@@ -129,7 +129,7 @@ static bool getNextHeaderRange(const XSevenZip::SIGNATUREHEADER &signatureHeader
 
 static bool sevenZipCheckCRC32(QIODevice *pDevice, qint64 nOffset, qint64 nSize, quint32 nExpectedCRC, XBinary::PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedDevice(pDevice);
+    QIODevice *guardedDevice = pDevice;
     if (!guardedDevice) return false;
     const qint64 nDeviceSize = guardedDevice->size();
     if (!guardedDevice || (nOffset < 0) || (nSize < 0) || (nOffset > nDeviceSize) || (nSize > nDeviceSize - nOffset)) {
@@ -145,7 +145,7 @@ static bool sevenZipCheckCRC32(QIODevice *pDevice, qint64 nOffset, qint64 nSize,
     while ((nRemaining > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         qint32 nChunkSize = (qint32)qMin<qint64>(baChunk.size(), nRemaining);
 
-        if (XBinary::read_array_process(guardedDevice.data(), nCurrentOffset, baChunk.data(), nChunkSize, pPdStruct) != nChunkSize || !guardedDevice) {
+        if (XBinary::read_array_process(guardedDevice, nCurrentOffset, baChunk.data(), nChunkSize, pPdStruct) != nChunkSize || !guardedDevice) {
             return false;
         }
 
@@ -242,12 +242,11 @@ public:
     }
     bool aliases(QIODevice *output) const
     {
-        QPointer<const SevenZipPartsDevice> self(this);
-        const QList<QPointer<QFile>> parts = m_parts;
-        for (const QPointer<QFile> &file : parts) {
+        const QList<QFile *> parts = m_parts;
+        for (QFile *const file : parts) {
             if (!file) return true;
-            const bool alias = XBinary::devicesAlias(file.data(), output);
-            if (!self || !file || alias) return true;
+            const bool alias = XBinary::devicesAlias(file, output);
+            if (!file || alias) return true;
         }
         return false;
     }
@@ -262,7 +261,6 @@ public:
 protected:
     qint64 readData(char *data, qint64 limit) override
     {
-        QPointer<SevenZipPartsDevice> self(this);
         if ((limit < 0) || (m_position < 0) || (m_position > m_size)) return -1;
         qint64 done = 0;
         while ((done < limit) && (m_position < m_size)) {
@@ -271,14 +269,14 @@ protected:
             const qint64 partPosition = m_position - m_starts.at(index);
             const qint64 partLength = m_lengths.at(index);
             const qint64 request = qMin(limit - done, partLength - partPosition);
-            QPointer<QFile> file = m_parts.at(index);
+            QFile *file = m_parts.at(index);
             if (!file || !file->isOpen() || !file->isReadable()) return -1;
             const qint64 currentLength = file->size();
-            if (!self || !file || (currentLength != partLength)) return -1;
+            if (!file || (currentLength != partLength)) return -1;
             const bool seeked = file->seek(partPosition);
-            if (!self || !file || !seeked) return -1;
+            if (!file || !seeked) return -1;
             const qint64 received = file->read(data + done, request);
-            if (!self || !file || (received <= 0) || (received > request)) return -1;
+            if (!file || (received <= 0) || (received > request)) return -1;
             done += received;
             m_position += received;
         }
@@ -286,7 +284,7 @@ protected:
     }
     qint64 writeData(const char *, qint64) override { return -1; }
 private:
-    QList<QPointer<QFile>> m_parts;
+    QList<QFile *> m_parts;
     QList<qint64> m_starts;
     QList<qint64> m_lengths;
     qint64 m_size = 0;
@@ -296,11 +294,10 @@ private:
 
 bool XSevenZip::_prepareSplitInput(PDSTRUCT *pPdStruct)
 {
-    QPointer<XSevenZip> self(this);
-    QPointer<QIODevice> source(getDevice());
+    QIODevice *source = getDevice();
     if (!source || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
-    if (dynamic_cast<SevenZipPartsDevice *>(source.data())) return true;
-    QPointer<QFile> first(dynamic_cast<QFile *>(source.data()));
+    if (dynamic_cast<SevenZipPartsDevice *>(source)) return true;
+    QFile *first = dynamic_cast<QFile *>(source);
     if (!first) return true; // Byte buffers/subdevices cannot discover siblings.
     std::unique_ptr<SevenZipPartsDevice> joined;
     {
@@ -311,10 +308,10 @@ bool XSevenZip::_prepareSplitInput(PDSTRUCT *pPdStruct)
         const QString suffix = firstInfo.suffix();
         if ((suffix.size() < 3) || (suffix.size() > 9) || (suffix != QString(suffix.size() - 1, QChar('0')) + QChar('1'))) return true;
         const qint64 firstSize = first->size();
-        if (!self || !first || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+        if (!first || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
         if ((firstSize < (qint64)sizeof(SIGNATUREHEADER)) || !first->isOpen() || !first->isReadable() || first->isTextModeEnabled()) return false;
-        const QByteArray bytes = XBinary::read_array_process(first.data(), 0, sizeof(SIGNATUREHEADER), pPdStruct);
-        if (!self || !first || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+        const QByteArray bytes = XBinary::read_array_process(first, 0, sizeof(SIGNATUREHEADER), pPdStruct);
+        if (!first || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
         SIGNATUREHEADER header = {};
         if (!sevenZipParseSignatureHeader(bytes, &header) || !sevenZipSignatureMatches(header)) return true;
         const quint32 crc = XBinary::_getCRC32(bytes.constData() + 12, 20, 0xFFFFFFFFU, XBinary::_getCRC32Table_EDB88320()) ^ 0xFFFFFFFFU;
@@ -329,7 +326,7 @@ bool XSevenZip::_prepareSplitInput(PDSTRUCT *pPdStruct)
         if (directory.isEmpty()) return false;
         const QString prefix = firstInfo.fileName().left(firstInfo.fileName().size() - suffix.size());
         joined.reset(new (std::nothrow) SevenZipPartsDevice(nullptr));
-        if (!joined || !joined->append(first.data(), firstSize)) return false;
+        if (!joined || !joined->append(first, firstSize)) return false;
         for (qint32 part = 2; joined->size() < requiredSize; ++part) {
             if ((part > 1024) || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
             const QFileInfo nextInfo(QDir(directory).filePath(prefix + QString::number(part).rightJustified(suffix.size(), QChar('0'))));
@@ -339,43 +336,42 @@ bool XSevenZip::_prepareSplitInput(PDSTRUCT *pPdStruct)
             const qint64 nextSize = next->size();
             if ((nextSize <= 0) || ((quint64)nextSize > maxSize - (quint64)joined->size()) || !joined->append(next, nextSize)) return false;
         }
-        if (!joined->open(QIODevice::ReadOnly | QIODevice::Unbuffered) || !self || !first || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+        if (!joined->open(QIODevice::ReadOnly | QIODevice::Unbuffered) || !first || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
     }
     SevenZipPartsDevice *prepared = joined.get();
     // setDevice() is deliberately outside the unpack-operation guard and is
     // followed by normal CRC validation of the complete next header.
-    self->setDevice(prepared);
-    if (!self || (self->getDevice() != prepared)) return false;
-    QPointer<SevenZipPartsDevice> guardedPrepared(prepared);
+    setDevice(prepared);
+    if (getDevice() != prepared) return false;
+    SevenZipPartsDevice *guardedPrepared = prepared;
     joined.release();
-    prepared->setParent(self.data());
-    return self && guardedPrepared && (self->getDevice() == guardedPrepared.data());
+    prepared->setParent(this);
+    return guardedPrepared && (getDevice() == guardedPrepared);
 }
 
 bool XSevenZip::_loadValidatedNextHeader(QByteArray *pData, qint64 *pNextHeaderOffset, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSevenZip> guardedArchive(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pData || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     pData->clear();
     const qint64 nFileSize = guardedSource->size();
-    if (!guardedArchive || !guardedSource || (nFileSize < (qint64)sizeof(SIGNATUREHEADER))) return false;
+    if (!guardedSource || (nFileSize < (qint64)sizeof(SIGNATUREHEADER))) return false;
 
-    const QByteArray baSignature = XBinary::read_array_process(guardedSource.data(), 0, sizeof(SIGNATUREHEADER), pPdStruct);
+    const QByteArray baSignature = XBinary::read_array_process(guardedSource, 0, sizeof(SIGNATUREHEADER), pPdStruct);
     SIGNATUREHEADER signatureHeader = {};
-    if (!guardedArchive || !guardedSource || !sevenZipParseSignatureHeader(baSignature, &signatureHeader)) {
+    if (!guardedSource || !sevenZipParseSignatureHeader(baSignature, &signatureHeader)) {
         return false;
     }
     qint64 nNextHeaderOffset = 0;
     qint64 nNextHeaderSize = 0;
 
     if (!sevenZipSignatureMatches(signatureHeader) || !getNextHeaderRange(signatureHeader, nFileSize, &nNextHeaderOffset, &nNextHeaderSize) ||
-        (nNextHeaderSize > SEVENZIP_MAX_NEXT_HEADER_SIZE) || !sevenZipCheckCRC32(guardedSource.data(), 12, 20, signatureHeader.StartHeaderCRC, pPdStruct) ||
-        !guardedArchive || !guardedSource || !sevenZipCheckCRC32(guardedSource.data(), nNextHeaderOffset, nNextHeaderSize, signatureHeader.NextHeaderCRC, pPdStruct) ||
-        !guardedArchive || !guardedSource) {
+        (nNextHeaderSize > SEVENZIP_MAX_NEXT_HEADER_SIZE) || !sevenZipCheckCRC32(guardedSource, 12, 20, signatureHeader.StartHeaderCRC, pPdStruct) ||
+        !guardedSource || !sevenZipCheckCRC32(guardedSource, nNextHeaderOffset, nNextHeaderSize, signatureHeader.NextHeaderCRC, pPdStruct) ||
+        !guardedSource) {
         return false;
     }
 
@@ -387,7 +383,7 @@ bool XSevenZip::_loadValidatedNextHeader(QByteArray *pData, qint64 *pNextHeaderO
             return false;
         }
 
-        if (XBinary::read_array_process(guardedSource.data(), nNextHeaderOffset, pData->data(), nNextHeaderSize, pPdStruct) != nNextHeaderSize || !guardedArchive ||
+        if (XBinary::read_array_process(guardedSource, nNextHeaderOffset, pData->data(), nNextHeaderSize, pPdStruct) != nNextHeaderSize ||
             !guardedSource) {
             pData->clear();
             return false;
@@ -2495,13 +2491,12 @@ bool XSevenZip::_resolveBCJ2Streams(const SZSTATE &state, qint32 nFolderIndex, q
 
 bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSevenZip> guardedArchive(this);
     const XBinary::PDSTRUCTLIFETIME progressLifetime = pPdStruct ? XBinary::retainPdStructLifetime(pPdStruct) : XBinary::PDSTRUCTLIFETIME();
-    if (!pState || m_bUnpackOperationInProgress || ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedArchive->ownsUnpackSource(pState))) {
+    if (!pState || m_bUnpackOperationInProgress || ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState))) {
         return false;
     }
-    if (!guardedArchive->finishUnpack(pState, nullptr) || !guardedArchive) return false;
-    if (!guardedArchive->_prepareSplitInput(pPdStruct) || !guardedArchive) return false;
+    if (!finishUnpack(pState, nullptr)) return false;
+    if (!_prepareSplitInput(pPdStruct)) return false;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
 
@@ -2517,18 +2512,14 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
         }
 
         pState->nCurrentOffset = 0;
-        pState->nTotalSize = guardedArchive->getSize();
-        if (!guardedArchive) {
-            *pState = UNPACK_STATE();
-            return false;
-        }
+        pState->nTotalSize = getSize();
         pState->nCurrentIndex = 0;
         pState->nNumberOfRecords = 0;
         pState->pContext = nullptr;
         pState->mapUnpackProperties = mapProperties;
 
-        const bool bBound = guardedArchive->bindUnpackSource(pState, pPdStruct);
-        if (!guardedArchive || !bBound) {
+        const bool bBound = bindUnpackSource(pState, pPdStruct);
+        if (!bBound) {
             *pState = UNPACK_STATE();
             return false;
         }
@@ -2536,13 +2527,9 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
         QByteArray baData;
         qint64 nNextHeaderOffset = 0;
 
-        const bool bLoadedHeader = guardedArchive->_loadValidatedNextHeader(&baData, &nNextHeaderOffset, pPdStruct);
-        if (!guardedArchive) {
-            *pState = UNPACK_STATE();
-            return false;
-        }
+        const bool bLoadedHeader = _loadValidatedNextHeader(&baData, &nNextHeaderOffset, pPdStruct);
         if (!bLoadedHeader) {
-            guardedArchive->releaseUnpackSource(pState);
+            releaseUnpackSource(pState);
             *pState = UNPACK_STATE();
             return false;
         }
@@ -2551,16 +2538,16 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
         // Create context
         pContext = new (std::nothrow) SEVENZ_UNPACK_CONTEXT;
         if (!pContext) {
-            guardedArchive->releaseUnpackSource(pState);
+            releaseUnpackSource(pState);
             *pState = UNPACK_STATE();
             return false;
         }
         // pContext->nSignatureSize = sizeof(SIGNATUREHEADER);
 
         pState->pContext = pContext;
-        if (!guardedArchive->registerUnpackContextCleanup(pState, pContext, &deleteUnpackContext<SEVENZ_UNPACK_CONTEXT>)) {
+        if (!registerUnpackContextCleanup(pState, pContext, &deleteUnpackContext<SEVENZ_UNPACK_CONTEXT>)) {
             pState->pContext = nullptr;
-            guardedArchive->releaseUnpackSource(pState);
+            releaseUnpackSource(pState);
             delete pContext;
             *pState = UNPACK_STATE();
             return false;
@@ -2596,13 +2583,11 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                     state.bIsError = false;
                     state.sErrorString = QString();
 
-                    bool bEncodedHeaderParsed = guardedArchive->_handleId(&listRecords, XSevenZip::k7zIdEncodedHeader, &state, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
-                    if (!guardedArchive) return false;
+                    bool bEncodedHeaderParsed = _handleId(&listRecords, XSevenZip::k7zIdEncodedHeader, &state, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
 
                     bool bEncodedHeaderValid = false;
                     if (bEncodedHeaderParsed && !state.bIsError && (state.nCurrentOffset == state.nSize)) {
-                        bEncodedHeaderValid = guardedArchive->_validateEncodedHeader(&state, nNextHeaderOffset);
-                        if (!guardedArchive) return false;
+                        bEncodedHeaderValid = _validateEncodedHeader(&state, nNextHeaderOffset);
                     }
                     if (bEncodedHeaderValid && XBinary::isPdStructNotCanceled(pPdStruct)) {
                         baData.clear();
@@ -2611,8 +2596,7 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                         bufferOut.setBuffer(&baData);
 
                         if (bufferOut.open(QIODevice::ReadWrite)) {
-                            bHeader = guardedArchive->decompressHeader(mapProperties, &bufferOut, &state, pPdStruct);
-                            if (!guardedArchive) return false;
+                            bHeader = decompressHeader(mapProperties, &bufferOut, &state, pPdStruct);
                             bufferOut.close();
                             // Update nHeaderSize to actual decompressed size
                             nHeaderSize = baData.size();
@@ -2632,14 +2616,12 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                     state.bIsError = false;
                     state.sErrorString = QString();
 
-                    bool bHeaderParsed = guardedArchive->_handleId(&listRecords, XSevenZip::k7zIdHeader, &state, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
-                    if (!guardedArchive) return false;
+                    bool bHeaderParsed = _handleId(&listRecords, XSevenZip::k7zIdHeader, &state, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
                     // _printRecords(&listRecords);
 
                     bool bParsedHeaderValid = false;
                     if (bHeaderParsed && !state.bIsError && (state.nCurrentOffset == state.nSize)) {
-                        bParsedHeaderValid = guardedArchive->_validateParsedHeader(&state, nNextHeaderOffset, pPdStruct);
-                        if (!guardedArchive) return false;
+                        bParsedHeaderValid = _validateParsedHeader(&state, nNextHeaderOffset, pPdStruct);
                     }
                     if (bParsedHeaderValid && XBinary::isPdStructNotCanceled(pPdStruct)) {
                         qint32 nNumberOfFiles = state.listFileNames.count();
@@ -2682,14 +2664,14 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                         qint32 nFileSizeIndex = 0;
                         qint32 nFileCRCIndex = 0;
                         qint32 nFileIndexInCurrentFolder = 0;
-                        QPointer<QIODevice> guardedHashDevice(guardedArchive->getDevice());
+                        QIODevice *guardedHashDevice = getDevice();
                         SevenZipHashProgressBridge hashBridge = {pPdStruct, progressLifetime};
                         XBinary::PDSTRUCT hashProgress = XBinary::getPdStructSnapshot(pPdStruct);
                         if (pPdStruct) {
                             XBinary::setPdStructCallback(&hashProgress, sevenZipHashProgressCallback, &hashBridge);
                         }
-                        sMD5 = XBinary::getHash(XBinary::HASH_MD5, guardedHashDevice.data(), &hashProgress);
-                        if (!guardedArchive || !guardedHashDevice || (pPdStruct && !XBinary::isPdStructLifetimeAlive(progressLifetime))) {
+                        sMD5 = XBinary::getHash(XBinary::HASH_MD5, guardedHashDevice, &hashProgress);
+                        if (!guardedHashDevice || (pPdStruct && !XBinary::isPdStructLifetimeAlive(progressLifetime))) {
                             return false;
                         }
                         const bool bHashReady = !sMD5.isEmpty();
@@ -2858,14 +2840,12 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                         }
                                         if (cm == HANDLE_METHOD_BCJ2) {
                                             QMap<FPART_PROP, QVariant> streamProperties;
-                                            bBCJ2Resolved = guardedArchive->_resolveBCJ2Streams(state, nCurrentFolder, nFolderStreamBase, nCoderSizesOffset,
+                                            bBCJ2Resolved = _resolveBCJ2Streams(state, nCurrentFolder, nFolderStreamBase, nCoderSizesOffset,
                                                                                              &streamProperties, &nBCJ2MainOffset, &nBCJ2MainSize,
                                                                                              &nBCJ2OutputSize, pPdStruct);
-                                            if (!guardedArchive) return false;
                                             if (!bBCJ2Resolved) {
                                                 pContext->listArchiveRecords.clear();
-                                                guardedArchive->_errorMessage(tr("Unsupported or inconsistent 7z BCJ2 stream graph"), pPdStruct);
-                                                if (!guardedArchive) return false;
+                                                _errorMessage(tr("Unsupported or inconsistent 7z BCJ2 stream graph"), pPdStruct);
                                                 break;
                                             }
                                             cmBCJ2Main = (HANDLE_METHOD)streamProperties.value(FPART_PROP_HANDLEMETHOD4).toUInt();
@@ -3049,20 +3029,16 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                         if ((pContext->listArchiveRecords.count() != nNumberOfFiles) || (nCurrentEmptyStreamIndex != nNumberOfEmptyStreams) ||
                             !XBinary::isPdStructNotCanceled(pPdStruct)) {
                             pContext->listArchiveRecords.clear();
-                            guardedArchive->_errorMessage(tr("Invalid or canceled 7z file map"), pPdStruct);
-                            if (!guardedArchive) return false;
+                            _errorMessage(tr("Invalid or canceled 7z file map"), pPdStruct);
                         }
                     } else {
-                        guardedArchive->_errorMessage(tr("Invalid format data"), pPdStruct);
-                        if (!guardedArchive) return false;
+                        _errorMessage(tr("Invalid format data"), pPdStruct);
                     }
                 } else {
-                    guardedArchive->_errorMessage(tr("Cannot unpack data"), pPdStruct);
-                    if (!guardedArchive) return false;
+                    _errorMessage(tr("Cannot unpack data"), pPdStruct);
                 }
             } else {
-                guardedArchive->_errorMessage(tr("Invalid format data"), pPdStruct);
-                if (!guardedArchive) return false;
+                _errorMessage(tr("Invalid format data"), pPdStruct);
             }
 
             pState->nNumberOfRecords = pContext->listArchiveRecords.count();
@@ -3075,9 +3051,8 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
         }  // End if next header is present
 
         if (bResult) {
-            bResult = guardedArchive->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+            bResult = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
         }
-        if (!guardedArchive) return false;
 
         if (!bResult && pContext && (pState->pContext == pContext)) {
             pState->pContext = nullptr;
@@ -3085,11 +3060,10 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
     }  // End outer scope
 
     if (!bResult && pState) {
-        guardedArchive->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         pState->pContext = nullptr;
         delete pContext;
         pContext = nullptr;
-        if (!guardedArchive) return false;
         *pState = UNPACK_STATE();
     }
 
@@ -3101,14 +3075,13 @@ XBinary::ARCHIVERECORD XSevenZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pP
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
 
-    QPointer<XSevenZip> guardedArchive(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     XBinary::ARCHIVERECORD result = {};
 
     if (!XBinary::isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || !guardedSource) {
         return result;
     }
-    if (!guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive || !guardedSource) return result;
+    if (!isUnpackSourceCurrent(pState, pPdStruct) || !guardedSource) return result;
 
     if ((pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return result;
@@ -3126,10 +3099,8 @@ XBinary::ARCHIVERECORD XSevenZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pP
 
 bool XSevenZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSevenZip> self(this);
     const SevenZipPartsDevice *parts = dynamic_cast<SevenZipPartsDevice *>(getDevice());
     if (parts && parts->aliases(pDevice)) return false;
-    if (!self) return false;
     return XArchive::unpackCurrent(pState, pDevice, pPdStruct);
 }
 
@@ -3140,18 +3111,16 @@ bool XSevenZip::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
     Q_UNUSED(pPdStruct)
 
-    QPointer<XSevenZip> guardedArchive(this);
     if (!pState) {
         return false;
     }
 
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedArchive->ownsUnpackSource(pState)) return false;
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
 
     SEVENZ_UNPACK_CONTEXT *pContext = static_cast<SEVENZ_UNPACK_CONTEXT *>(pState->pContext);
-    guardedArchive->releaseUnpackSource(pState);
+    releaseUnpackSource(pState);
     pState->pContext = nullptr;
     delete pContext;
-    if (!guardedArchive) return false;
 
     pState->nCurrentOffset = 0;
     pState->nTotalSize = 0;
@@ -3168,15 +3137,14 @@ bool XSevenZip::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
 
-    QPointer<XSevenZip> guardedArchive(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     bool bResult = false;
 
     if (!XBinary::isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || !guardedSource || (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }
-    if (!guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive || !guardedSource) return false;
+    if (!isUnpackSourceCurrent(pState, pPdStruct) || !guardedSource) return false;
 
     // SEVENZ_UNPACK_CONTEXT *pContext = (SEVENZ_UNPACK_CONTEXT *)pState->pContext;
 
@@ -3317,9 +3285,8 @@ QList<XSevenZip::SZRECORD> XSevenZip::_handleData(char *pData, qint64 nSize, PDS
 bool XSevenZip::decompressHeader(const QMap<UNPACK_PROP, QVariant> &mapUnpackProperties, QIODevice *pDeviceOut, SZSTATE *pState, PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
-    QPointer<XSevenZip> guardedArchive(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    QPointer<QIODevice> guardedOutput(pDeviceOut);
+    QIODevice *guardedSource = getDevice();
+    QIODevice *guardedOutput = pDeviceOut;
 
     if (!pState || !guardedSource || !guardedOutput || !guardedOutput->isWritable() || pState->bIsError || !XBinary::isPdStructNotCanceled(pPdStruct) ||
         (pState->listFolders.count() != 1) || pState->listInStreams.isEmpty() || (pState->listOutStreams.count() != 1)) {
@@ -3352,7 +3319,7 @@ bool XSevenZip::decompressHeader(const QMap<UNPACK_PROP, QVariant> &mapUnpackPro
         qint64 nStreamOffset = pState->nStreamsBegin + inStream.nOffset;
         qint64 nStreamSize = inStream.nSize;
         const qint64 nFileSize = guardedSource->size();
-        if (!guardedArchive || !guardedSource || !guardedOutput || (nStreamOffset > nFileSize) || (nStreamSize > (nFileSize - nStreamOffset))) {
+        if (!guardedSource || !guardedOutput || (nStreamOffset > nFileSize) || (nStreamSize > (nFileSize - nStreamOffset))) {
             return false;
         }
 
@@ -3400,8 +3367,8 @@ bool XSevenZip::decompressHeader(const QMap<UNPACK_PROP, QVariant> &mapUnpackPro
         XBinary::DATAPROCESS_STATE state = {};
         state.mapProperties = mapProperties;
         state.mapUnpackProperties = mapUnpackProperties;
-        state.pDeviceInput = guardedSource.data();
-        state.pDeviceOutput = guardedOutput.data();
+        state.pDeviceInput = guardedSource;
+        state.pDeviceOutput = guardedOutput;
         state.nInputOffset = nStreamOffset;
         state.nInputLimit = nStreamSize;
         state.nProcessedOffset = 0;
@@ -3420,7 +3387,7 @@ bool XSevenZip::decompressHeader(const QMap<UNPACK_PROP, QVariant> &mapUnpackPro
         bResult = xDecompress.multiDecompress(&state, pPdStruct);
     }
 
-    return bResult && guardedArchive && guardedSource && guardedOutput;
+    return bResult && guardedSource && guardedOutput;
 }
 
 QList<QString> XSevenZip::getSearchSignatures()
@@ -3442,27 +3409,25 @@ XBinary *XSevenZip::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nMod
 
 bool XSevenZip::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XSevenZip> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
-        if (!guardedThis || !bResult) return false;
-        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(guardedThis->XArchive::getInternalInfo(pPdStruct));
-        if (!guardedThis || !pInfo) return false;
-        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        if (!bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        if (!pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) = *pInfo;
     }
 
-    return guardedThis && bResult;
+    return bResult;
 }
 
 void *XSevenZip::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XSevenZip> guardedThis(this);
-    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
-    if (!guardedThis || !bHandled) return nullptr;
+    const bool bHandled = handleInternalInfo(pPdStruct);
+    if (!bHandled) return nullptr;
 
-    return &guardedThis->m_internalInfo;
+    return &m_internalInfo;
 }
 
 void XSevenZip::setInternalInfo(void *pInternalInfo)

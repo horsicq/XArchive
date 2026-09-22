@@ -54,14 +54,13 @@ XBinary *XLBR::createInstance(QIODevice *pDevice, bool bIsImage,
 bool XLBR::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
                       PDSTRUCT *pPdStruct)
 {
-    QPointer<XLBR> guardedThis(this);
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || (nTotalSize < 128) ||
+    if ((nTotalSize < 128) ||
         !XBinary::isPdStructNotCanceled(pPdStruct))
         return false;
 
     const QByteArray baControl = read_array_process(0, 32, pPdStruct);
-    if (!guardedThis || (baControl.size() != 32))
+    if ((baControl.size() != 32))
         return false;
     const uchar *pControl =
         reinterpret_cast<const uchar *>(baControl.constData());
@@ -80,7 +79,7 @@ bool XLBR::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
 
     const QByteArray baDirectory =
         read_array_process(0, nDirectorySize, pPdStruct);
-    if (!guardedThis || (baDirectory.size() != nDirectorySize))
+    if ((baDirectory.size() != nDirectorySize))
         return false;
     const uchar *pDirectory =
         reinterpret_cast<const uchar *>(baDirectory.constData());

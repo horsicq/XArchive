@@ -40,8 +40,6 @@ XMSCompressSZ::XMSCompressSZ(QIODevice *pDevice) : XArchive(pDevice)
 
 bool XMSCompressSZ::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
-    QPointer<XMSCompressSZ> guardedThis(this);
-
     if (!pContext) return false;
 
     *pContext = CONTEXT();
@@ -49,22 +47,17 @@ bool XMSCompressSZ::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<QIODevice> guardedSource(guardedThis->getDevice());
-    if (!guardedThis || !guardedSource) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!guardedSource) return false;
 
-    const qint64 nTotalSize = guardedThis->getSize();
-    if (!guardedThis) return false;
-
+    const qint64 nTotalSize = getSize();
     if (nTotalSize < SZ_HEADER_SIZE) return false;
 
-    const QByteArray baSignature = guardedThis->read_array(0, 8);
-    if (!guardedThis) return false;
+    const QByteArray baSignature = read_array(0, 8);
     if (baSignature.size() != 8) return false;
     if (memcmp(baSignature.constData(), SZ_SIGNATURE, 8) != 0) return false;
 
-    const quint32 nUncompressedSize = guardedThis->read_uint32(8);
-    if (!guardedThis) return false;
-
+    const quint32 nUncompressedSize = read_uint32(8);
     if (static_cast<qint64>(nUncompressedSize) > SZ_MAX_UNPACKED_SIZE) return false;
 
     pContext->nCompressedOffset = SZ_HEADER_SIZE;
@@ -78,8 +71,8 @@ bool XMSCompressSZ::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     // character of the extension on disk ("SETARGV.OBJ" -> "SETARGV.OB$"),
     // so the original name cannot be recovered from the stream: keep the
     // device's complete file name, extension included.
-    const QString sDeviceFileName = XBinary::getDeviceFileName(guardedSource.data());
-    if (!guardedThis || !guardedSource) return false;
+    const QString sDeviceFileName = XBinary::getDeviceFileName(guardedSource);
+    if (!guardedSource) return false;
     if (!sDeviceFileName.isEmpty()) {
         pContext->sFileName = QFileInfo(sDeviceFileName).fileName();
     }
@@ -90,18 +83,17 @@ bool XMSCompressSZ::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XMSCompressSZ::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<XMSCompressSZ> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
 
     CONTEXT context = {};
-    const bool bResult = guardedThis->parseContext(&context, pPdStruct);
+    const bool bResult = parseContext(&context, pPdStruct);
 
     if (guardedSource && (nSavedPosition >= 0)) {
         guardedSource->seek(nSavedPosition);
     }
 
-    return guardedThis && bResult;
+    return bResult;
 }
 
 bool XMSCompressSZ::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
@@ -206,7 +198,7 @@ XBinary::_MEMORY_MAP XMSCompressSZ::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdS
     result.sArch = getArch();
     result.nBinarySize = getSize();
 
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
 
     CONTEXT context = {};
@@ -317,7 +309,7 @@ QList<XBinary::FPART> XMSCompressSZ::getFileParts(quint32 nFileParts, qint32 nLi
         return listResult;
     }
 
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
 
     CONTEXT context = {};
@@ -387,8 +379,7 @@ QList<XBinary::FPART> XMSCompressSZ::getFileParts(quint32 nFileParts, qint32 nLi
 
 bool XMSCompressSZ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XMSCompressSZ> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
 
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) {
         return false;
@@ -396,7 +387,7 @@ bool XMSCompressSZ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVa
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -411,9 +402,9 @@ bool XMSCompressSZ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVa
         return false;
     }
 
-    const bool bParsed = guardedThis->parseContext(pContext, pPdStruct);
-    if (!bParsed || !guardedThis || !guardedSource) {
-        if (guardedThis) guardedThis->releaseUnpackSource(pState);
+    const bool bParsed = parseContext(pContext, pPdStruct);
+    if (!bParsed || !guardedSource) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -422,25 +413,15 @@ bool XMSCompressSZ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVa
     pState->mapUnpackProperties = mapProperties;
     pState->mapArchiveProperties.insert(FPART_PROP_INFO, tr("Microsoft COMPRESS \"SZ \" container; Okumura LZSS (4 KiB window, F = 18)"));
     pState->nCurrentOffset = 0;
-    pState->nTotalSize = guardedThis->getSize();
-    if (!guardedThis) {
-        delete pContext;
-        *pState = UNPACK_STATE();
-        return false;
-    }
+    pState->nTotalSize = getSize();
     pState->nCurrentIndex = 0;
     pState->nNumberOfRecords = 1;
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -453,10 +434,7 @@ XBinary::ARCHIVERECORD XMSCompressSZ::infoCurrent(UNPACK_STATE *pState, PDSTRUCT
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return ARCHIVERECORD();
-
-    QPointer<XMSCompressSZ> guardedThis(this);
-
-    if (!pState || !isPdStructNotCanceled(pPdStruct) || !guardedThis->isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis || (pState->nCurrentIndex < 0) ||
+    if (!pState || !isPdStructNotCanceled(pPdStruct) || !isUnpackSourceCurrent(pState, pPdStruct) || (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return ARCHIVERECORD();
     }
@@ -485,10 +463,7 @@ bool XMSCompressSZ::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
-
-    QPointer<XMSCompressSZ> guardedThis(this);
-
-    if (!pState || !guardedThis->isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis || (pState->nCurrentIndex < 0) ||
+    if (!pState || !isUnpackSourceCurrent(pState, pPdStruct) || (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }
@@ -544,27 +519,25 @@ XBinary *XMSCompressSZ::createInstance(QIODevice *pDevice, bool bIsImage, XADDR 
 
 bool XMSCompressSZ::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XMSCompressSZ> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
-        if (!guardedThis || !bResult) return false;
-        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(guardedThis->XArchive::getInternalInfo(pPdStruct));
-        if (!guardedThis || !pInfo) return false;
-        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        if (!bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        if (!pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) = *pInfo;
     }
 
-    return guardedThis && bResult;
+    return bResult;
 }
 
 void *XMSCompressSZ::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XMSCompressSZ> guardedThis(this);
-    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
-    if (!guardedThis || !bHandled) return nullptr;
+    const bool bHandled = handleInternalInfo(pPdStruct);
+    if (!bHandled) return nullptr;
 
-    return &guardedThis->m_internalInfo;
+    return &m_internalInfo;
 }
 
 void XMSCompressSZ::setInternalInfo(void *pInternalInfo)

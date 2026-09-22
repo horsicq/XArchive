@@ -5,7 +5,6 @@
 
 #include "xsecondnature.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <cstring>
@@ -167,8 +166,7 @@ bool XSecondNature::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XSecondNature> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -177,7 +175,7 @@ bool XSecondNature::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const QByteArray baBanner =
         read_array_process(0, SN_BANNER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || baBanner.size() != SN_BANNER_SIZE) {
+    if (!guardedSource || baBanner.size() != SN_BANNER_SIZE) {
         return false;
     }
 
@@ -219,7 +217,7 @@ bool XSecondNature::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.kind == KIND_BMX) {
         const QByteArray baCount = readHeaderBlock(
             SN_BMX_COUNT_OFFSET, 2, context.bComplemented, pPdStruct);
-        if (!guardedThis || !guardedSource || baCount.size() != 2) return false;
+        if (!guardedSource || baCount.size() != 2) return false;
         nCount = static_cast<qint32>(qFromLittleEndian<quint16>(
             reinterpret_cast<const uchar *>(baCount.constData())));
         if (nCount < 1 || nCount > SN_BMX_MAX_MEMBERS) return false;
@@ -228,7 +226,7 @@ bool XSecondNature::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     } else if (context.kind == KIND_REF) {
         const QByteArray baCounts = readHeaderBlock(
             SN_BMX_COUNT_OFFSET, 4, context.bComplemented, pPdStruct);
-        if (!guardedThis || !guardedSource || baCounts.size() != 4) return false;
+        if (!guardedSource || baCounts.size() != 4) return false;
         const uchar *pCounts =
             reinterpret_cast<const uchar *>(baCounts.constData());
         // Two counts: text members first, then image members.  They are
@@ -255,7 +253,7 @@ bool XSecondNature::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const QByteArray baDir = readHeaderBlock(nDirOffset, nDirSize,
                                              context.bComplemented, pPdStruct);
-    if (!guardedThis || !guardedSource || baDir.size() != nDirSize) {
+    if (!guardedSource || baDir.size() != nDirSize) {
         return false;
     }
 
@@ -265,7 +263,7 @@ bool XSecondNature::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.kind == KIND_SNX) {
         const QByteArray baInfo = readHeaderBlock(
             SN_SNX_INFO_OFFSET, 6, context.bComplemented, pPdStruct);
-        if (!guardedThis || !guardedSource || baInfo.size() != 6) return false;
+        if (!guardedSource || baInfo.size() != 6) return false;
         const uchar *pInfo = reinterpret_cast<const uchar *>(baInfo.constData());
         context.nSequenceId = qFromLittleEndian<quint16>(pInfo);
         context.nWidth = qFromLittleEndian<quint16>(pInfo + 2);
@@ -274,7 +272,7 @@ bool XSecondNature::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         const QByteArray baTitle =
             readHeaderBlock(SN_SNX_TITLE_OFFSET, SN_SNX_TITLE_SIZE,
                             context.bComplemented, pPdStruct);
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
         if (baTitle.size() == SN_SNX_TITLE_SIZE) {
             const QByteArray baTrimmed = snFixedName(baTitle);
             bool bPrintable = true;
@@ -346,7 +344,7 @@ bool XSecondNature::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (!isPdStructNotCanceled(pPdStruct)) return false;
         MEMBER &member = context.listMembers[i];
         if (!resolveStream(&member, context.nInputSize, pPdStruct) ||
-            !guardedThis || !guardedSource) {
+            !guardedSource) {
             return false;
         }
         qint64 nEnd = member.nMemberOffset + member.nMemberSize;
@@ -356,12 +354,12 @@ bool XSecondNature::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     context.nArchiveSize = nArchiveEnd;
     *pContext = context;
-    return guardedThis && guardedSource;
+    return guardedSource != nullptr;
 }
 
 bool XSecondNature::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -553,8 +551,7 @@ bool XSecondNature::initUnpack(UNPACK_STATE *pState,
                                const QMap<UNPACK_PROP, QVariant> &mapProperties,
                                PDSTRUCT *pPdStruct)
 {
-    QPointer<XSecondNature> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
@@ -563,7 +560,7 @@ bool XSecondNature::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) || !guardedSource ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -578,9 +575,9 @@ bool XSecondNature::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource ||
+    if (!parseContext(pContext, pPdStruct) || !guardedSource ||
         pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -607,15 +604,10 @@ bool XSecondNature::initUnpack(UNPACK_STATE *pState,
     pState->pContext = pContext;
 
     const bool bFinalized =
-        guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+        validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

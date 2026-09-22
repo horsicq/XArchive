@@ -44,7 +44,7 @@ public:
     struct UNPACK_CONTEXT {
         ~UNPACK_CONTEXT();
         QList<FILE_ENTRY> listEntries;
-        QPointer<QIODevice> pSourceDevice;
+        QIODevice *pSourceDevice = nullptr;
         UNPACK_STATE *pOwnerState = nullptr;
         QByteArray baToken;
         quint64 nDeviceGeneration = 0;
@@ -71,9 +71,6 @@ public:
     virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
-
-protected:
-    bool isDeviceReplacementAllowed() const override;
 
 private:
     struct LIFETIME_STATE {

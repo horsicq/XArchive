@@ -5,7 +5,6 @@
 
 #include "xmva.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -81,16 +80,15 @@ bool XMVA::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XMVA> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
     if (context.nInputSize < MVA_CONTAINER_HEADER_SIZE + MVA_MEMBER_HEADER_SIZE) return false;
 
     const QByteArray baHeader = read_array_process(0, MVA_CONTAINER_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != MVA_CONTAINER_HEADER_SIZE)) return false;
+    if ((baHeader.size() != MVA_CONTAINER_HEADER_SIZE)) return false;
     if (baHeader.left(4) != QByteArray("mflh", 4)) return false;
     // A .MVB continuation volume repeats the "mflh" tag but carries the tail of
     // the previous volume's stream here instead of 1.
@@ -108,7 +106,7 @@ bool XMVA::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
             break;
         }
         const QByteArray baMember = read_array_process(nOffset, MVA_MEMBER_HEADER_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baMember.size() != MVA_MEMBER_HEADER_SIZE)) return false;
+        if ((baMember.size() != MVA_MEMBER_HEADER_SIZE)) return false;
         const uchar *pMember = reinterpret_cast<const uchar *>(baMember.constData());
         if (baMember.left(4) != QByteArray("mfen", 4)) break;
         if (qFromLittleEndian<quint16>(pMember + 4) != MVA_MEMBER_VERSION) break;
@@ -150,7 +148,7 @@ bool XMVA::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     }
 
     if (context.listMembers.isEmpty()) return false;
-    if (!guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!isPdStructNotCanceled(pPdStruct)) return false;
 
     context.nArchiveSize = nOffset;
     *pContext = context;
@@ -159,11 +157,11 @@ bool XMVA::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XMVA::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
-    const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
+    QIODevice *guardedSource = getDevice();
+    const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
-    if (guardedSource && (nSavedPosition >= 0)) {
+    if ((nSavedPosition >= 0)) {
         guardedSource->seek(nSavedPosition);
     }
     return bResult;
@@ -322,11 +320,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XMVA::getDefaultUnpackProperties()
 
 bool XMVA::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XMVA> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -336,8 +333,8 @@ bool XMVA::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -351,15 +348,10 @@ bool XMVA::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

@@ -57,11 +57,9 @@ QString XRarSFX::getVersion()
 QMap<XBinary::UNPACK_PROP, QVariant> XRarSFX::getDefaultUnpackProperties()
 {
     if (m_bRequireWinRarAttribution) {
-        QPointer<XRarSFX> guardedThis(this);
-        const bool bValid = guardedThis->isValid();
-        if (!guardedThis) return QMap<UNPACK_PROP, QVariant>();
+        const bool bValid = isValid();
         if (!bValid) {
-            return guardedThis->XBinary::getDefaultUnpackProperties();
+            return XBinary::getDefaultUnpackProperties();
         }
     }
 
@@ -79,23 +77,22 @@ bool XRarSFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant>
 
 bool XRarSFX::_isWinRarAttributed(PDSTRUCT *pPdStruct)
 {
-    QPointer<XRarSFX> guardedThis(this);
-    const INTERNAL_INFO *pInfo = static_cast<const INTERNAL_INFO *>(guardedThis->getInternalInfo(pPdStruct));
-    if (!guardedThis || !pInfo || !pInfo->bIsValid || (pInfo->arcType != FT_RAR)) {
+    const INTERNAL_INFO *pInfo = static_cast<const INTERNAL_INFO *>(getInternalInfo(pPdStruct));
+    if (!pInfo || !pInfo->bIsValid || (pInfo->arcType != FT_RAR)) {
         return false;
     }
 
-    XPE pe(guardedThis->getDevice(), guardedThis->isImage(), guardedThis->getModuleAddress());
+    XPE pe(getDevice(), isImage(), getModuleAddress());
     if (!pe.isValid(pPdStruct)) return false;
 
-    const qint64 nTotalSize = guardedThis->getSize();
+    const qint64 nTotalSize = getSize();
     const qint64 nOverlayOffset = pe.getOverlayOffset(pPdStruct);
-    if (!guardedThis || (pInfo->nArchiveOffset != nOverlayOffset) || (nOverlayOffset <= 0) || ((nTotalSize - nOverlayOffset) < 8)) {
+    if ((pInfo->nArchiveOffset != nOverlayOffset) || (nOverlayOffset <= 0) || ((nTotalSize - nOverlayOffset) < 8)) {
         return false;
     }
 
-    const QByteArray baHead = guardedThis->read_array_process(nOverlayOffset, 8, pPdStruct);
-    if (!guardedThis || (baHead.size() != 8)) return false;
+    const QByteArray baHead = read_array_process(nOverlayOffset, 8, pPdStruct);
+    if (baHead.size() != 8) return false;
     const quint8 *p = reinterpret_cast<const quint8 *>(baHead.constData());
 
     // Preserve the WinRAR attribution contract: a PE stub, a
@@ -105,9 +102,9 @@ bool XRarSFX::_isWinRarAttributed(PDSTRUCT *pPdStruct)
     const bool bRar4 = (p[0] == 0x52) && (p[1] == 0x61) && (p[2] == 0x72) && (p[3] == 0x21) && (p[4] == 0x1A) && (p[5] == 0x07) && (p[6] == 0x00);
     if (!bRar5 && !bRar4) return false;
 
-    const bool bResult = (guardedThis->find_ansiString(0, nOverlayOffset, "name=\"WinRAR", pPdStruct) != -1) ||
-                         (guardedThis && (guardedThis->find_ansiString(0, nOverlayOffset, "sfxrar", pPdStruct) != -1)) ||
-                         (guardedThis && (guardedThis->find_ansiString(0, nOverlayOffset, "sfxcon", pPdStruct) != -1));
+    const bool bResult = (find_ansiString(0, nOverlayOffset, "name=\"WinRAR", pPdStruct) != -1) ||
+                         (find_ansiString(0, nOverlayOffset, "sfxrar", pPdStruct) != -1) ||
+                         (find_ansiString(0, nOverlayOffset, "sfxcon", pPdStruct) != -1);
 
-    return guardedThis && bResult && XBinary::isPdStructNotCanceled(pPdStruct);
+    return bResult && XBinary::isPdStructNotCanceled(pPdStruct);
 }

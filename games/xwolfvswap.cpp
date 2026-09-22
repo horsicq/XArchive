@@ -28,13 +28,12 @@ XBinary *XWolfVSwap::createInstance(QIODevice *pDevice, bool bIsImage,
 bool XWolfVSwap::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
                             PDSTRUCT *pPdStruct)
 {
-    QPointer<XWolfVSwap> guardedThis(this);
     const qint64 totalSize = getSize();
-    if (!guardedThis || totalSize < 12 ||
+    if (totalSize < 12 ||
         !isPdStructNotCanceled(pPdStruct))
         return false;
     const QByteArray fixed = read_array_process(0, 6, pPdStruct);
-    if (!guardedThis || fixed.size() != 6) return false;
+    if (fixed.size() != 6) return false;
     const uchar *fixedData = reinterpret_cast<const uchar *>(fixed.constData());
     const quint16 count = qFromLittleEndian<quint16>(fixedData);
     const quint16 spriteStart = qFromLittleEndian<quint16>(fixedData + 2);
@@ -45,7 +44,7 @@ bool XWolfVSwap::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
         return false;
     const QByteArray table = read_array_process(6, qint64(count) * 6,
                                                 pPdStruct);
-    if (!guardedThis || table.size() != qint64(count) * 6) return false;
+    if (table.size() != qint64(count) * 6) return false;
     const uchar *offsets = reinterpret_cast<const uchar *>(table.constData());
     const uchar *lengths = offsets + qint64(count) * 4;
 

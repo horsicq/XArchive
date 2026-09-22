@@ -20,7 +20,6 @@
  */
 #include "xtarnextsteparchive.h"
 
-#include <QPointer>
 
 #include <new>
 
@@ -118,8 +117,7 @@ bool XTarNextStepArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XTarNextStepArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -134,7 +132,7 @@ bool XTarNextStepArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (context.listMembers.size() >= TARNS_MAX_MEMBERS) break;
 
         const QByteArray baBlock = read_array_process(nOffset, TARNS_BLOCK_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baBlock.size() != TARNS_BLOCK_SIZE)) return false;
+        if (!guardedSource || (baBlock.size() != TARNS_BLOCK_SIZE)) return false;
         if (tarnsIsZeroBlock(baBlock)) break;
 
         qint64 nStoredChecksum = 0;
@@ -192,7 +190,7 @@ bool XTarNextStepArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XTarNextStepArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -343,11 +341,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XTarNextStepArchive::getDefaultUnpackProper
 
 bool XTarNextStepArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XTarNextStepArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -357,8 +354,8 @@ bool XTarNextStepArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PRO
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -371,15 +368,10 @@ bool XTarNextStepArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PRO
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

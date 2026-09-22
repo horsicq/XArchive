@@ -6,7 +6,6 @@
 
 #include "Algos/xaindecoder.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <memory>
@@ -110,15 +109,14 @@ QString XESPArchive::methodToString(quint8 nMethod)
 // off the large executables.
 bool XESPArchive::isDosCarrier(PDSTRUCT *pPdStruct)
 {
-    QPointer<XESPArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
 
     const qint64 nInputSize = guardedSource->size();
     if (nInputSize < 2) return false;
 
     const QByteArray baMagic = read_array_process(0, 2, pPdStruct);
-    if (!guardedThis || !guardedSource || (baMagic.size() != 2)) return false;
+    if ((baMagic.size() != 2)) return false;
     const bool bMZ = ((quint8)baMagic.at(0) == 'M') && ((quint8)baMagic.at(1) == 'Z');
     const bool bZM = ((quint8)baMagic.at(0) == 'Z') && ((quint8)baMagic.at(1) == 'M');
     if (!bMZ && !bZM) return false;
@@ -126,7 +124,7 @@ bool XESPArchive::isDosCarrier(PDSTRUCT *pPdStruct)
     if (nInputSize < 0x40) return true;
 
     const QByteArray baHeader = read_array_process(0, 0x40, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != 0x40)) return false;
+    if ((baHeader.size() != 0x40)) return false;
     const uchar *pHeader = (const uchar *)baHeader.constData();
 
     const quint16 nRelocationOffset = qFromLittleEndian<quint16>(pHeader + 0x18);
@@ -136,7 +134,7 @@ bool XESPArchive::isDosCarrier(PDSTRUCT *pPdStruct)
     if ((nNewHeader <= 0) || (nNewHeader > (nInputSize - 2))) return true;
 
     const QByteArray baNew = read_array_process(nNewHeader, 2, pPdStruct);
-    if (!guardedThis || !guardedSource || (baNew.size() != 2)) return false;
+    if ((baNew.size() != 2)) return false;
     if (baNew == QByteArray("PE", 2)) return false;
     if (baNew == QByteArray("NE", 2)) return false;
     if (baNew == QByteArray("LE", 2)) return false;
@@ -150,9 +148,8 @@ bool XESPArchive::isDosCarrier(PDSTRUCT *pPdStruct)
 // takes the first "ESP>" whose directory actually decodes into records.
 bool XESPArchive::locateContainer(qint64 *pnContainerOffset, PDSTRUCT *pPdStruct)
 {
-    QPointer<XESPArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pnContainerOffset || !guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pnContainerOffset || guardedSource->isSequential()) return false;
 
     const qint64 nInputSize = guardedSource->size();
     if (nInputSize < (ESP_HEADER_SIZE + 1)) return false;
@@ -162,9 +159,9 @@ bool XESPArchive::locateContainer(qint64 *pnContainerOffset, PDSTRUCT *pPdStruct
         *pnContainerOffset = 0;
         return true;
     }
-    if (!guardedThis || !guardedSource) return false;
+    if (!guardedSource) return false;
 
-    if (!isDosCarrier(pPdStruct) || !guardedThis || !guardedSource) return false;
+    if (!isDosCarrier(pPdStruct)) return false;
 
     char szTag[4] = {};
     szTag[0] = 'E';
@@ -178,7 +175,7 @@ bool XESPArchive::locateContainer(qint64 *pnContainerOffset, PDSTRUCT *pPdStruct
         if (nSearchOffset >= nInputSize) break;
 
         const qint64 nCandidate = find_array(nSearchOffset, nInputSize - nSearchOffset, szTag, 4, pPdStruct);
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
         if (nCandidate <= 0) break;
 
         CONTEXT candidate = {};
@@ -186,7 +183,7 @@ bool XESPArchive::locateContainer(qint64 *pnContainerOffset, PDSTRUCT *pPdStruct
             *pnContainerOffset = nCandidate;
             return true;
         }
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
 
         nSearchOffset = nCandidate + 1;
     }
@@ -198,15 +195,14 @@ bool XESPArchive::readHeader(qint64 nContainerOffset, CONTEXT *pContext, PDSTRUC
 {
     if (!pContext) return false;
 
-    QPointer<XESPArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     const qint64 nInputSize = guardedSource->size();
     if (!espRangeWithin(nInputSize, nContainerOffset, ESP_HEADER_SIZE)) return false;
 
     const QByteArray baHeader = read_array_process(nContainerOffset, ESP_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != ESP_HEADER_SIZE)) return false;
+    if ((baHeader.size() != ESP_HEADER_SIZE)) return false;
     const uchar *pHeader = (const uchar *)baHeader.constData();
 
     if ((pHeader[0] != 'E') || (pHeader[1] != 'S') || (pHeader[2] != 'P') || (pHeader[3] != '>')) return false;
@@ -247,8 +243,7 @@ bool XESPArchive::readDirectory(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XESPArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
 
     pContext->listMembers.clear();
@@ -257,7 +252,7 @@ bool XESPArchive::readDirectory(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (nStreamSize <= 0) return false;
 
     QByteArray baStream = read_array_process(pContext->nDirectoryOffset, nStreamSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baStream.size() != nStreamSize)) return false;
+    if ((baStream.size() != nStreamSize)) return false;
     if (pContext->bScrambled) descramble(&baStream);
 
     // The directory ends on its own escape, so a budget is asked for and the
@@ -265,7 +260,7 @@ bool XESPArchive::readDirectory(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     const qint64 nBudget = qMin((qint64)ESP_MAX_MEMBERS * ESP_RECORD_SIZE, ESP_MAX_DIRECTORY);
     QByteArray baDirectory;
     XAINDecoder::decode(baStream, 0, nBudget, &baDirectory, pPdStruct);
-    if (!guardedThis || !guardedSource) return false;
+    if (!guardedSource) return false;
     if (baDirectory.size() < ESP_RECORD_SIZE) return false;
 
     // Rebuilt byte for byte, because the parent field is an offset into it.
@@ -331,8 +326,7 @@ bool XESPArchive::materialize(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
     if (pContext->bEncrypted || (pContext->nFilter == ESP_FILTER_CHANNELS)) return false;
 
-    QPointer<XESPArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
 
     qint64 nStreamTotal = 0;
@@ -361,13 +355,13 @@ bool XESPArchive::materialize(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         // not masked.
         if (nStreamTotal > nBodySize) return false;
         baStream = read_array_process(nBodyOffset, nStreamTotal, pPdStruct);
-        if (!guardedThis || !guardedSource || (baStream.size() != nStreamTotal)) return false;
+        if ((baStream.size() != nStreamTotal)) return false;
     } else {
         QByteArray baBody = read_array_process(nBodyOffset, nBodySize, pPdStruct);
-        if (!guardedThis || !guardedSource || (baBody.size() != nBodySize)) return false;
+        if ((baBody.size() != nBodySize)) return false;
         if (pContext->bScrambled) descramble(&baBody);
         if (!XAINDecoder::decode(baBody, 0, nStreamTotal, &baStream, pPdStruct)) return false;
-        if (!guardedThis || !guardedSource || (baStream.size() != nStreamTotal)) return false;
+        if ((baStream.size() != nStreamTotal)) return false;
     }
 
     if (pContext->nFilter == ESP_FILTER_DELTA) applyDeltaFilter(&baStream);
@@ -424,18 +418,17 @@ bool XESPArchive::parseContext(CONTEXT *pContext, bool bMaterialize, PDSTRUCT *p
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XESPArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     qint64 nContainerOffset = 0;
-    if (!locateContainer(&nContainerOffset, pPdStruct) || !guardedThis || !guardedSource) return false;
-    if (!readHeader(nContainerOffset, &context, pPdStruct) || !guardedThis || !guardedSource) return false;
-    if (!readDirectory(&context, pPdStruct) || !guardedThis || !guardedSource) return false;
+    if (!locateContainer(&nContainerOffset, pPdStruct)) return false;
+    if (!readHeader(nContainerOffset, &context, pPdStruct)) return false;
+    if (!readDirectory(&context, pPdStruct)) return false;
 
     if (bMaterialize && !materialize(&context, pPdStruct)) {
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
         // A password-protected or /MM2 archive still lists; only its bytes are
         // withheld, and unpackCurrent() is what refuses them.
         context.baContent.clear();
@@ -449,7 +442,7 @@ bool XESPArchive::parseContext(CONTEXT *pContext, bool bMaterialize, PDSTRUCT *p
 
 bool XESPArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, false, pPdStruct);
@@ -545,11 +538,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XESPArchive::getDefaultUnpackProperties()
 
 bool XESPArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XESPArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -559,8 +551,8 @@ bool XESPArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVari
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(&pContext->context, true, pPdStruct) || !guardedThis || !guardedSource || pContext->context.listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(&pContext->context, true, pPdStruct) || pContext->context.listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -573,15 +565,10 @@ bool XESPArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVari
     pState->nNumberOfRecords = pContext->context.listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -593,8 +580,7 @@ bool XESPArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVari
 XBinary::ARCHIVERECORD XESPArchive::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
-    QPointer<XESPArchive> guardedThis(this);
-    if (!operationGuard.isAllowed() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis || (pState->nCurrentIndex < 0) ||
+    if (!operationGuard.isAllowed() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return ARCHIVERECORD();
     }
@@ -649,11 +635,10 @@ XBinary::ARCHIVERECORD XESPArchive::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *
 bool XESPArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    QPointer<XESPArchive> guardedThis(this);
-    QPointer<QIODevice> guardedOutput(pDevice);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !pDevice || !guardedSource || !isUnpackOutputSupported(guardedOutput.data()) ||
-        devicesAlias(guardedSource.data(), guardedOutput.data()) || !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis || (pState->nCurrentIndex < 0) ||
+    QIODevice *guardedOutput = pDevice;
+    QIODevice *guardedSource = getDevice();
+    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !pDevice || !isUnpackOutputSupported(guardedOutput) ||
+        devicesAlias(guardedSource, guardedOutput) || !isUnpackSourceCurrent(pState, pPdStruct) || (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }
@@ -692,15 +677,15 @@ bool XESPArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRU
     }
 
     std::unique_ptr<QIODevice> pStage(createFileBuffer(member.nSize, pPdStruct));
-    if (!pStage || !guardedThis || !guardedOutput) return false;
+    if (!pStage) return false;
     if (member.nSize > 0) {
         const qint64 nWritten = pStage->write(pContext->context.baContent.constData() + member.nContentOffset, member.nSize);
         if (nWritten != member.nSize) return false;
     }
     if (!pStage->seek(0) || !isUnpackSourceCurrent(pState, pPdStruct)) return false;
 
-    const bool bResult = publishUnpackOutput(pStage.get(), guardedOutput.data(), pState, pPdStruct);
-    if (!guardedThis || !bResult) return false;
+    const bool bResult = publishUnpackOutput(pStage.get(), guardedOutput, pState, pPdStruct);
+    if (!bResult) return false;
 
     return true;
 }
@@ -708,8 +693,7 @@ bool XESPArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRU
 bool XESPArchive::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    QPointer<XESPArchive> guardedThis(this);
-    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis || (pState->nCurrentIndex < 0) ||
+    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }

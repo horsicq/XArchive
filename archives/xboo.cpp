@@ -10,7 +10,6 @@
 
 #include "xboo.h"
 
-#include <QPointer>
 
 #include <limits>
 #include <memory>
@@ -329,19 +328,18 @@ bool XBOO::readSource(QByteArray *pbaSource, PDSTRUCT *pPdStruct)
 {
     if (!pbaSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XBOO> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     const qint64 nSize = getSize();
-    if (!guardedThis || !guardedSource || (nSize < BOO_MIN_FILE_SIZE) ||
+    if ((nSize < BOO_MIN_FILE_SIZE) ||
         (nSize > BOO_MAX_ENCODED_SIZE) ||
         (nSize > static_cast<qint64>((std::numeric_limits<int>::max)()))) {
         return false;
     }
 
     *pbaSource = read_array_process(0, nSize, pPdStruct);
-    return guardedThis && guardedSource &&
+    return guardedSource &&
            (static_cast<qint64>(pbaSource->size()) == nSize) &&
            isPdStructNotCanceled(pPdStruct);
 }
@@ -354,10 +352,9 @@ bool XBOO::parseContext(CONTEXT *pContext, qint64 nDecodedLimit,
         return false;
     }
 
-    QPointer<XBOO> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     QByteArray baSource;
-    if (!readSource(&baSource, pPdStruct) || !guardedThis || !guardedSource) {
+    if (!readSource(&baSource, pPdStruct)) {
         return false;
     }
 
@@ -377,12 +374,12 @@ bool XBOO::parseContext(CONTEXT *pContext, qint64 nDecodedLimit,
     }
 
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XBOO::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context;
     const bool bResult =
@@ -478,9 +475,8 @@ bool XBOO::initUnpack(UNPACK_STATE *pState,
                       const QMap<UNPACK_PROP, QVariant> &mapProperties,
                       PDSTRUCT *pPdStruct)
 {
-    QPointer<XBOO> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
     }
@@ -488,7 +484,7 @@ bool XBOO::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -538,9 +534,8 @@ bool XBOO::initUnpack(UNPACK_STATE *pState,
         *pState = UNPACK_STATE();
         return false;
     }
-    if (!parseContext(&pContext->context, nDecodedLimit, pPdStruct) ||
-        !guardedThis || !guardedSource) {
-        if (guardedThis) guardedThis->releaseUnpackSource(pState);
+    if (!parseContext(&pContext->context, nDecodedLimit, pPdStruct)) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -553,16 +548,11 @@ bool XBOO::initUnpack(UNPACK_STATE *pState,
     pState->nNumberOfRecords = 1;
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(
+    const bool bFinalized = validateAndFinalizeUnpackSource(
         pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -575,9 +565,8 @@ XBinary::ARCHIVERECORD XBOO::infoCurrent(UNPACK_STATE *pState,
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress,
                                           &m_bNestedUnpackInfoAuthorized);
-    QPointer<XBOO> guardedThis(this);
     if (!operationGuard.isAllowed() || !pState || !pState->pContext ||
-        !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis ||
+        !isUnpackSourceCurrent(pState, pPdStruct) ||
         (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords) ||
         (pState->nNumberOfRecords != 1)) {
@@ -618,11 +607,9 @@ bool XBOO::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
                          PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    QPointer<XBOO> guardedThis(this);
-    QPointer<QIODevice> guardedOutput(pDevice);
+    QIODevice *guardedOutput = pDevice;
     if (!operationGuard.isAcquired() || !pState || !pState->pContext ||
-        !pDevice || !isUnpackSourceCurrent(pState, pPdStruct) ||
-        !guardedThis || (pState->nCurrentIndex < 0) ||
+        !pDevice || !isUnpackSourceCurrent(pState, pPdStruct) || (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords) ||
         (pState->nNumberOfRecords != 1) ||
         devicesAlias(getDevice(), pDevice)) {
@@ -665,15 +652,15 @@ bool XBOO::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
 
     std::unique_ptr<QIODevice> pStage(createFileBuffer(nDecodedSize,
                                                        pPdStruct));
-    if (!pStage || !guardedThis || !guardedOutput ||
+    if (!pStage ||
         (pStage->write(baDecoded) != nDecodedSize) || !pStage->seek(0) ||
         !isUnpackSourceCurrent(pState, pPdStruct)) {
         return false;
     }
     const bool bResult = publishUnpackOutput(pStage.get(),
-                                             guardedOutput.data(), pState,
+                                             guardedOutput, pState,
                                              pPdStruct);
-    if (!guardedThis || !bResult) return false;
+    if (!bResult) return false;
     pState->nCurrentOffset = pState->nTotalSize;
     return true;
 }
@@ -681,9 +668,8 @@ bool XBOO::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
 bool XBOO::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    QPointer<XBOO> guardedThis(this);
     if (!operationGuard.isAcquired() || !pState || !pState->pContext ||
-        !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis ||
+        !isUnpackSourceCurrent(pState, pPdStruct) ||
         (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;

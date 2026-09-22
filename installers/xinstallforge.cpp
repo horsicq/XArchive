@@ -72,25 +72,24 @@ public:
 
     bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override
     {
-        QPointer<XInstallForgeTarGzip> guardedArchive(this);
         const XBinary::PDSTRUCTLIFETIME progressLifetime = XBinary::retainPdStructLifetime(pPdStruct);
-        if (!XTAR_GZ::initUnpack(pState, mapProperties, pPdStruct) || !guardedArchive || (pPdStruct && !XBinary::isPdStructLifetimeAlive(progressLifetime))) return false;
+        if (!XTAR_GZ::initUnpack(pState, mapProperties, pPdStruct) || (pPdStruct && !XBinary::isPdStructLifetimeAlive(progressLifetime))) return false;
 
-        const qint64 nCompressedSize = guardedArchive->getSize();
-        if (!guardedArchive || (pPdStruct && !XBinary::isPdStructLifetimeAlive(progressLifetime))) return false;
-        QPointer<QIODevice> guardedDecompressed(guardedArchive->m_pDecompressedData);
+        const qint64 nCompressedSize = getSize();
+        if ((pPdStruct && !XBinary::isPdStructLifetimeAlive(progressLifetime))) return false;
+        QIODevice *guardedDecompressed = m_pDecompressedData;
         const qint64 nDecompressedSize = guardedDecompressed ? guardedDecompressed->size() : -1;
-        if (!guardedArchive || !guardedDecompressed || (pPdStruct && !XBinary::isPdStructLifetimeAlive(progressLifetime))) return false;
+        if (!guardedDecompressed || (pPdStruct && !XBinary::isPdStructLifetimeAlive(progressLifetime))) return false;
         bool bIntegrityValid = (nCompressedSize >= 18) && (nDecompressedSize >= 0);
         if (bIntegrityValid) {
-            const quint32 nStoredSize = guardedArchive->read_uint32(nCompressedSize - 4);
-            if (!guardedArchive || !guardedDecompressed || (pPdStruct && !XBinary::isPdStructLifetimeAlive(progressLifetime))) return false;
+            const quint32 nStoredSize = read_uint32(nCompressedSize - 4);
+            if (!guardedDecompressed || (pPdStruct && !XBinary::isPdStructLifetimeAlive(progressLifetime))) return false;
             bIntegrityValid = ((quint64)nDecompressedSize == (quint64)nStoredSize) && XBinary::isPdStructNotCanceled(pPdStruct);
         }
 
         if (bIntegrityValid) {
-            const quint32 nStoredCRC32 = guardedArchive->read_uint32(nCompressedSize - 8);
-            if (!guardedArchive || !guardedDecompressed || (pPdStruct && !XBinary::isPdStructLifetimeAlive(progressLifetime))) return false;
+            const quint32 nStoredCRC32 = read_uint32(nCompressedSize - 8);
+            if (!guardedDecompressed || (pPdStruct && !XBinary::isPdStructLifetimeAlive(progressLifetime))) return false;
 
             // The footer check must not invoke the caller callback after the
             // base archive has published state owned by pState.  A private
@@ -103,12 +102,12 @@ public:
                 crcProgress.nFileBufferSize.storeRelease(progressSnapshot.nFileBufferSize.loadAcquire());
                 XBinary::setPdStructCallback(&crcProgress, installForgeCRCProgressCallback, &progressBridge);
             }
-            bIntegrityValid = XBinary::checkCRC(guardedDecompressed.data(), CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF, nStoredCRC32, &crcProgress) && guardedArchive &&
+            bIntegrityValid = XBinary::checkCRC(guardedDecompressed, CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF, nStoredCRC32, &crcProgress) &&
                               guardedDecompressed && (!pPdStruct || XBinary::isPdStructLifetimeAlive(progressLifetime)) && XBinary::isPdStructNotCanceled(pPdStruct);
         }
 
         if (!bIntegrityValid) {
-            if (guardedArchive) guardedArchive->XTAR_GZ::finishUnpack(pState, nullptr);
+            XTAR_GZ::finishUnpack(pState, nullptr);
             return false;
         }
 
@@ -206,30 +205,19 @@ XInstallForge::UNPACK_DEFERRED_CLEANUP::~UNPACK_DEFERRED_CLEANUP()
 
 XInstallForge::XInstallForge(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress) : XBinary(pDevice, bIsImage, nModuleAddress)
 {
-    m_pUnpackDeferredCleanup = QSharedPointer<UNPACK_DEFERRED_CLEANUP>::create();
-    const QSharedPointer<UNPACK_DEFERRED_CLEANUP> pDeferredCleanup = m_pUnpackDeferredCleanup;
-    m_pUnpackOperationState = QSharedPointer<bool>(new bool(false), INSTALLFORGE_OPERATION_STATE_DELETER(pDeferredCleanup));
     m_internalInfo = INTERNAL_INFO();
     setIsArchive(true);
 }
 
 XInstallForge::~XInstallForge()
 {
-    if (m_pUnpackOperationState) *m_pUnpackOperationState = true;
-    if (m_pUnpackDeferredCleanup) {
-        m_pUnpackDeferredCleanup->setContexts.unite(m_setUnpackContexts);
-        m_setUnpackContexts.clear();
-    }
-    m_pUnpackDeferredCleanup.clear();
-    m_pUnpackOperationState.clear();
 }
 
 bool XInstallForge::isValid(PDSTRUCT *pPdStruct)
 {
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
-    QPointer<XInstallForge> guardedThis(this);
-    const INTERNAL_INFO *pInfo = static_cast<const INTERNAL_INFO *>(guardedThis->getInternalInfo(pPdStruct));
-    return guardedThis && pInfo && pInfo->bIsValid;
+    const INTERNAL_INFO *pInfo = static_cast<const INTERNAL_INFO *>(getInternalInfo(pPdStruct));
+    return pInfo && pInfo->bIsValid;
 }
 
 bool XInstallForge::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
@@ -246,39 +234,34 @@ XInstallForge::INTERNAL_INFO XInstallForge::_getInternalInfo(PDSTRUCT *pPdStruct
 // Cache format-specific parsing together with the XBinary memory map.
 bool XInstallForge::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XInstallForge> guardedThis(this);
-    const bool bAlreadyHandled = guardedThis->isInternalInfoHandled();
-    if (!guardedThis) return false;
-
+    const bool bAlreadyHandled = isInternalInfoHandled();
     if (!bAlreadyHandled) {
-        const quint64 nTransaction = guardedThis->beginInternalInfoTransaction();
+        const quint64 nTransaction = beginInternalInfoTransaction();
         if (!nTransaction) return false;
 
         // The transaction supplies the recursion sentinel. Keep every
         // source-derived value local until the same binding is revalidated.
-        guardedThis->m_internalInfo = INTERNAL_INFO();
-        INTERNAL_INFO info = guardedThis->_getInternalInfo(pPdStruct);
-        if (!guardedThis) return false;
-        if (!guardedThis->isInternalInfoTransactionCurrent(nTransaction) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
-            guardedThis->rollbackInternalInfoTransaction(nTransaction);
+        m_internalInfo = INTERNAL_INFO();
+        INTERNAL_INFO info = _getInternalInfo(pPdStruct);
+        if (!isInternalInfoTransactionCurrent(nTransaction) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+            rollbackInternalInfoTransaction(nTransaction);
             return false;
         }
 
-        const XBinary::_MEMORY_MAP memoryMap = guardedThis->getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
-        if (!guardedThis) return false;
-        if (!guardedThis->isInternalInfoTransactionCurrent(nTransaction) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
-            guardedThis->rollbackInternalInfoTransaction(nTransaction);
+        const XBinary::_MEMORY_MAP memoryMap = getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
+        if (!isInternalInfoTransactionCurrent(nTransaction) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+            rollbackInternalInfoTransaction(nTransaction);
             return false;
         }
         info.memoryMap = memoryMap;
 
-        if (!guardedThis->isInternalInfoTransactionCurrent(nTransaction)) {
-            guardedThis->rollbackInternalInfoTransaction(nTransaction);
+        if (!isInternalInfoTransactionCurrent(nTransaction)) {
+            rollbackInternalInfoTransaction(nTransaction);
             return false;
         }
-        guardedThis->m_internalInfo = info;
-        if (!guardedThis->commitInternalInfoTransaction(nTransaction, static_cast<XBinary::INTERNAL_INFO *>(&guardedThis->m_internalInfo))) {
-            guardedThis->rollbackInternalInfoTransaction(nTransaction);
+        m_internalInfo = info;
+        if (!commitInternalInfoTransaction(nTransaction, static_cast<XBinary::INTERNAL_INFO *>(&m_internalInfo))) {
+            rollbackInternalInfoTransaction(nTransaction);
             return false;
         }
     }
@@ -288,11 +271,10 @@ bool XInstallForge::handleInternalInfo(PDSTRUCT *pPdStruct)
 
 void *XInstallForge::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XInstallForge> guardedThis(this);
-    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
-    if (!guardedThis || !bHandled) return nullptr;
+    const bool bHandled = handleInternalInfo(pPdStruct);
+    if (!bHandled) return nullptr;
 
-    return &guardedThis->m_internalInfo;
+    return &m_internalInfo;
 }
 
 void XInstallForge::setInternalInfo(void *pInternalInfo)
@@ -447,16 +429,11 @@ QMap<XBinary::UNPACK_PROP, QVariant> XInstallForge::getDefaultUnpackProperties()
 bool XInstallForge::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     if (!pState) return false;
-    QSharedPointer<bool> pOperationState = m_pUnpackOperationState;
-    if (!pOperationState || *pOperationState) return false;
-    QScopedValueRollback<bool> operationGuard(*pOperationState, true);
-    QPointer<XInstallForge> guardedThis(this);
     if (!pState->baUnpackSourceToken.isEmpty()) return false;
 
     if (pState->pContext) {
         UNPACK_CONTEXT *pOldContext = static_cast<UNPACK_CONTEXT *>(pState->pContext);
-        if (!m_setUnpackContexts.contains(pOldContext) || (pOldContext->pOwnerState != pState)) return false;
-        m_setUnpackContexts.remove(pOldContext);
+        if (pOldContext->pOwnerState != pState) return false;
         pState->pContext = nullptr;
         bool bFinishOK = true;
         if (pOldContext->pArchive) {
@@ -469,25 +446,24 @@ bool XInstallForge::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVa
         }
         delete pOldContext;
         *pState = UNPACK_STATE();
-        if (!guardedThis || !bFinishOK) return false;
+        if (!bFinishOK) return false;
     }
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
     *pState = UNPACK_STATE();
     pState->mapUnpackProperties = mapProperties;
 
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource) return false;
-    XInstallForge detector(guardedSource.data(), isImage(), getModuleAddress());
+    QIODevice *guardedSource = getDevice();
+    XInstallForge detector(guardedSource, isImage(), getModuleAddress());
     INTERNAL_INFO info = detector._detect(pPdStruct);
-    if (!guardedThis || !guardedSource || !info.bIsValid || (info.nArchiveOffset < 0) || (info.nArchiveSize <= 0)) return false;
+    if (!info.bIsValid || (info.nArchiveOffset < 0) || (info.nArchiveSize <= 0)) return false;
     const qint64 nTotalSize = guardedSource->size();
-    if (!guardedThis || !guardedSource || (nTotalSize < 0)) return false;
+    if ((nTotalSize < 0)) return false;
 
     UNPACK_CONTEXT *pContext = new UNPACK_CONTEXT;
     pContext->pOuterSourceDevice = guardedSource;
     pContext->nOwnerDeviceGeneration = getDeviceGeneration();
-    pContext->pSubDevice = new SubDevice(guardedSource.data(), info.nArchiveOffset, info.nArchiveSize);
+    pContext->pSubDevice = new SubDevice(guardedSource, info.nArchiveOffset, info.nArchiveSize);
     pContext->pArchive = nullptr;
     pContext->innerState = UNPACK_STATE();
 
@@ -503,7 +479,7 @@ bool XInstallForge::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVa
         case PAYLOAD_7Z:
         default: pContext->pArchive = new XSevenZip(pContext->pSubDevice); break;
     }
-    if (!pContext->pArchive->initUnpack(&pContext->innerState, mapProperties, pPdStruct) || !guardedThis || !guardedSource) {
+    if (!pContext->pArchive->initUnpack(&pContext->innerState, mapProperties, pPdStruct)) {
         pContext->pArchive->finishUnpack(&pContext->innerState, nullptr);
         delete pContext->pArchive;
         pContext->pSubDevice->close();
@@ -520,10 +496,6 @@ bool XInstallForge::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVa
     if (bNamesValid) pContext->listDecodedNames.reserve(nRecords);
     for (qint32 i = 0; bNamesValid && (i < nRecords); i++) {
         ARCHIVERECORD record = pContext->pArchive->infoCurrent(&pContext->innerState, pPdStruct);
-        if (!guardedThis || !guardedSource) {
-            bNamesValid = false;
-            break;
-        }
         QString sDecodedName;
         if (!decodeInstallForgeName(record.mapProperties.value(FPART_PROP_ORIGINALNAME).toString(), &sDecodedName)) {
             bNamesValid = false;
@@ -539,13 +511,12 @@ bool XInstallForge::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVa
         if (((i + 1) < nRecords) && !pContext->pArchive->moveToNext(&pContext->innerState, pPdStruct)) {
             bNamesValid = false;
         }
-        if (!guardedThis || !guardedSource) bNamesValid = false;
     }
     if (bNamesValid) {
-        bNamesValid = pContext->pArchive->finishUnpack(&pContext->innerState, nullptr) && guardedThis && guardedSource;
+        bNamesValid = pContext->pArchive->finishUnpack(&pContext->innerState, nullptr) && guardedSource;
         if (bNamesValid) {
             pContext->innerState = UNPACK_STATE();
-            bNamesValid = pContext->pArchive->initUnpack(&pContext->innerState, mapProperties, pPdStruct) && guardedThis && guardedSource &&
+            bNamesValid = pContext->pArchive->initUnpack(&pContext->innerState, mapProperties, pPdStruct) && guardedSource &&
                           (pContext->innerState.nNumberOfRecords == nRecords);
         }
     }
@@ -563,22 +534,17 @@ bool XInstallForge::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVa
     pState->mapArchiveProperties = pContext->innerState.mapArchiveProperties;
     pContext->pOwnerState = pState;
     pState->pContext = pContext;
-    m_setUnpackContexts.insert(pContext);
     return true;
 }
 
 XBinary::ARCHIVERECORD XInstallForge::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     ARCHIVERECORD result = {};
-    QSharedPointer<bool> pOperationState = m_pUnpackOperationState;
-    if (!pOperationState || *pOperationState) return result;
-    QScopedValueRollback<bool> operationGuard(*pOperationState, true);
-    QPointer<XInstallForge> guardedThis(this);
     if (!pState || !pState->baUnpackSourceToken.isEmpty() || !pState->pContext || !XBinary::isPdStructNotCanceled(pPdStruct) || (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords))
         return result;
     UNPACK_CONTEXT *pContext = static_cast<UNPACK_CONTEXT *>(pState->pContext);
-    if (!m_setUnpackContexts.contains(pContext) || (pContext->pOwnerState != pState) || !pContext->pOuterSourceDevice || (pContext->pOuterSourceDevice != getDevice()) ||
+    if ((pContext->pOwnerState != pState) || !pContext->pOuterSourceDevice || (pContext->pOuterSourceDevice != getDevice()) ||
         (pContext->nOwnerDeviceGeneration != getDeviceGeneration()) || !pContext->pArchive)
         return result;
     if (pState->nCurrentIndex >= pContext->listDecodedNames.size()) return result;
@@ -586,33 +552,29 @@ XBinary::ARCHIVERECORD XInstallForge::infoCurrent(UNPACK_STATE *pState, PDSTRUCT
         (pContext->innerState.nNumberOfRecords != pState->nNumberOfRecords))
         return result;
     result = pContext->pArchive->infoCurrent(&pContext->innerState, pPdStruct);
-    if (!guardedThis || !m_setUnpackContexts.contains(pContext) || (pState->pContext != pContext)) return ARCHIVERECORD();
+    if (pState->pContext != pContext) return ARCHIVERECORD();
     result.mapProperties.insert(FPART_PROP_ORIGINALNAME, pContext->listDecodedNames.at(pState->nCurrentIndex));
     return result;
 }
 
 bool XInstallForge::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    QSharedPointer<bool> pOperationState = m_pUnpackOperationState;
-    if (!pOperationState || *pOperationState) return false;
-    QScopedValueRollback<bool> operationGuard(*pOperationState, true);
-    QPointer<XInstallForge> guardedThis(this);
-    QPointer<QIODevice> guardedOutput(pDevice);
-    if (!pState || !pState->baUnpackSourceToken.isEmpty() || !pState->pContext || !guardedOutput || !guardedOutput->isOpen() || !guardedOutput->isWritable() ||
-        guardedOutput->isSequential() || !guardedThis || !guardedOutput || (guardedOutput->openMode() & (QIODevice::Append | QIODevice::Text)) ||
+    QIODevice *guardedOutput = pDevice;
+    if (!pState || !pState->baUnpackSourceToken.isEmpty() || !pState->pContext || !guardedOutput->isOpen() || !guardedOutput->isWritable() ||
+        guardedOutput->isSequential() || (guardedOutput->openMode() & (QIODevice::Append | QIODevice::Text)) ||
         !XBinary::isPdStructNotCanceled(pPdStruct) || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }
     UNPACK_CONTEXT *pContext = static_cast<UNPACK_CONTEXT *>(pState->pContext);
-    if (!m_setUnpackContexts.contains(pContext) || (pContext->pOwnerState != pState) || !pContext->pOuterSourceDevice || (pContext->pOuterSourceDevice != getDevice()) ||
+    if ((pContext->pOwnerState != pState) || !pContext->pOuterSourceDevice || (pContext->pOuterSourceDevice != getDevice()) ||
         (pContext->nOwnerDeviceGeneration != getDeviceGeneration()) || !pContext->pArchive)
         return false;
     if ((pContext->innerState.nCurrentIndex != pState->nCurrentIndex) || (pContext->innerState.nCurrentOffset != pState->nCurrentOffset) ||
         (pContext->innerState.nNumberOfRecords != pState->nNumberOfRecords))
         return false;
     pContext->innerState.spOutputBudget = pState->spOutputBudget;
-    bool bResult = pContext->pArchive->unpackCurrent(&pContext->innerState, guardedOutput.data(), pPdStruct);
-    if (!guardedThis || !guardedOutput || !m_setUnpackContexts.contains(pContext) || (pState->pContext != pContext)) return false;
+    bool bResult = pContext->pArchive->unpackCurrent(&pContext->innerState, guardedOutput, pPdStruct);
+    if (pState->pContext != pContext) return false;
     pState->nCurrentOffset = pContext->innerState.nCurrentOffset;
     pState->mapArchiveProperties = pContext->innerState.mapArchiveProperties;
     return bResult;
@@ -620,22 +582,18 @@ bool XInstallForge::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDST
 
 bool XInstallForge::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QSharedPointer<bool> pOperationState = m_pUnpackOperationState;
-    if (!pOperationState || *pOperationState) return false;
-    QScopedValueRollback<bool> operationGuard(*pOperationState, true);
-    QPointer<XInstallForge> guardedThis(this);
     if (!pState || !pState->baUnpackSourceToken.isEmpty() || !pState->pContext || !XBinary::isPdStructNotCanceled(pPdStruct) || (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords))
         return false;
     UNPACK_CONTEXT *pContext = static_cast<UNPACK_CONTEXT *>(pState->pContext);
-    if (!m_setUnpackContexts.contains(pContext) || (pContext->pOwnerState != pState) || !pContext->pOuterSourceDevice || (pContext->pOuterSourceDevice != getDevice()) ||
+    if ((pContext->pOwnerState != pState) || !pContext->pOuterSourceDevice || (pContext->pOuterSourceDevice != getDevice()) ||
         (pContext->nOwnerDeviceGeneration != getDeviceGeneration()) || !pContext->pArchive)
         return false;
     if ((pContext->innerState.nCurrentIndex != pState->nCurrentIndex) || (pContext->innerState.nCurrentOffset != pState->nCurrentOffset) ||
         (pContext->innerState.nNumberOfRecords != pState->nNumberOfRecords))
         return false;
     bool bResult = pContext->pArchive->moveToNext(&pContext->innerState, pPdStruct);
-    if (!guardedThis || !m_setUnpackContexts.contains(pContext) || (pState->pContext != pContext)) return false;
+    if (pState->pContext != pContext) return false;
     pState->nCurrentIndex = pContext->innerState.nCurrentIndex;
     pState->nCurrentOffset = pContext->innerState.nCurrentOffset;
     pState->mapArchiveProperties = pContext->innerState.mapArchiveProperties;
@@ -647,15 +605,10 @@ bool XInstallForge::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     Q_UNUSED(pPdStruct)
     if (!pState) return false;
     if (!pState->baUnpackSourceToken.isEmpty()) return false;
-    QSharedPointer<bool> pOperationState = m_pUnpackOperationState;
-    if (!pOperationState || *pOperationState) return false;
-    QScopedValueRollback<bool> operationGuard(*pOperationState, true);
-    QPointer<XInstallForge> guardedThis(this);
     bool bResult = true;
     if (pState->pContext) {
         UNPACK_CONTEXT *pContext = static_cast<UNPACK_CONTEXT *>(pState->pContext);
-        if (!m_setUnpackContexts.contains(pContext) || (pContext->pOwnerState != pState)) return false;
-        m_setUnpackContexts.remove(pContext);
+        if (pContext->pOwnerState != pState) return false;
         pState->pContext = nullptr;
         if (pContext->pArchive) {
             bResult = pContext->pArchive->finishUnpack(&pContext->innerState, nullptr);
@@ -666,7 +619,6 @@ bool XInstallForge::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
             delete pContext->pSubDevice;
         }
         delete pContext;
-        if (!guardedThis) return false;
     }
     pState->nCurrentOffset = 0;
     pState->nTotalSize = 0;

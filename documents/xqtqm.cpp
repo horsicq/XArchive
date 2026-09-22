@@ -10,7 +10,6 @@
 
 #include <QFileInfo>
 #include <QLocale>
-#include <QPointer>
 #include <QtEndian>
 
 #include <limits>
@@ -298,16 +297,15 @@ QByteArray XQtQM::renderTS(const CATALOG &catalog)
 bool XQtQM::readSource(QByteArray *pData, PDSTRUCT *pPdStruct)
 {
     if (!pData || !isPdStructNotCanceled(pPdStruct)) return false;
-    QPointer<XQtQM> guardedThis(this);
     const qint64 nSize = getSize();
-    if (!guardedThis || (nSize < 16) || (nSize > QM_MAX_SOURCE) || (nSize > (std::numeric_limits<int>::max)())) return false;
+    if ((nSize < 16) || (nSize > QM_MAX_SOURCE) || (nSize > (std::numeric_limits<int>::max)())) return false;
     const QByteArray baMagic = read_array_process(0, 16, pPdStruct);
-    if (!guardedThis || (baMagic.size() != 16)) return false;
+    if ((baMagic.size() != 16)) return false;
     for (qint32 i = 0; i < 16; ++i) {
         if (static_cast<quint8>(baMagic.at(i)) != QM_MAGIC[i]) return false;
     }
     *pData = read_array_process(0, nSize, pPdStruct);
-    return guardedThis && (pData->size() == nSize) && isPdStructNotCanceled(pPdStruct);
+    return (pData->size() == nSize) && isPdStructNotCanceled(pPdStruct);
 }
 
 QString XQtQM::memberName()
@@ -386,7 +384,6 @@ XBinary *XQtQM::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleA
 
 bool XQtQM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XQtQM> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
@@ -395,12 +392,12 @@ bool XQtQM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     pState->pContext = nullptr;
     *pState = UNPACK_STATE();
     delete pOldContext;
-    if (!guardedThis || !bindUnpackSource(pState, pPdStruct)) return false;
+    if (!bindUnpackSource(pState, pPdStruct)) return false;
 
     QByteArray baSource;
     CATALOG catalog;
     UNPACK_CONTEXT *pContext = new (std::nothrow) UNPACK_CONTEXT;
-    bool bResult = pContext && readSource(&baSource, pPdStruct) && guardedThis && parseCatalog(baSource, &catalog, pPdStruct);
+    bool bResult = pContext && readSource(&baSource, pPdStruct) && parseCatalog(baSource, &catalog, pPdStruct);
     if (bResult) {
         pContext->sName = memberName();
         catalog.sLanguage = normalizeLanguage(catalog.sLanguage);
@@ -408,11 +405,11 @@ bool XQtQM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
         pContext->baText = renderTS(catalog);
         pContext->nMessages = catalog.listMessages.size();
         pContext->sLanguage = catalog.sLanguage;
-        bResult = guardedThis && (pContext->baText.size() <= QM_MAX_TEXT);
+        bResult = (pContext->baText.size() <= QM_MAX_TEXT);
     }
     if (!bResult) {
         delete pContext;
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
         return false;
     }
@@ -424,7 +421,6 @@ bool XQtQM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     pState->nTotalSize = baSource.size();
     pState->mapUnpackProperties = mapProperties;
     if (!validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
-        if (!guardedThis) return false;
         pState->pContext = nullptr;
         releaseUnpackSource(pState);
         delete pContext;
@@ -436,9 +432,8 @@ bool XQtQM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
 
 XBinary::ARCHIVERECORD XQtQM::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XQtQM> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
-    if (!operationGuard.isAllowed() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis || (pState->nCurrentIndex != 0) ||
+    if (!operationGuard.isAllowed() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || (pState->nCurrentIndex != 0) ||
         (pState->nNumberOfRecords != 1))
         return ARCHIVERECORD();
     const UNPACK_CONTEXT *pContext = static_cast<const UNPACK_CONTEXT *>(pState->pContext);
@@ -456,13 +451,12 @@ XBinary::ARCHIVERECORD XQtQM::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
 
 bool XQtQM::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    QPointer<XQtQM> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState || !pState->pContext || !pDevice || !isUnpackSourceCurrent(pState, pPdStruct) || (pState->nCurrentIndex != 0) ||
         (pState->nNumberOfRecords != 1) || devicesAlias(getDevice(), pDevice))
         return false;
 
-    QPointer<QIODevice> guardedOutput(pDevice);
+    QIODevice *guardedOutput = pDevice;
     const UNPACK_CONTEXT *pContext = static_cast<const UNPACK_CONTEXT *>(pState->pContext);
     const qint64 nSize = pContext->baText.size();
     if (!isUnpackOutputSizeAllowed(pState->mapUnpackProperties, nSize)) return false;
@@ -473,19 +467,18 @@ bool XQtQM::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     }
 
     std::unique_ptr<QIODevice> pStage(createFileBuffer(nSize, pPdStruct));
-    if (!pStage || !guardedThis || !guardedOutput || ((nSize > 0) && (pStage->write(pContext->baText) != nSize)) || !pStage->seek(0) ||
+    if (!pStage || !guardedOutput || ((nSize > 0) && (pStage->write(pContext->baText) != nSize)) || !pStage->seek(0) ||
         !isUnpackSourceCurrent(pState, pPdStruct))
         return false;
-    const bool bResult = publishUnpackOutput(pStage.get(), guardedOutput.data(), pState, pPdStruct);
-    if (bResult && guardedThis) pState->nCurrentOffset = nSize;
-    return bResult && guardedThis;
+    const bool bResult = publishUnpackOutput(pStage.get(), guardedOutput, pState, pPdStruct);
+    if (bResult) pState->nCurrentOffset = nSize;
+    return bResult;
 }
 
 bool XQtQM::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XQtQM> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis || (pState->nCurrentIndex < 0) ||
+    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords))
         return false;
     ++pState->nCurrentIndex;

@@ -5,7 +5,6 @@
 
 #include "xagis.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <cstring>
@@ -66,8 +65,7 @@ bool XAGIS::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XAGIS> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -84,7 +82,7 @@ bool XAGIS::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         }
         const QByteArray baHeader =
             read_array_process(nOffset, AGIS_HEADER_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource ||
+        if (!guardedSource ||
             baHeader.size() != AGIS_HEADER_SIZE) {
             return false;
         }
@@ -144,7 +142,7 @@ bool XAGIS::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
             if (member.nCompressedSize < 3) return false;
             const QByteArray baPrelude =
                 read_array_process(member.nDataOffset, 2, pPdStruct);
-            if (!guardedThis || !guardedSource || baPrelude.size() != 2) {
+            if (!guardedSource || baPrelude.size() != 2) {
                 return false;
             }
             if (static_cast<quint8>(baPrelude.at(0)) != nMethod) return false;
@@ -166,7 +164,7 @@ bool XAGIS::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
             context.nFirstMemberOffset =
                 context.listMembers.first().nHeaderOffset;
             *pContext = context;
-            return guardedThis && guardedSource &&
+            return guardedSource &&
                    isPdStructNotCanceled(pPdStruct);
         }
     }
@@ -176,7 +174,7 @@ bool XAGIS::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XAGIS::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -399,8 +397,7 @@ bool XAGIS::initUnpack(UNPACK_STATE *pState,
                        const QMap<UNPACK_PROP, QVariant> &mapProperties,
                        PDSTRUCT *pPdStruct)
 {
-    QPointer<XAGIS> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
@@ -409,7 +406,7 @@ bool XAGIS::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) || !guardedSource ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -425,9 +422,9 @@ bool XAGIS::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis ||
+    if (!parseContext(pContext, pPdStruct) ||
         !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -443,16 +440,11 @@ bool XAGIS::initUnpack(UNPACK_STATE *pState,
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(
+    const bool bFinalized = validateAndFinalizeUnpackSource(
         pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

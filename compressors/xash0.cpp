@@ -8,8 +8,6 @@
 #include "Algos/xash0decoder.h"
 
 #include <QFileInfo>
-#include <QPointer>
-
 #include <new>
 
 namespace {
@@ -64,9 +62,7 @@ qint64 XASH0::windowSize(qint32 nDistBits)
 bool XASH0::parseContext(CONTEXT *pContext, bool bVerifyPayload, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
-
-    QPointer<XASH0> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -74,7 +70,7 @@ bool XASH0::parseContext(CONTEXT *pContext, bool bVerifyPayload, PDSTRUCT *pPdSt
     if ((context.nInputSize < ASH0_MIN_SIZE) || (context.nInputSize > ASH0_MAX_PACKED_SIZE)) return false;
 
     const QByteArray baHeader = read_array_process(0, ASH0_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != ASH0_HEADER_SIZE)) return false;
+    if (!guardedSource || (baHeader.size() != ASH0_HEADER_SIZE)) return false;
 
     // Magic, length 1..0xFFFFFF, distance offset in [0x10, size - 4] and the
     // expansion-ratio guard all live in the decoder's header parse so the two
@@ -88,8 +84,8 @@ bool XASH0::parseContext(CONTEXT *pContext, bool bVerifyPayload, PDSTRUCT *pPdSt
     context.nTopByte = header.nTopByte;
     context.nDistBits = 0;
 
-    const QString sDeviceName = XBinary::getDeviceFileName(guardedSource.data());
-    if (!guardedThis || !guardedSource) return false;
+    const QString sDeviceName = XBinary::getDeviceFileName(guardedSource);
+    if (!guardedSource) return false;
     QString sContainerName;
     if (!sDeviceName.isEmpty()) {
         sContainerName = QFileInfo(sDeviceName).fileName();
@@ -98,7 +94,7 @@ bool XASH0::parseContext(CONTEXT *pContext, bool bVerifyPayload, PDSTRUCT *pPdSt
 
     if (bVerifyPayload) {
         const QByteArray baPacked = read_array_process(0, context.nInputSize, pPdStruct);
-        if (!guardedThis || !guardedSource || (baPacked.size() != context.nInputSize)) return false;
+        if (!guardedSource || (baPacked.size() != context.nInputSize)) return false;
 
         // The whole gate: both streams must parse, every match must be legal,
         // the output must reach exactly the declared length, and the width
@@ -106,7 +102,7 @@ bool XASH0::parseContext(CONTEXT *pContext, bool bVerifyPayload, PDSTRUCT *pPdSt
         // any cheaper.
         XASH0Decoder::RESULT result = {};
         if (!XASH0Decoder::probe(baPacked, &result, pPdStruct)) return false;
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
         if ((result.nDistBits != ASH0_DIST_BITS_DEFAULT) && (result.nDistBits != ASH0_DIST_BITS_RANCH)) return false;
         if (result.nSymBits != ASH0_SYM_BITS) return false;
         context.nDistBits = result.nDistBits;
@@ -116,12 +112,12 @@ bool XASH0::parseContext(CONTEXT *pContext, bool bVerifyPayload, PDSTRUCT *pPdSt
 
     context.nArchiveSize = context.nInputSize;
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XASH0::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     // Four magic bytes and a 24-bit length have no checksum behind them; only
@@ -284,11 +280,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XASH0::getDefaultUnpackProperties()
 
 bool XASH0::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XASH0> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -300,8 +295,8 @@ bool XASH0::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     }
     // bVerifyPayload = true: the decoder takes the plaintext length as an
     // INPUT and the width as a hint, so both must be ones it reproduces.
-    if (!parseContext(pContext, true, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, true, pPdStruct) || !guardedSource) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -319,15 +314,10 @@ bool XASH0::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     pState->nNumberOfRecords = 1;
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

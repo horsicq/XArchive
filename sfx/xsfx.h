@@ -33,7 +33,7 @@ public:
     };
 
     struct UNPACK_CONTEXT {
-        QPointer<QIODevice> pOuterSourceDevice;
+        QIODevice *pOuterSourceDevice = nullptr;
         quint64 nOwnerDeviceGeneration;
         UNPACK_STATE *pOwnerState = nullptr;
         INTERNAL_INFO info;
@@ -88,11 +88,6 @@ public:
 protected:
     explicit XSFX(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress, FT requiredArcType);
 
-    bool isDeviceReplacementAllowed() const override
-    {
-        return (!m_pUnpackOperationState || !*m_pUnpackOperationState) && m_setUnpackContexts.isEmpty();
-    }
-
 private:
     struct SCAN_CANDIDATE_EVALUATOR;
 
@@ -104,9 +99,6 @@ private:
     bool _matchArchiveAt(qint64 nOffset, qint64 nSize, FT *pType, qint64 *pArchiveSize, PDSTRUCT *pPdStruct, XSFX_ZPAQ_SCAN_CACHE *pZpaqScanCache,
                          XSFX_FREEARC_SCAN_CACHE *pFreeArcScanCache, bool *pbProvisional, bool *pbResourceIndeterminate, bool *pbUseOuterDevice);
     XArchive *_createArchive(FT arcType, QIODevice *pDevice, bool bAllowOpaqueZpaq = false);
-    QSharedPointer<bool> m_pUnpackOperationState;
-    QSharedPointer<UNPACK_DEFERRED_CLEANUP> m_pUnpackDeferredCleanup;
-    QSet<UNPACK_CONTEXT *> m_setUnpackContexts;
     FT m_requiredArcType;
 };
 

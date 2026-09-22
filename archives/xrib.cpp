@@ -21,7 +21,6 @@
 #include "xrib.h"
 
 #include <QBuffer>
-#include <QPointer>
 #include <QtEndian>
 
 #include <cstring>
@@ -49,18 +48,16 @@ bool XRIB::readHeaderInfo(RIB_HEADER_INFO *pInfo, PDSTRUCT *pPdStruct)
     if (pInfo) *pInfo = RIB_HEADER_INFO();
     if (!pInfo || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XRIB> guardedThis(this);
-    QPointer<QIODevice> guardedDevice(getDevice());
-    if (!guardedThis || !guardedDevice) return false;
+    QIODevice *guardedDevice = getDevice();
 
     const qint64 nFileSize = getSize();
-    if (!guardedThis || !guardedDevice || (nFileSize < RIB_HEADER_SIZE)) {
+    if (nFileSize < RIB_HEADER_SIZE) {
         return false;
     }
 
     const qint64 nReadSize = qMin<qint64>(nFileSize, RIB_HEADER_SIZE + RIB_PREFIX_SIZE);
     const QByteArray baHeader = read_array_process(0, nReadSize, pPdStruct);
-    if (!guardedThis || !guardedDevice || (baHeader.size() != nReadSize) || !ribStartsWith(baHeader, "RIB\0", 4)) {
+    if ((baHeader.size() != nReadSize) || !ribStartsWith(baHeader, "RIB\0", 4)) {
         return false;
     }
 
@@ -99,14 +96,13 @@ bool XRIB::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 
 bool XRIB::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XRIB> guardedThis(this);
     if (!isInternalInfoHandled()) {
         RIB_HEADER_INFO info;
-        if (!readHeaderInfo(&info, pPdStruct) || !guardedThis) return false;
+        if (!readHeaderInfo(&info, pPdStruct)) return false;
 
-        if (!XArchive::handleInternalInfo(pPdStruct) || !guardedThis) return false;
+        if (!XArchive::handleInternalInfo(pPdStruct)) return false;
         XArchive::INTERNAL_INFO *pBase = static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
-        if (!guardedThis || !pBase) return false;
+        if (!pBase) return false;
         static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) = *pBase;
 
         m_internalInfo.nPackedSize = info.nPackedSize;
@@ -213,7 +209,6 @@ QString XRIB::payloadExtension(const QByteArray &baPrefix)
 
 bool XRIB::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XRIB> guardedThis(this);
     if (m_bUnpackOperationInProgress) return false;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState) return false;
@@ -226,12 +221,12 @@ bool XRIB::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     pState->pContext = nullptr;
     *pState = UNPACK_STATE();
     delete pOldContext;
-    if (!guardedThis || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
-    if (!bindUnpackSource(pState, pPdStruct) || !guardedThis) return false;
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    if (!bindUnpackSource(pState, pPdStruct)) return false;
 
     RIB_HEADER_INFO info;
-    if (!readHeaderInfo(&info, pPdStruct) || !guardedThis) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!readHeaderInfo(&info, pPdStruct)) {
+        releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
         return false;
     }
@@ -254,20 +249,8 @@ bool XRIB::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     pContext->nFileSize = info.nFileSize;
     pContext->nPackedSize = info.nPackedSize;
     pContext->nUncompressedSize = info.nUncompressedSize;
-    QPointer<QIODevice> guardedDevice(getDevice());
-    if (!guardedThis || !guardedDevice) {
-        delete pContext;
-        if (guardedThis) releaseUnpackSource(pState);
-        *pState = UNPACK_STATE();
-        return false;
-    }
-    QString sBaseName = XBinary::getDeviceFileBaseName(guardedDevice.data());
-    if (!guardedThis || !guardedDevice) {
-        delete pContext;
-        if (guardedThis) releaseUnpackSource(pState);
-        *pState = UNPACK_STATE();
-        return false;
-    }
+    QIODevice *guardedDevice = getDevice();
+    QString sBaseName = XBinary::getDeviceFileBaseName(guardedDevice);
     if (sBaseName.isEmpty()) sBaseName = QStringLiteral("data");
     pContext->sFileName = sBaseName + QLatin1Char('.') + payloadExtension(info.baPayloadPrefix);
 
@@ -278,11 +261,6 @@ bool XRIB::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     pState->nTotalSize = info.nFileSize;
     pState->mapUnpackProperties = mapProperties;
     if (!validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
         pState->pContext = nullptr;
         releaseUnpackSource(pState);
         delete pContext;
@@ -294,12 +272,11 @@ bool XRIB::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
 
 XBinary::ARCHIVERECORD XRIB::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XRIB> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed() || !pState || !pState->pContext) return ARCHIVERECORD();
 
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!bSourceCurrent || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return ARCHIVERECORD();
     }
     RIB_UNPACK_CONTEXT *pContext = static_cast<RIB_UNPACK_CONTEXT *>(pState->pContext);
@@ -504,12 +481,11 @@ bool XRIB::decompress(const QByteArray &baPackedData, qint64 nUncompressedSize, 
 bool XRIB::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    QPointer<XRIB> guardedThis(this);
-    QPointer<QIODevice> guardedOutput(pDevice);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !guardedThis || !guardedOutput || !guardedSource ||
-        !isUnpackOutputSupported(guardedOutput.data()) || XBinary::devicesAlias(guardedSource.data(), guardedOutput.data()) ||
-        !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    QIODevice *guardedOutput = pDevice;
+    QIODevice *guardedSource = getDevice();
+    if (!operationGuard.isAcquired() || !pState || !pState->pContext ||
+        !isUnpackOutputSupported(guardedOutput) || XBinary::devicesAlias(guardedSource, guardedOutput) ||
+        !isUnpackSourceCurrent(pState, pPdStruct) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -527,13 +503,13 @@ bool XRIB::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
     }
 
     const QByteArray baPacked = read_array_process(RIB_HEADER_SIZE, pContext->nPackedSize, pPdStruct);
-    if (!guardedThis || !guardedOutput || !guardedSource || (baPacked.size() != pContext->nPackedSize) || !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis) {
+    if ((baPacked.size() != pContext->nPackedSize) || !isUnpackSourceCurrent(pState, pPdStruct)) {
         return false;
     }
 
     QByteArray baDecoded;
-    if (!decompress(baPacked, pContext->nUncompressedSize, &baDecoded, pPdStruct) || !guardedThis || !guardedOutput || !guardedSource ||
-        (baDecoded.size() != pContext->nUncompressedSize) || !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis) {
+    if (!decompress(baPacked, pContext->nUncompressedSize, &baDecoded, pPdStruct) ||
+        (baDecoded.size() != pContext->nUncompressedSize) || !isUnpackSourceCurrent(pState, pPdStruct)) {
         XBinary::setPdStructErrorString(pPdStruct, tr("Invalid RIB compressed stream"));
         return false;
     }
@@ -557,22 +533,21 @@ bool XRIB::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
 
     QBuffer stage(&baDecoded);
     if (!stage.open(QIODevice::ReadOnly)) return false;
-    const bool bResult = guardedThis && guardedOutput && guardedSource && isUnpackSourceCurrent(pState, pPdStruct) && guardedThis &&
-                         publishUnpackOutput(&stage, guardedOutput.data(), pState, pPdStruct);
+    const bool bResult = isUnpackSourceCurrent(pState, pPdStruct) &&
+                         publishUnpackOutput(&stage, guardedOutput, pState, pPdStruct);
     stage.close();
-    if (bResult && guardedThis) {
+    if (bResult) {
         pState->nCurrentOffset = pContext->nUncompressedSize;
     }
-    return bResult && guardedThis && guardedOutput && guardedSource;
+    return bResult;
 }
 
 bool XRIB::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XRIB> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState || !pState->pContext) return false;
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent || !XBinary::isPdStructNotCanceled(pPdStruct) || (pState->nNumberOfRecords != 1) || (pState->nCurrentIndex != 0)) {
+    if (!bSourceCurrent || !XBinary::isPdStructNotCanceled(pPdStruct) || (pState->nNumberOfRecords != 1) || (pState->nCurrentIndex != 0)) {
         return false;
     }
     pState->nCurrentIndex = 1;

@@ -22,7 +22,6 @@
 
 #include "Algos/ximpdecoder.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -53,16 +52,15 @@ bool XIMPArchive::parseContext(CONTEXT *pContext, bool bFull, PDSTRUCT *pPdStruc
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XIMPArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
     if ((context.nInputSize < IMP_HEADER_SIZE) || (context.nInputSize > 0x7fffffffLL)) return false;
 
     const QByteArray baHeader = read_array_process(0, IMP_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != IMP_HEADER_SIZE)) return false;
+    if ((baHeader.size() != IMP_HEADER_SIZE)) return false;
     if (baHeader.left(4) != QByteArray("IMP\n", 4)) return false;
 
     const uchar *pHeader = (const uchar *)baHeader.constData();
@@ -81,7 +79,7 @@ bool XIMPArchive::parseContext(CONTEXT *pContext, bool bFull, PDSTRUCT *pPdStruc
     if (context.nNumberOfFiles > 0) {
         if (!impRangeWithin(context.nInputSize, context.nDirectoryOffset, 6)) return false;
         const QByteArray baTag = read_array_process(context.nDirectoryOffset, 6, pPdStruct);
-        if (!guardedThis || !guardedSource || (baTag.size() != 6)) return false;
+        if ((baTag.size() != 6)) return false;
         if (baTag != QByteArray("IMPDE\0", 6)) return false;
     }
 
@@ -92,7 +90,7 @@ bool XIMPArchive::parseContext(CONTEXT *pContext, bool bFull, PDSTRUCT *pPdStruc
 
     const qint64 nDirectorySize = qMin(context.nInputSize - context.nDirectoryOffset, IMP_MAX_DIRECTORY);
     const QByteArray baDirectory = read_array_process(context.nDirectoryOffset, nDirectorySize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baDirectory.size() != nDirectorySize)) return false;
+    if ((baDirectory.size() != nDirectorySize)) return false;
 
     QList<QByteArray> listChunks;
     if (!XIMPDecoder::decodeDirectory(baDirectory, (qint32)context.nNumberOfFiles, &listChunks, pPdStruct)) return false;
@@ -145,12 +143,12 @@ bool XIMPArchive::parseContext(CONTEXT *pContext, bool bFull, PDSTRUCT *pPdStruc
 
 bool XIMPArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
     const bool bResult = parseContext(&context, false, pPdStruct);
-    if (guardedSource) guardedSource->seek(nSavedPosition);
+    guardedSource->seek(nSavedPosition);
 
     return bResult;
 }
@@ -300,11 +298,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XIMPArchive::getDefaultUnpackProperties()
 
 bool XIMPArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XIMPArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -314,8 +311,8 @@ bool XIMPArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVari
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, true, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, true, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -328,15 +325,10 @@ bool XIMPArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVari
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

@@ -5,7 +5,6 @@
 
 #include "xaodos.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <cstring>
@@ -205,9 +204,8 @@ bool XAODOS::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XAODOS> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -224,8 +222,7 @@ bool XAODOS::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const QByteArray baBootBlock =
         read_array_process(0, AODOS_BLOCK_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        (baBootBlock.size() != AODOS_BLOCK_SIZE)) {
+    if ((baBootBlock.size() != AODOS_BLOCK_SIZE)) {
         return false;
     }
     if (std::memcmp(baBootBlock.constData(), AODOS_MAGIC,
@@ -246,8 +243,7 @@ bool XAODOS::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         AODOS_SYSTEM_AREA_SIZE - AODOS_DIRECTORY_OFFSET;
     const QByteArray baDirectory = read_array_process(
         AODOS_DIRECTORY_OFFSET, nDirectoryAreaSize, pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        (baDirectory.size() != nDirectoryAreaSize)) {
+    if ((baDirectory.size() != nDirectoryAreaSize)) {
         return false;
     }
 
@@ -408,12 +404,12 @@ bool XAODOS::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.listMembers.isEmpty()) return false;
 
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XAODOS::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -610,9 +606,8 @@ bool XAODOS::initUnpack(UNPACK_STATE *pState,
                         const QMap<UNPACK_PROP, QVariant> &mapProperties,
                         PDSTRUCT *pPdStruct)
 {
-    QPointer<XAODOS> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
     }
@@ -620,7 +615,7 @@ bool XAODOS::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -635,9 +630,9 @@ bool XAODOS::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource ||
+    if (!parseContext(pContext, pPdStruct) ||
         pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -656,16 +651,11 @@ bool XAODOS::initUnpack(UNPACK_STATE *pState,
     pState->pContext = pContext;
 
     const bool bFinalized =
-        guardedThis->validateAndFinalizeUnpackSource(pState, pContext,
+        validateAndFinalizeUnpackSource(pState, pContext,
                                                      pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

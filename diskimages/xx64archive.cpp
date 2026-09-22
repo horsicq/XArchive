@@ -21,7 +21,6 @@
 #include "xx64archive.h"
 
 #include <QBuffer>
-#include <QPointer>
 #include <QSet>
 #include <QtEndian>
 
@@ -82,8 +81,7 @@ bool XX64Archive::collectChain(CONTEXT *pContext, quint8 nTrack, quint8 nSector,
 {
     if (!pContext || !pMember) return false;
 
-    QPointer<XX64Archive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
 
     QSet<quint32> setVisited;
@@ -104,7 +102,7 @@ bool XX64Archive::collectChain(CONTEXT *pContext, quint8 nTrack, quint8 nSector,
         if (!x64RangeWithin(pContext->nInputSize, nOffset, X64_SECTOR_SIZE)) break;
 
         const QByteArray baLink = read_array_process(nOffset, 2, pPdStruct);
-        if (!guardedThis || !guardedSource || (baLink.size() != 2)) return false;
+        if (!guardedSource || (baLink.size() != 2)) return false;
         const quint8 nNextTrack = (quint8)baLink.at(0);
         const quint8 nNextSector = (quint8)baLink.at(1);
 
@@ -136,8 +134,7 @@ bool XX64Archive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XX64Archive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -146,7 +143,7 @@ bool XX64Archive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nInputSize < (X64_HEADER_SIZE + X64_SECTOR_SIZE)) return false;
 
     const QByteArray baHeader = read_array_process(0, 8, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != 8)) return false;
+    if (!guardedSource || (baHeader.size() != 8)) return false;
     const uchar *pHeader = (const uchar *)baHeader.constData();
     if ((pHeader[0] != 0x43) || (pHeader[1] != 0x15) || (pHeader[2] != 0x41) || (pHeader[3] != 0x64)) return false;
     if (pHeader[4] != 1) return false;
@@ -170,7 +167,7 @@ bool XX64Archive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (!x64RangeWithin(context.nInputSize, nOffset, X64_SECTOR_SIZE)) break;
 
         const QByteArray baSector = read_array_process(nOffset, X64_SECTOR_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baSector.size() != X64_SECTOR_SIZE)) return false;
+        if (!guardedSource || (baSector.size() != X64_SECTOR_SIZE)) return false;
         const uchar *pSector = (const uchar *)baSector.constData();
 
         for (qint32 i = 0; i < X64_ENTRIES_PER_SECTOR; ++i) {
@@ -195,7 +192,7 @@ bool XX64Archive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
             if (member.sFileName.isEmpty()) member.sFileName = QStringLiteral("file%1").arg(context.listMembers.size() + 1);
 
             if (!collectChain(&context, pEntry[3], pEntry[4], &member, pPdStruct)) return false;
-            if (!guardedThis || !guardedSource) return false;
+            if (!guardedSource) return false;
 
             context.listMembers.append(member);
         }
@@ -213,7 +210,7 @@ bool XX64Archive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XX64Archive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -346,11 +343,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XX64Archive::getDefaultUnpackProperties()
 
 bool XX64Archive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XX64Archive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -360,8 +356,8 @@ bool XX64Archive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVari
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -374,15 +370,10 @@ bool XX64Archive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVari
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -422,11 +413,10 @@ XBinary::ARCHIVERECORD XX64Archive::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *
 bool XX64Archive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    QPointer<XX64Archive> guardedThis(this);
-    QPointer<QIODevice> guardedOutput(pDevice);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !guardedOutput || !guardedSource || !isUnpackOutputSupported(guardedOutput.data()) ||
-        devicesAlias(guardedSource.data(), guardedOutput.data()) || !isUnpackSourceCurrent(pState, pPdStruct) || (pState->nCurrentIndex < 0) ||
+    QIODevice *guardedOutput = pDevice;
+    QIODevice *guardedSource = getDevice();
+    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !guardedOutput || !guardedSource || !isUnpackOutputSupported(guardedOutput) ||
+        devicesAlias(guardedSource, guardedOutput) || !isUnpackSourceCurrent(pState, pPdStruct) || (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }
@@ -445,7 +435,7 @@ bool XX64Archive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRU
     }
 
     std::unique_ptr<QIODevice> pStage(createFileBuffer(member.nSize, pPdStruct));
-    if (!pStage || !pStage->seek(0) || !guardedThis || !guardedOutput || !guardedSource) return false;
+    if (!pStage || !pStage->seek(0) || !guardedOutput || !guardedSource) return false;
 
     qint64 nWritten = 0;
     for (qint32 i = 0; i < member.listExtents.size(); ++i) {
@@ -456,16 +446,16 @@ bool XX64Archive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRU
         if (extent.nSize == 0) continue;
 
         const QByteArray baChunk = read_array_process(extent.nOffset, extent.nSize, pPdStruct);
-        if (!guardedThis || !guardedOutput || !guardedSource || (baChunk.size() != extent.nSize) || !isUnpackSourceCurrent(pState, pPdStruct)) return false;
+        if (!guardedOutput || !guardedSource || (baChunk.size() != extent.nSize) || !isUnpackSourceCurrent(pState, pPdStruct)) return false;
         if (pStage->write(baChunk) != extent.nSize) return false;
         nWritten += extent.nSize;
     }
     if (nWritten != member.nSize) return false;
-    if (!pStage->seek(0) || !guardedThis || !guardedOutput) return false;
+    if (!pStage->seek(0) || !guardedOutput) return false;
 
-    const bool bResult = publishUnpackOutput(pStage.get(), guardedOutput.data(), pState, pPdStruct);
+    const bool bResult = publishUnpackOutput(pStage.get(), guardedOutput, pState, pPdStruct);
 
-    return bResult && guardedThis;
+    return bResult;
 }
 
 bool XX64Archive::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)

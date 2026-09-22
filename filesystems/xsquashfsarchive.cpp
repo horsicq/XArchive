@@ -20,7 +20,6 @@
  */
 #include "xsquashfsarchive.h"
 
-#include <QPointer>
 
 #include <new>
 
@@ -40,8 +39,7 @@ bool XSquashFSArchive::parseContext(CONTEXT *pContext, bool bFull, PDSTRUCT *pPd
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XSquashFSArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -50,7 +48,7 @@ bool XSquashFSArchive::parseContext(CONTEXT *pContext, bool bFull, PDSTRUCT *pPd
     if (context.nInputSize > XSquashFSDecoder::MAX_INPUT_SIZE) return false;
 
     const QByteArray baHeader = read_array_process(0, SQUASHFS_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != SQUASHFS_HEADER_SIZE)) return false;
+    if (!guardedSource || (baHeader.size() != SQUASHFS_HEADER_SIZE)) return false;
     if (!XSquashFSDecoder::parseSuperBlock(baHeader, context.nInputSize, &context.superBlock)) return false;
 
     context.nArchiveSize = context.nInputSize;
@@ -67,9 +65,9 @@ bool XSquashFSArchive::parseContext(CONTEXT *pContext, bool bFull, PDSTRUCT *pPd
     // every metadata block is compressed, so the walk works on the image as a
     // whole rather than on a window of it.
     const QByteArray baFile = read_array_process(0, context.nInputSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baFile.size() != context.nInputSize)) return false;
+    if (!guardedSource || (baFile.size() != context.nInputSize)) return false;
     if (!XSquashFSDecoder::listMembers(baFile, &context.listMembers, pPdStruct)) return false;
-    if (!guardedThis || !guardedSource) return false;
+    if (!guardedSource) return false;
     if (context.listMembers.isEmpty()) return false;
 
     *pContext = context;
@@ -79,7 +77,7 @@ bool XSquashFSArchive::parseContext(CONTEXT *pContext, bool bFull, PDSTRUCT *pPd
 
 bool XSquashFSArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -259,11 +257,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XSquashFSArchive::getDefaultUnpackPropertie
 
 bool XSquashFSArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSquashFSArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -273,8 +270,8 @@ bool XSquashFSArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, 
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, true, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, true, pPdStruct) || !guardedSource || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -287,15 +284,10 @@ bool XSquashFSArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, 
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

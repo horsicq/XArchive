@@ -21,7 +21,6 @@
 #include "xmathcadpacked.h"
 
 #include <QFileInfo>
-#include <QPointer>
 
 #include <cstring>
 #include <new>
@@ -116,10 +115,10 @@ XMathCadPacked::XMathCadPacked(QIODevice *pDevice) : XArchive(pDevice)
 
 QString XMathCadPacked::deriveMemberName()
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return MATHCAD_FALLBACK_NAME;
 
-    const QString sDeviceName = XBinary::getDeviceFileName(guardedSource.data());
+    const QString sDeviceName = XBinary::getDeviceFileName(guardedSource);
     if (sDeviceName.isEmpty()) return MATHCAD_FALLBACK_NAME;
 
     // The container's own name is the only name this format carries; the
@@ -134,8 +133,7 @@ bool XMathCadPacked::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XMathCadPacked> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -143,7 +141,7 @@ bool XMathCadPacked::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nInputSize < (MATHCAD_MAGIC_SIZE + 1)) return false;
 
     const QByteArray baMagic = read_array_process(0, MATHCAD_MAGIC_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baMagic.size() != MATHCAD_MAGIC_SIZE)) return false;
+    if (!guardedSource || (baMagic.size() != MATHCAD_MAGIC_SIZE)) return false;
     if (std::memcmp(baMagic.constData(), MATHCAD_MAGIC, static_cast<size_t>(MATHCAD_MAGIC_SIZE)) != 0) return false;
 
     context.nStreamOffset = MATHCAD_MAGIC_SIZE;
@@ -151,12 +149,12 @@ bool XMathCadPacked::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const qint64 nSampleSize = (context.nStreamSize < MATHCAD_PROBE_INPUT) ? context.nStreamSize : MATHCAD_PROBE_INPUT;
     const QByteArray baSample = read_array_process(context.nStreamOffset, nSampleSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baSample.size() != nSampleSize)) return false;
+    if (!guardedSource || (baSample.size() != nSampleSize)) return false;
 
     if (!mathcadProbeStream(baSample, nSampleSize == context.nStreamSize)) return false;
 
     context.sFileName = deriveMemberName();
-    if (!guardedThis || !guardedSource) return false;
+    if (!guardedSource) return false;
 
     *pContext = context;
 
@@ -167,7 +165,7 @@ bool XMathCadPacked::isValid(PDSTRUCT *pPdStruct)
 {
     // The probe runs on a device the caller still owns: remember where its
     // cursor was and put it back, whatever the outcome.
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
 
     CONTEXT context = {};
@@ -343,8 +341,7 @@ QMap<XBinary::UNPACK_PROP, QVariant> XMathCadPacked::getDefaultUnpackProperties(
 
 bool XMathCadPacked::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XMathCadPacked> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
 
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) {
         return false;
@@ -352,7 +349,7 @@ bool XMathCadPacked::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QV
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -367,8 +364,8 @@ bool XMathCadPacked::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QV
         return false;
     }
 
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) guardedThis->releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -384,15 +381,10 @@ bool XMathCadPacked::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QV
 
     // Binding only stages the source; without this finalize the listing would
     // work and every extraction would silently produce nothing.
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

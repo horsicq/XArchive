@@ -5,7 +5,6 @@
 
 #include "xjam.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -96,14 +95,13 @@ bool XJAM::walkNode(CONTEXT *pContext, qint64 nNodeOffset, const QString &sPrefi
     if (pSetVisited->contains(nNodeOffset)) return false;
     pSetVisited->insert(nNodeOffset);
 
-    QPointer<XJAM> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
 
     if (!jamRangeWithin(pContext->nInputSize, nNodeOffset, JAM_COUNT_SIZE)) return false;
 
     QByteArray baCount = read_array_process(nNodeOffset, JAM_COUNT_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baCount.size() != JAM_COUNT_SIZE)) return false;
+    if ((baCount.size() != JAM_COUNT_SIZE)) return false;
     const qint64 nNumberOfFiles = static_cast<qint64>(qFromLittleEndian<qint32>(reinterpret_cast<const uchar *>(baCount.constData())));
     if (nNumberOfFiles < 0) return false;
 
@@ -113,7 +111,7 @@ bool XJAM::walkNode(CONTEXT *pContext, qint64 nNodeOffset, const QString &sPrefi
 
     if (nNumberOfFiles > 0) {
         const QByteArray baTable = read_array_process(nOffset, nFileTableSize, pPdStruct);
-        if (!guardedThis || !guardedSource || (static_cast<qint64>(baTable.size()) != nFileTableSize)) return false;
+        if ((static_cast<qint64>(baTable.size()) != nFileTableSize)) return false;
         for (qint64 i = 0; i < nNumberOfFiles; i++) {
             if (!isPdStructNotCanceled(pPdStruct)) return false;
             if (pContext->listMembers.size() >= JAM_MAX_MEMBERS) return false;
@@ -136,7 +134,7 @@ bool XJAM::walkNode(CONTEXT *pContext, qint64 nNodeOffset, const QString &sPrefi
 
     if (!jamRangeWithin(pContext->nInputSize, nOffset, JAM_COUNT_SIZE)) return false;
     baCount = read_array_process(nOffset, JAM_COUNT_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baCount.size() != JAM_COUNT_SIZE)) return false;
+    if ((baCount.size() != JAM_COUNT_SIZE)) return false;
     const qint64 nNumberOfDirectories = static_cast<qint64>(qFromLittleEndian<qint32>(reinterpret_cast<const uchar *>(baCount.constData())));
     if (nNumberOfDirectories < 0) return false;
     nOffset += JAM_COUNT_SIZE;
@@ -145,7 +143,7 @@ bool XJAM::walkNode(CONTEXT *pContext, qint64 nNodeOffset, const QString &sPrefi
         const qint64 nDirectoryTableSize = nNumberOfDirectories * JAM_DIRECTORY_ENTRY_SIZE;
         if (!jamRangeWithin(pContext->nInputSize, nOffset, nDirectoryTableSize)) return false;
         const QByteArray baTable = read_array_process(nOffset, nDirectoryTableSize, pPdStruct);
-        if (!guardedThis || !guardedSource || (static_cast<qint64>(baTable.size()) != nDirectoryTableSize)) return false;
+        if ((static_cast<qint64>(baTable.size()) != nDirectoryTableSize)) return false;
         for (qint64 i = 0; i < nNumberOfDirectories; i++) {
             if (!isPdStructNotCanceled(pPdStruct)) return false;
             const char *pEntry = baTable.constData() + (i * JAM_DIRECTORY_ENTRY_SIZE);
@@ -165,18 +163,17 @@ bool XJAM::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XJAM> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = getSize();
-    if (!guardedThis || !guardedSource) return false;
+    if (!guardedSource) return false;
     // Magic, the root file count, and at least one complete file record.
     if (context.nInputSize < JAM_ROOT_OFFSET + JAM_COUNT_SIZE + JAM_FILE_ENTRY_SIZE + JAM_COUNT_SIZE) return false;
 
     const QByteArray baHeader = read_array_process(0, JAM_ROOT_OFFSET + JAM_COUNT_SIZE + JAM_FILE_ENTRY_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != JAM_ROOT_OFFSET + JAM_COUNT_SIZE + JAM_FILE_ENTRY_SIZE)) return false;
+    if ((baHeader.size() != JAM_ROOT_OFFSET + JAM_COUNT_SIZE + JAM_FILE_ENTRY_SIZE)) return false;
     const uchar *pHeader = reinterpret_cast<const uchar *>(baHeader.constData());
 
     if ((pHeader[0] != 'J') || (pHeader[1] != 'A') || (pHeader[2] != 'M')) return false;
@@ -193,7 +190,7 @@ bool XJAM::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     QSet<qint64> setVisited;
     if (!walkNode(&context, JAM_ROOT_OFFSET, QString(), &setVisited, 0, pPdStruct)) return false;
-    if (!guardedThis || !guardedSource || context.listMembers.isEmpty()) return false;
+    if (context.listMembers.isEmpty()) return false;
 
     context.nArchiveSize = context.nInputSize;
     *pContext = context;
@@ -202,11 +199,11 @@ bool XJAM::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XJAM::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
-    const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
+    QIODevice *guardedSource = getDevice();
+    const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
-    if (guardedSource && (nSavedPosition >= 0)) {
+    if ((nSavedPosition >= 0)) {
         guardedSource->seek(nSavedPosition);
     }
     return bResult;
@@ -362,11 +359,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XJAM::getDefaultUnpackProperties()
 
 bool XJAM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XJAM> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -376,8 +372,8 @@ bool XJAM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -391,15 +387,10 @@ bool XJAM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

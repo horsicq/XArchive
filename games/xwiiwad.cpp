@@ -26,7 +26,6 @@
 #include <QDateTime>
 #include <QFile>
 #include <QFileInfo>
-#include <QPointer>
 #include <QSet>
 #include <QtEndian>
 
@@ -346,8 +345,7 @@ bool XWiiWAD::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XWiiWAD> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -356,7 +354,7 @@ bool XWiiWAD::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     // ---- header -------------------------------------------------------
     const QByteArray baHeader = read_array_process(0, WIIWAD_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != WIIWAD_HEADER_SIZE)) return false;
+    if (!guardedSource || (baHeader.size() != WIIWAD_HEADER_SIZE)) return false;
     const uchar *pHeader = reinterpret_cast<const uchar *>(baHeader.constData());
 
     if (wiiWadReadBE32(pHeader) != static_cast<quint32>(WIIWAD_HEADER_SIZE)) return false;
@@ -412,7 +410,7 @@ bool XWiiWAD::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     // ---- ticket -------------------------------------------------------
     const QByteArray baTicket = read_array_process(context.nTicketOffset, WIIWAD_TICKET_MIN_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baTicket.size() != WIIWAD_TICKET_MIN_SIZE)) return false;
+    if (!guardedSource || (baTicket.size() != WIIWAD_TICKET_MIN_SIZE)) return false;
     const uchar *pTicket = reinterpret_cast<const uchar *>(baTicket.constData());
     if (wiiWadReadBE32(pTicket) != WIIWAD_SIG_RSA2048) return false;
 
@@ -434,7 +432,7 @@ bool XWiiWAD::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     // ---- TMD ----------------------------------------------------------
     const QByteArray baTmdHeader = read_array_process(context.nTmdOffset, WIIWAD_TMD_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baTmdHeader.size() != WIIWAD_TMD_HEADER_SIZE)) return false;
+    if (!guardedSource || (baTmdHeader.size() != WIIWAD_TMD_HEADER_SIZE)) return false;
     const uchar *pTmd = reinterpret_cast<const uchar *>(baTmdHeader.constData());
     if (wiiWadReadBE32(pTmd) != WIIWAD_SIG_RSA2048) return false;
 
@@ -462,7 +460,7 @@ bool XWiiWAD::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     QByteArray baRecords;
     if (nRecordsSize > 0) {
         baRecords = read_array_process(context.nTmdOffset + WIIWAD_TMD_HEADER_SIZE, nRecordsSize, pPdStruct);
-        if (!guardedThis || !guardedSource || (baRecords.size() != nRecordsSize)) return false;
+        if (!guardedSource || (baRecords.size() != nRecordsSize)) return false;
     }
 
     // ---- members: metadata sections ----------------------------------
@@ -586,7 +584,7 @@ bool XWiiWAD::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         entry.sFileName = sTitleIdHex + QStringLiteral(".footer");
         if (context.nFooterSize >= WIIWAD_FOOTER_STAMP_SIZE) {
             const QByteArray baStamp = read_array_process(context.nFooterOffset, WIIWAD_FOOTER_STAMP_SIZE, pPdStruct);
-            if (!guardedThis || !guardedSource) return false;
+            if (!guardedSource) return false;
             QDateTime dtStamp;
             if (wiiWadParseFooterStamp(baStamp, &dtStamp)) entry.dtFooter = dtStamp;
         }
@@ -596,7 +594,7 @@ bool XWiiWAD::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     // ---- names --------------------------------------------------------
     for (qint32 i = 0; i < listEntries.size(); ++i) {
         const QString sFixed = fixFileName(listEntries.at(i).sFileName);
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
         if (sFixed.isEmpty()) return false;
         listEntries[i].sFileName = sFixed;
     }
@@ -605,7 +603,7 @@ bool XWiiWAD::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     QStringList listCertNames;
     if (context.nCertSize > 0) {
         const QByteArray baCerts = read_array_process(context.nCertOffset, context.nCertSize, pPdStruct);
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
         if (baCerts.size() == context.nCertSize) listCertNames = wiiWadWalkCertificates(baCerts);
     }
 
@@ -665,12 +663,12 @@ bool XWiiWAD::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     context.listEntries = listEntries;
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XWiiWAD::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -898,14 +896,13 @@ bool XWiiWAD::resolveCommonKey(const QMap<UNPACK_PROP, QVariant> &mapProperties,
 bool XWiiWAD::resolveTitleKey(UNPACK_STATE *pState, CONTEXT *pContext, QString *psError)
 {
     if (!pState || !pContext || !psError) return false;
-    QPointer<XWiiWAD> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
 
     // Read the properties on every call: unpackToFolder() replaces the state's
     // property map after initUnpack(), so a key captured at init could be stale.
-    const QString sDeviceFileName = XBinary::getDeviceFileName(guardedSource.data());
-    if (!guardedThis || !guardedSource) return false;
+    const QString sDeviceFileName = XBinary::getDeviceFileName(guardedSource);
+    if (!guardedSource) return false;
 
     QByteArray baCommonKey;
     if (!resolveCommonKey(pState->mapUnpackProperties, sDeviceFileName, &baCommonKey, psError)) {
@@ -942,15 +939,14 @@ bool XWiiWAD::resolveTitleKey(UNPACK_STATE *pState, CONTEXT *pContext, QString *
 
 bool XWiiWAD::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XWiiWAD> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) {
         return false;
     }
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -961,8 +957,8 @@ bool XWiiWAD::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant>
 
     // Malformed output-limit properties fail here rather than at extraction.
     OUTPUT_POLICY policy = {};
-    if (!resolveUnpackOutputPolicy(mapProperties, &policy) || !guardedThis) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!resolveUnpackOutputPolicy(mapProperties, &policy)) {
+        releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
         return false;
     }
@@ -974,9 +970,9 @@ bool XWiiWAD::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant>
     }
     // A missing key is NOT an init failure: the listing is complete from the
     // TMD and the metadata sections extract without one.
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listEntries.isEmpty() ||
+    if (!parseContext(pContext, pPdStruct) || !guardedSource || pContext->listEntries.isEmpty() ||
         (pContext->nSourceSize != guardedSource->size())) {
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -984,9 +980,9 @@ bool XWiiWAD::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant>
 
     QString sKeyStatus = QStringLiteral("not supplied");
     {
-        const QString sDeviceFileName = XBinary::getDeviceFileName(guardedSource.data());
-        if (!guardedThis || !guardedSource) {
-            if (guardedThis) releaseUnpackSource(pState);
+        const QString sDeviceFileName = XBinary::getDeviceFileName(guardedSource);
+        if (!guardedSource) {
+            releaseUnpackSource(pState);
             delete pContext;
             *pState = UNPACK_STATE();
             return false;
@@ -1019,15 +1015,10 @@ bool XWiiWAD::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant>
     pState->nNumberOfRecords = pContext->listEntries.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -1037,15 +1028,14 @@ bool XWiiWAD::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant>
 
 XBinary::ARCHIVERECORD XWiiWAD::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XWiiWAD> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
-    if (!operationGuard.isAllowed() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis ||
+    if (!operationGuard.isAllowed() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return ARCHIVERECORD();
     }
     CONTEXT *pContext = static_cast<CONTEXT *>(pState->pContext);
     const qint64 nCurrentSize = getSize();
-    if (!guardedThis || (nCurrentSize != pContext->nSourceSize) || (pState->nTotalSize != nCurrentSize) ||
+    if ((nCurrentSize != pContext->nSourceSize) || (pState->nTotalSize != nCurrentSize) ||
         (pState->nNumberOfRecords != pContext->listEntries.size()) || (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pContext->listEntries.size())) {
         return ARCHIVERECORD();
@@ -1088,18 +1078,17 @@ XBinary::ARCHIVERECORD XWiiWAD::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdS
 
 bool XWiiWAD::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    QPointer<XWiiWAD> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    QPointer<QIODevice> guardedOutput(pDevice);
+    QIODevice *guardedSource = getDevice();
+    QIODevice *guardedOutput = pDevice;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState || !guardedSource || !guardedOutput || !pState->pContext ||
-        devicesAlias(guardedSource.data(), guardedOutput.data()) || !isUnpackSourceCurrent(pState, pPdStruct) ||
+        devicesAlias(guardedSource, guardedOutput) || !isUnpackSourceCurrent(pState, pPdStruct) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
     CONTEXT *pContext = static_cast<CONTEXT *>(pState->pContext);
     const qint64 nCurrentSize = getSize();
-    if (!guardedThis || (nCurrentSize != pContext->nSourceSize) || (pState->nTotalSize != nCurrentSize) ||
+    if ((nCurrentSize != pContext->nSourceSize) || (pState->nTotalSize != nCurrentSize) ||
         (pState->nNumberOfRecords != pContext->listEntries.size()) || (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pContext->listEntries.size())) {
         return false;
@@ -1113,7 +1102,7 @@ bool XWiiWAD::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *
         // Raw STORE section: the base implementation runs the store codec
         // through XDecompress and acquires the operation guard itself.
         operationGuard.release();
-        return guardedThis && guardedThis->XArchive::unpackCurrent(pState, pDevice, pPdStruct);
+        return XArchive::unpackCurrent(pState, pDevice, pPdStruct);
     }
 
     const qint64 nPlainSize = entry.nUncompressedSize;
@@ -1124,7 +1113,7 @@ bool XWiiWAD::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *
     }
 
     QString sKeyError;
-    if (!resolveTitleKey(pState, pContext, &sKeyError) || !guardedThis || !guardedSource || !guardedOutput) {
+    if (!resolveTitleKey(pState, pContext, &sKeyError) || !guardedSource || !guardedOutput) {
         if (!sKeyError.isEmpty()) setPdStructErrorString(pPdStruct, sKeyError);
         return false;
     }
@@ -1152,7 +1141,7 @@ bool XWiiWAD::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *
     }
 
     WiiWadStageHolder stage(createFileBuffer(nPlainSize, pPdStruct));
-    if (!stage.pDevice || (stage.pDevice->size() != nPlainSize) || !stage.pDevice->seek(0) || !guardedThis || !guardedSource ||
+    if (!stage.pDevice || (stage.pDevice->size() != nPlainSize) || !stage.pDevice->seek(0) || !guardedSource ||
         !guardedOutput || !isUnpackSourceCurrent(pState, pPdStruct)) {
         return false;
     }
@@ -1175,13 +1164,13 @@ bool XWiiWAD::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *
     qint64 nCipherDone = 0;
     qint64 nPlainWritten = 0;
     while (nCipherDone < nCipherSize) {
-        if (!guardedThis || !guardedSource || !guardedOutput || !isUnpackSourceCurrent(pState, pPdStruct) ||
+        if (!guardedSource || !guardedOutput || !isUnpackSourceCurrent(pState, pPdStruct) ||
             !isPdStructNotCanceled(pPdStruct)) {
             return false;
         }
         const qint64 nChunk = qMin<qint64>(WIIWAD_DECRYPT_CHUNK, nCipherSize - nCipherDone);
         if ((nChunk <= 0) || ((nChunk % WIIWAD_AES_BLOCK) != 0)) return false;
-        if ((read_array_process(entry.nOffset + nCipherDone, baCipher.data(), nChunk, pPdStruct) != nChunk) || !guardedThis ||
+        if ((read_array_process(entry.nOffset + nCipherDone, baCipher.data(), nChunk, pPdStruct) != nChunk) ||
             !guardedSource || !guardedOutput) {
             return false;
         }
@@ -1194,7 +1183,7 @@ bool XWiiWAD::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *
             if (safeWriteData(stage.pDevice, nPlainWritten, baPlain.constData(), nToWrite, pPdStruct) != nToWrite) {
                 return false;
             }
-            if (!guardedThis || !guardedSource || !guardedOutput) return false;
+            if (!guardedSource || !guardedOutput) return false;
             hash.addData(baPlain.constData(), static_cast<int>(nToWrite));
             nPlainWritten += nToWrite;
         }
@@ -1210,22 +1199,21 @@ bool XWiiWAD::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *
         return false;
     }
 
-    if (!guardedThis || !guardedSource || !guardedOutput || (stage.pDevice->size() != nPlainSize) || !stage.pDevice->seek(0) ||
+    if (!guardedSource || !guardedOutput || (stage.pDevice->size() != nPlainSize) || !stage.pDevice->seek(0) ||
         !isUnpackSourceCurrent(pState, pPdStruct) || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
-    const bool bPublished = publishUnpackOutput(stage.pDevice, guardedOutput.data(), pState, pPdStruct);
-    if (bPublished && guardedThis) {
+    const bool bPublished = publishUnpackOutput(stage.pDevice, guardedOutput, pState, pPdStruct);
+    if (bPublished) {
         pState->nCurrentOffset = entry.nOffset + entry.nSize;
     }
-    return bPublished && guardedThis;
+    return bPublished;
 }
 
 bool XWiiWAD::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XWiiWAD> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis ||
+    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }

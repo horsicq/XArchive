@@ -5,7 +5,6 @@
 
 #include "xcorelltec.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <cstring>
@@ -74,9 +73,8 @@ bool XCorelLtec::parseContext(CONTEXT *pContext, bool bProbeStream,
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XCorelLtec> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -86,8 +84,7 @@ bool XCorelLtec::parseContext(CONTEXT *pContext, bool bProbeStream,
 
     const QByteArray baHeader =
         read_array_process(0, LTEC_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        (baHeader.size() != LTEC_HEADER_SIZE)) {
+    if ((baHeader.size() != LTEC_HEADER_SIZE)) {
         return false;
     }
     const uchar *pHeader = reinterpret_cast<const uchar *>(baHeader.constData());
@@ -115,8 +112,7 @@ bool XCorelLtec::parseContext(CONTEXT *pContext, bool bProbeStream,
         }
         const QByteArray baRecord =
             read_array_process(nOffset, LTEC_RECORD_FIXED_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            (baRecord.size() != LTEC_RECORD_FIXED_SIZE)) {
+        if ((baRecord.size() != LTEC_RECORD_FIXED_SIZE)) {
             return false;
         }
         const uchar *pRecord =
@@ -141,8 +137,7 @@ bool XCorelLtec::parseContext(CONTEXT *pContext, bool bProbeStream,
         }
         const QByteArray baNameField = read_array_process(
             nOffset + LTEC_RECORD_FIXED_SIZE, nNameSize, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            (baNameField.size() != nNameSize)) {
+        if ((baNameField.size() != nNameSize)) {
             return false;
         }
         // Fixed relationship, not a search: the terminator is the LAST byte
@@ -231,8 +226,7 @@ bool XCorelLtec::parseContext(CONTEXT *pContext, bool bProbeStream,
         const qint64 nProbeRead = qMin<qint64>(block.nStreamSize, 0x20000);
         const QByteArray baPacked =
             read_array_process(block.nFileOffset, nProbeRead, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            (baPacked.size() != nProbeRead)) {
+        if ((baPacked.size() != nProbeRead)) {
             return false;
         }
         const qint64 nProbeSize =
@@ -245,12 +239,12 @@ bool XCorelLtec::parseContext(CONTEXT *pContext, bool bProbeStream,
 
     context.nArchiveSize = context.nInputSize;
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XCorelLtec::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, true, pPdStruct);
@@ -455,9 +449,8 @@ bool XCorelLtec::initUnpack(UNPACK_STATE *pState,
                             const QMap<UNPACK_PROP, QVariant> &mapProperties,
                             PDSTRUCT *pPdStruct)
 {
-    QPointer<XCorelLtec> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
     }
@@ -465,7 +458,7 @@ bool XCorelLtec::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -480,9 +473,8 @@ bool XCorelLtec::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, false, pPdStruct) || !guardedThis ||
-        !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, false, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -499,15 +491,10 @@ bool XCorelLtec::initUnpack(UNPACK_STATE *pState,
     pState->pContext = pContext;
 
     const bool bFinalized =
-        guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+        validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

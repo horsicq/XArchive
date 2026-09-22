@@ -25,7 +25,6 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
-#include <QPointer>
 #include <QSet>
 #include <QTemporaryFile>
 #include <QtEndian>
@@ -600,26 +599,25 @@ bool XISCab::_readCommonHeader(QIODevice *pDevice, COMMON_HEADER *pHeader, PDSTR
     if (pHeader) *pHeader = COMMON_HEADER();
     if (!pDevice || !pHeader || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XISCab> guardedThis(const_cast<XISCab *>(this));
-    QPointer<QIODevice> guardedDevice(pDevice);
+    QIODevice *guardedDevice = pDevice;
     const bool bOpen = guardedDevice->isOpen();
-    if (!guardedThis || !guardedDevice || !bOpen) return false;
+    if (!bOpen) return false;
     const bool bReadable = guardedDevice->isReadable();
-    if (!guardedThis || !guardedDevice || !bReadable) return false;
+    if (!bReadable) return false;
     const bool bSequential = guardedDevice->isSequential();
-    if (!guardedThis || !guardedDevice || bSequential) return false;
+    if (bSequential) return false;
 
     const qint64 nSavedPosition = guardedDevice->pos();
-    if (!guardedThis || !guardedDevice || (nSavedPosition < 0)) return false;
+    if ((nSavedPosition < 0)) return false;
     const qint64 nSize = guardedDevice->size();
-    if (!guardedThis || !guardedDevice || (nSize < IS_COMMON_HEADER_SIZE)) return false;
+    if ((nSize < IS_COMMON_HEADER_SIZE)) return false;
     const qint64 nReadSize = qMin<qint64>(nSize, IS_COMMON_HEADER_SIZE + IS_VOLUME_HEADER_V6_SIZE);
     const bool bSeeked = guardedDevice->seek(0);
-    if (!guardedThis || !guardedDevice || !bSeeked) return false;
+    if (!bSeeked) return false;
     const QByteArray baHeader = guardedDevice->read(nReadSize);
-    if (!guardedThis || !guardedDevice) return false;
+    if (!guardedDevice) return false;
     const bool bRestored = guardedDevice->seek(nSavedPosition);
-    if (!guardedThis || !guardedDevice || !bRestored || (baHeader.size() != nReadSize) || (readLE32(baHeader, 0) != IS_CAB_SIGNATURE)) {
+    if (!bRestored || (baHeader.size() != nReadSize) || (readLE32(baHeader, 0) != IS_CAB_SIGNATURE)) {
         return false;
     }
 
@@ -668,14 +666,12 @@ XISCab::INTERNAL_INFO XISCab::_getInternalInfo(PDSTRUCT *pPdStruct)
 
 bool XISCab::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XISCab> guardedThis(this);
     if (!isInternalInfoHandled()) {
-        if (!XArchive::handleInternalInfo(pPdStruct) || !guardedThis) return false;
+        if (!XArchive::handleInternalInfo(pPdStruct)) return false;
         XArchive::INTERNAL_INFO *pBase = static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
-        if (!guardedThis || !pBase) return false;
+        if (!pBase) return false;
         static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) = *pBase;
         const INTERNAL_INFO detected = _getInternalInfo(pPdStruct);
-        if (!guardedThis) return false;
         m_internalInfo.bIsValid = detected.bIsValid;
         m_internalInfo.nMajorVersion = detected.nMajorVersion;
         m_internalInfo.bHasCabDescriptor = detected.bHasCabDescriptor;
@@ -773,7 +769,7 @@ QMap<XBinary::UNPACK_PROP, QVariant> XISCab::getDefaultUnpackProperties()
     return XArchive::getDefaultUnpackProperties();
 }
 
-bool XISCab::_loadCatalog(UNPACK_CONTEXT *pContext, PDSTRUCT *pPdStruct) const
+bool XISCab::_loadCatalog(UNPACK_CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext) return false;
     QByteArray *pCatalog = &pContext->baCatalog;
@@ -788,33 +784,32 @@ bool XISCab::_loadCatalog(UNPACK_CONTEXT *pContext, PDSTRUCT *pPdStruct) const
     pContext->mapResolvedMediaPaths.clear();
     *pHeader = COMMON_HEADER();
 
-    QPointer<XISCab> guardedThis(const_cast<XISCab *>(this));
-    QPointer<QIODevice> guardedDevice(guardedThis ? guardedThis->getDevice() : nullptr);
-    if (!guardedThis || !guardedDevice) return false;
+    QIODevice *guardedDevice = getDevice();
+    if (!guardedDevice) return false;
     COMMON_HEADER sourceHeader;
-    const bool bHeaderRead = _readCommonHeader(guardedDevice.data(), &sourceHeader, pPdStruct);
-    if (!guardedThis || !guardedDevice || !bHeaderRead) return false;
+    const bool bHeaderRead = _readCommonHeader(guardedDevice, &sourceHeader, pPdStruct);
+    if (!bHeaderRead) return false;
 
-    QFile *pSourceFile = dynamic_cast<QFile *>(guardedDevice.data());
+    QFile *pSourceFile = dynamic_cast<QFile *>(guardedDevice);
     const QString sSourcePath = pSourceFile ? QFileInfo(pSourceFile->fileName()).absoluteFilePath() : QString();
     const QString sPrefix = mediaPrefixFromPath(sSourcePath);
 
     if (sourceHeader.nDescriptorSize) {
         const qint64 nSize = guardedDevice->size();
-        if (!guardedThis || !guardedDevice || (nSize < IS_COMMON_HEADER_SIZE) || (nSize > IS_MAX_CATALOG_SIZE) || (nSize > (std::numeric_limits<qint32>::max)())) {
+        if ((nSize < IS_COMMON_HEADER_SIZE) || (nSize > IS_MAX_CATALOG_SIZE) || (nSize > (std::numeric_limits<qint32>::max)())) {
             return false;
         }
         const qint64 nSavedPosition = guardedDevice->pos();
-        if (!guardedThis || !guardedDevice || (nSavedPosition < 0)) return false;
+        if ((nSavedPosition < 0)) return false;
         const bool bSeeked = guardedDevice->seek(0);
-        if (!guardedThis || !guardedDevice || !bSeeked) return false;
+        if (!bSeeked) return false;
         *pCatalog = guardedDevice->read(nSize);
-        if (!guardedThis || !guardedDevice) {
+        if (!guardedDevice) {
             pCatalog->clear();
             return false;
         }
         const bool bRestored = guardedDevice->seek(nSavedPosition);
-        if (!guardedThis || !guardedDevice || !bRestored || (pCatalog->size() != nSize)) {
+        if (!bRestored || (pCatalog->size() != nSize)) {
             pCatalog->clear();
             return false;
         }
@@ -949,7 +944,6 @@ bool XISCab::_parseCatalog(const QByteArray &baCatalog, const COMMON_HEADER &com
 
 bool XISCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XISCab> guardedThis(this);
     if (m_bUnpackOperationInProgress) return false;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState) return false;
@@ -962,8 +956,8 @@ bool XISCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> 
     pState->pContext = nullptr;
     *pState = UNPACK_STATE();
     delete pOldContext;
-    if (!guardedThis || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
-    if (!bindUnpackSource(pState, pPdStruct) || !guardedThis) return false;
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    if (!bindUnpackSource(pState, pPdStruct)) return false;
 
     UNPACK_CONTEXT *pContext = new (std::nothrow) UNPACK_CONTEXT;
     if (!pContext) {
@@ -971,7 +965,7 @@ bool XISCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> 
         return false;
     }
     bool bResult = _loadCatalog(pContext, pPdStruct);
-    bResult = bResult && guardedThis && _parseCatalog(pContext->baCatalog, pContext->common, &pContext->listEntries, &pContext->listVisibleIndices, pPdStruct);
+    bResult = bResult && _parseCatalog(pContext->baCatalog, pContext->common, &pContext->listEntries, &pContext->listVisibleIndices, pPdStruct);
     const bool bMetadataOnly = mapProperties.value(UNPACK_PROP_METADATAONLY, false).toBool();
     if (bResult && !bMetadataOnly && pContext->mapEmbeddedVolumes.isEmpty()) {
         const QString sVolumePath = mediaPath(pContext->sMediaPrefix, 1, QStringLiteral("cab"), &pContext->mapResolvedMediaPaths);
@@ -982,11 +976,6 @@ bool XISCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> 
             bResult = false;
         }
     }
-    if (!guardedThis) {
-        delete pContext;
-        *pState = UNPACK_STATE();
-        return false;
-    }
     if (!bResult || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         delete pContext;
         releaseUnpackSource(pState);
@@ -995,9 +984,9 @@ bool XISCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> 
     }
 
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || (nTotalSize < 0)) {
+    if ((nTotalSize < 0)) {
         delete pContext;
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
         return false;
     }
@@ -1009,11 +998,6 @@ bool XISCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> 
     pState->nTotalSize = nTotalSize;
     pState->mapUnpackProperties = mapProperties;
     if (!validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
         pState->pContext = nullptr;
         releaseUnpackSource(pState);
         delete pContext;
@@ -1025,13 +1009,12 @@ bool XISCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> 
 
 XBinary::ARCHIVERECORD XISCab::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XISCab> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed() || !pState || !pState->pContext) {
         return ARCHIVERECORD();
     }
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!bSourceCurrent || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return ARCHIVERECORD();
     }
     UNPACK_CONTEXT *pContext = static_cast<UNPACK_CONTEXT *>(pState->pContext);
@@ -1315,15 +1298,14 @@ bool XISCab::_extractEntry(const UNPACK_CONTEXT *pContext, qint32 nEntryIndex, Q
 bool XISCab::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    QPointer<XISCab> guardedThis(this);
-    QPointer<QIODevice> guardedOutput(pDevice);
-    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !guardedOutput) {
+    QIODevice *guardedOutput = pDevice;
+    if (!operationGuard.isAcquired() || !pState || !pState->pContext) {
         return false;
     }
-    const bool bOutputSupported = isUnpackOutputSupported(guardedOutput.data());
-    if (!guardedThis || !guardedOutput || !bOutputSupported) return false;
+    const bool bOutputSupported = isUnpackOutputSupported(guardedOutput);
+    if (!bOutputSupported) return false;
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !guardedOutput || !bSourceCurrent || !XBinary::isPdStructNotCanceled(pPdStruct) || (pState->nCurrentIndex < 0) ||
+    if (!bSourceCurrent || !XBinary::isPdStructNotCanceled(pPdStruct) || (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }
@@ -1363,20 +1345,19 @@ bool XISCab::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *p
     QTemporaryFile stage;
     if (!stage.open()) return false;
     bool bResult = _extractEntry(pContext, nEntryIndex, &stage, pState, pPdStruct);
-    bResult = bResult && guardedThis && guardedOutput && isUnpackSourceCurrent(pState, pPdStruct) && guardedThis;
-    if (bResult) bResult = publishUnpackOutput(&stage, guardedOutput.data(), pState, pPdStruct);
+    bResult = bResult && isUnpackSourceCurrent(pState, pPdStruct);
+    if (bResult) bResult = publishUnpackOutput(&stage, guardedOutput, pState, pPdStruct);
     return bResult;
 }
 
 bool XISCab::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XISCab> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState || !pState->pContext) {
         return false;
     }
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!bSourceCurrent || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
     UNPACK_CONTEXT *pContext = static_cast<UNPACK_CONTEXT *>(pState->pContext);

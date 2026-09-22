@@ -14,11 +14,10 @@ QList<QString> XHOG2::getSearchSignatures() { return {QStringLiteral("'HOG2'")};
 
 bool XHOG2::scanFormat(QList<ENTRY> *entries, qint64 *archiveEnd, PDSTRUCT *progress)
 {
-    QPointer<XHOG2> owner(this);
     const qint64 total = getSize();
-    if (!owner || total < 68 || !isPdStructNotCanceled(progress)) return false;
+    if (total < 68 || !isPdStructNotCanceled(progress)) return false;
     const QByteArray header = read_array_process(0, 68, progress);
-    if (!owner || header.size() != 68 || std::memcmp(header.constData(), "HOG2", 4)) return false;
+    if (header.size() != 68 || std::memcmp(header.constData(), "HOG2", 4)) return false;
     const uchar *h = reinterpret_cast<const uchar *>(header.constData());
     const quint32 count = readLE32(h + 4), firstData = readLE32(h + 8);
     // The reference implementation's catalogue recognizer requires at least one entry and exact adjacency
@@ -32,7 +31,7 @@ bool XHOG2::scanFormat(QList<ENTRY> *entries, qint64 *archiveEnd, PDSTRUCT *prog
         if (!isPdStructNotCanceled(progress)) return false;
         const qint64 tableOffset = 68 + qint64(index) * 48;
         const QByteArray row = read_array_process(tableOffset, 48, progress);
-        if (!owner || row.size() != 48) return false;
+        if (row.size() != 48) return false;
         const uchar *p = reinterpret_cast<const uchar *>(row.constData());
         const quint32 size = readLE32(p + 40), timestamp = readLE32(p + 44);
         QString name, uniqueName;

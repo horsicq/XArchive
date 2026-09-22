@@ -5,7 +5,6 @@
 
 #include "xarcv2sfx.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -162,8 +161,7 @@ qint64 XARCV2SFX::nextCandidateOffset(qint64 nFrom, PDSTRUCT *pPdStruct)
 bool XARCV2SFX::parseChain(CONTEXT *pContext, qint64 nStubOffset,
                            PDSTRUCT *pPdStruct)
 {
-    QPointer<XARCV2SFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
 
     const qint64 nInputSize = pContext->nInputSize;
@@ -178,7 +176,7 @@ bool XARCV2SFX::parseChain(CONTEXT *pContext, qint64 nStubOffset,
         }
         const QByteArray baArchiveHeader = read_array_process(
             nOffset, ARCV2SFX_ARCHIVE_HEADER_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource ||
+        if (!guardedSource ||
             baArchiveHeader.size() != ARCV2SFX_ARCHIVE_HEADER_SIZE) {
             return false;
         }
@@ -211,7 +209,7 @@ bool XARCV2SFX::parseChain(CONTEXT *pContext, qint64 nStubOffset,
                isPdStructNotCanceled(pPdStruct)) {
             const QByteArray baPrefix = read_array_process(
                 nOffset, ARCV2SFX_BLOCK_PREFIX_SIZE, pPdStruct);
-            if (!guardedThis || !guardedSource ||
+            if (!guardedSource ||
                 baPrefix.size() != ARCV2SFX_BLOCK_PREFIX_SIZE) {
                 return false;
             }
@@ -242,7 +240,7 @@ bool XARCV2SFX::parseChain(CONTEXT *pContext, qint64 nStubOffset,
 
             const QByteArray baHeader =
                 read_array_process(nOffset, nBlockHeaderSize, pPdStruct);
-            if (!guardedThis || !guardedSource ||
+            if (!guardedSource ||
                 baHeader.size() != nBlockHeaderSize) {
                 return false;
             }
@@ -304,7 +302,7 @@ bool XARCV2SFX::parseChain(CONTEXT *pContext, qint64 nStubOffset,
     }
 
     if ((nOffset != nInputSize) || pContext->listMembers.isEmpty() ||
-        !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
+        !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -319,8 +317,7 @@ bool XARCV2SFX::parseContext(CONTEXT *pContext, bool bProbeScramble,
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XARCV2SFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -331,7 +328,7 @@ bool XARCV2SFX::parseContext(CONTEXT *pContext, bool bProbeScramble,
                                  ARCV2SFX_BLOCK_FIXED_SIZE) {
         return false;
     }
-    if (!isExecutableCarrier(pPdStruct) || !guardedThis || !guardedSource) {
+    if (!isExecutableCarrier(pPdStruct) || !guardedSource) {
         return false;
     }
 
@@ -341,7 +338,7 @@ bool XARCV2SFX::parseContext(CONTEXT *pContext, bool bProbeScramble,
                        isPdStructNotCanceled(pPdStruct);
          ++i) {
         const qint64 nCandidate = nextCandidateOffset(nFrom, pPdStruct);
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
         if (nCandidate < 0) break;
 
         CONTEXT candidate = {};
@@ -350,7 +347,7 @@ bool XARCV2SFX::parseContext(CONTEXT *pContext, bool bProbeScramble,
         if (parseChain(&candidate, nCandidate, pPdStruct)) {
             context = candidate;
             bFound = true;
-        } else if (!guardedThis || !guardedSource) {
+        } else if (!guardedSource) {
             return false;
         }
         nFrom = nCandidate + 1;
@@ -371,7 +368,7 @@ bool XARCV2SFX::parseContext(CONTEXT *pContext, bool bProbeScramble,
             _getCRC32(member.nDataOffset, member.nDataSize, 0xffffffffU,
                       _getCRC32Table_EDB88320(), pPdStruct) ^
             0xffffffffU;
-        if (!guardedThis || !guardedSource ||
+        if (!guardedSource ||
             !isPdStructNotCanceled(pPdStruct)) {
             return false;
         }
@@ -382,7 +379,7 @@ bool XARCV2SFX::parseContext(CONTEXT *pContext, bool bProbeScramble,
     if (bProbeScramble) {
         context.scramble = probeScramble(context.listMembers,
                                          &context.bScrambleProbed, pPdStruct);
-        if (!guardedThis || !guardedSource ||
+        if (!guardedSource ||
             !isPdStructNotCanceled(pPdStruct)) {
             return false;
         }
@@ -401,13 +398,12 @@ bool XARCV2SFX::streamEndsAtDeclaredLength(const MEMBER &member,
         return false;
     }
 
-    QPointer<XARCV2SFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
 
     QByteArray baPacked =
         read_array_process(member.nDataOffset, member.nDataSize, pPdStruct);
-    if (!guardedThis || !guardedSource ||
+    if (!guardedSource ||
         baPacked.size() != member.nDataSize) {
         return false;
     }
@@ -429,7 +425,7 @@ bool XARCV2SFX::streamEndsAtDeclaredLength(const MEMBER &member,
     if (!XDecompress::decompressArcvLzhuf(baPacked,
                                           static_cast<qint32>(nLength), false,
                                           &baUnpacked, pPdStruct) ||
-        (baUnpacked.size() != nLength) || !guardedThis || !guardedSource) {
+        (baUnpacked.size() != nLength) || !guardedSource) {
         return false;
     }
     QByteArray baOverrun;
@@ -526,7 +522,7 @@ XARCV2SFX::SCRAMBLE XARCV2SFX::probeScramble(const QList<MEMBER> &listMembers,
 
 bool XARCV2SFX::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     // Validation never probes: the probe decompresses real payloads, which has
@@ -780,8 +776,7 @@ bool XARCV2SFX::initUnpack(UNPACK_STATE *pState,
                            const QMap<UNPACK_PROP, QVariant> &mapProperties,
                            PDSTRUCT *pPdStruct)
 {
-    QPointer<XARCV2SFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
@@ -790,7 +785,7 @@ bool XARCV2SFX::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) || !guardedSource ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -805,9 +800,9 @@ bool XARCV2SFX::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, true, pPdStruct) || !guardedThis ||
+    if (!parseContext(pContext, true, pPdStruct) ||
         !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -838,16 +833,11 @@ bool XARCV2SFX::initUnpack(UNPACK_STATE *pState,
     pState->pContext = pContext;
 
     const bool bFinalized =
-        guardedThis->validateAndFinalizeUnpackSource(pState, pContext,
+        validateAndFinalizeUnpackSource(pState, pContext,
                                                      pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

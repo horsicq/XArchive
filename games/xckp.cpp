@@ -63,7 +63,7 @@ public:
     }
 
 private:
-    QPointer<QIODevice> m_pDevice;
+    QIODevice *m_pDevice;
     qint64 m_nPosition;
     bool m_bRestored;
 };
@@ -238,7 +238,6 @@ bool XCKPEDPBase::scanArchive(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
     if (pEntries) pEntries->clear();
     if (pArchiveEnd) *pArchiveEnd = 0;
 
-    QPointer<XCKPEDPBase> guardedThis(this);
     const FT fileType = getFileType();
     if (!isSupportedFileType(fileType) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
@@ -246,14 +245,14 @@ bool XCKPEDPBase::scanArchive(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
     }
 
     CKPEDPDevicePositionGuard positionGuard(getDevice());
-    if (!guardedThis || !positionGuard.isValid()) return false;
+    if (!positionGuard.isValid()) return false;
 
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || (nTotalSize < CKPEDP_HEADER_SIZE)) return false;
+    if ((nTotalSize < CKPEDP_HEADER_SIZE)) return false;
 
     const QByteArray baHeader =
         read_array_process(0, CKPEDP_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || (baHeader.size() != CKPEDP_HEADER_SIZE)) return false;
+    if ((baHeader.size() != CKPEDP_HEADER_SIZE)) return false;
 
     const char *pExpectedSignature =
         (fileType == FT_CKP) ? ".CKP" : ".EDP";
@@ -292,7 +291,7 @@ bool XCKPEDPBase::scanArchive(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
         }
 
         const QByteArray baLength = read_array_process(nCursor, 2, pPdStruct);
-        if (!guardedThis || (baLength.size() != 2)) return false;
+        if ((baLength.size() != 2)) return false;
         const quint16 nCharacterCount = ckpEdpReadLE16(
             reinterpret_cast<const uchar *>(baLength.constData()));
         if (!nCharacterCount) return false;
@@ -306,7 +305,7 @@ bool XCKPEDPBase::scanArchive(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
 
         const QByteArray baRecord =
             read_array_process(nCursor, nRecordSize, pPdStruct);
-        if (!guardedThis || (baRecord.size() != nRecordSize)) return false;
+        if ((baRecord.size() != nRecordSize)) return false;
         const uchar *pRecord =
             reinterpret_cast<const uchar *>(baRecord.constData());
         const uchar *pTail = pRecord + 2 + nNameSize;
@@ -359,7 +358,7 @@ bool XCKPEDPBase::scanArchive(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
     }
 
     const bool bRestored = positionGuard.restore();
-    if (!guardedThis || !bRestored || (getFileType() != fileType) ||
+    if (!bRestored || (getFileType() != fileType) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -455,7 +454,6 @@ bool XCKPEDPBase::initUnpack(
     const QMap<UNPACK_PROP, QVariant> &mapProperties,
     PDSTRUCT *pPdStruct)
 {
-    QPointer<XCKPEDPBase> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState) return false;
 
@@ -470,16 +468,15 @@ bool XCKPEDPBase::initUnpack(
     pState->pContext = nullptr;
     *pState = UNPACK_STATE();
     delete pOldContext;
-    if (!guardedThis || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!isPdStructNotCanceled(pPdStruct)) return false;
 
     const bool bBound = bindUnpackSource(pState, pPdStruct);
-    if (!guardedThis || !bBound) return false;
+    if (!bBound) return false;
 
     const FT fileType = getFileType();
     QList<ENTRY> listEntries;
     qint64 nArchiveEnd = 0;
     const bool bScanned = scanArchive(&listEntries, &nArchiveEnd, pPdStruct);
-    if (!guardedThis) return false;
     if (!bScanned || !isSupportedFileType(fileType) ||
         (getFileType() != fileType) ||
         !isPdStructNotCanceled(pPdStruct)) {
@@ -489,7 +486,7 @@ bool XCKPEDPBase::initUnpack(
     }
 
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || !ckpEdpRangeWithin(nTotalSize, 0, nArchiveEnd)) {
+    if (!ckpEdpRangeWithin(nTotalSize, 0, nArchiveEnd)) {
         releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
         return false;
@@ -513,7 +510,6 @@ bool XCKPEDPBase::initUnpack(
     pState->mapUnpackProperties = mapProperties;
 
     if (!validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
-        if (!guardedThis) return false;
         pState->pContext = nullptr;
         releaseUnpackSource(pState);
         delete pContext;
@@ -527,7 +523,6 @@ bool XCKPEDPBase::initUnpack(
 XBinary::ARCHIVERECORD XCKPEDPBase::infoCurrent(
     UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XCKPEDPBase> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(
         &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed() || !pState || !pState->pContext) {
@@ -535,7 +530,7 @@ XBinary::ARCHIVERECORD XCKPEDPBase::infoCurrent(
     }
 
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent ||
+    if (!bSourceCurrent ||
         !isPdStructNotCanceled(pPdStruct)) {
         return ARCHIVERECORD();
     }
@@ -543,7 +538,7 @@ XBinary::ARCHIVERECORD XCKPEDPBase::infoCurrent(
     UNPACK_CONTEXT *pContext =
         static_cast<UNPACK_CONTEXT *>(pState->pContext);
     const qint64 nCurrentSize = getSize();
-    if (!guardedThis || (pState->nTotalSize != nCurrentSize) ||
+    if ((pState->nTotalSize != nCurrentSize) ||
         (pContext->fileType != getFileType()) ||
         (pState->nNumberOfRecords != pContext->listEntries.count()) ||
         !ckpEdpRangeWithin(nCurrentSize, 0, pContext->nArchiveEnd) ||
@@ -585,14 +580,13 @@ XBinary::ARCHIVERECORD XCKPEDPBase::infoCurrent(
 
 bool XCKPEDPBase::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XCKPEDPBase> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState || !pState->pContext) {
         return false;
     }
 
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent ||
+    if (!bSourceCurrent ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -600,7 +594,7 @@ bool XCKPEDPBase::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     UNPACK_CONTEXT *pContext =
         static_cast<UNPACK_CONTEXT *>(pState->pContext);
     const qint64 nCurrentSize = getSize();
-    if (!guardedThis || (pState->nTotalSize != nCurrentSize) ||
+    if ((pState->nTotalSize != nCurrentSize) ||
         (pContext->fileType != getFileType()) ||
         (pState->nNumberOfRecords != pContext->listEntries.count()) ||
         (pState->nCurrentIndex < 0) ||
@@ -661,27 +655,25 @@ QList<XBinary::FPART_PROP> XCKPEDPBase::getAvailableFPARTProperties()
 
 bool XCKPEDPBase::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XCKPEDPBase> guardedThis(this);
     bool bResult = true;
     if (!isInternalInfoHandled()) {
-        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
-        if (!guardedThis || !bResult) return false;
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        if (!bResult) return false;
         XArchive::INTERNAL_INFO *pInfo =
             static_cast<XArchive::INTERNAL_INFO *>(
-                guardedThis->XArchive::getInternalInfo(pPdStruct));
-        if (!guardedThis || !pInfo) return false;
+                XArchive::getInternalInfo(pPdStruct));
+        if (!pInfo) return false;
         static_cast<XArchive::INTERNAL_INFO &>(
-            guardedThis->m_internalInfo) = *pInfo;
+            m_internalInfo) = *pInfo;
     }
-    return guardedThis && bResult;
+    return bResult;
 }
 
 void *XCKPEDPBase::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XCKPEDPBase> guardedThis(this);
-    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
-    if (!guardedThis || !bHandled) return nullptr;
-    return &guardedThis->m_internalInfo;
+    const bool bHandled = handleInternalInfo(pPdStruct);
+    if (!bHandled) return nullptr;
+    return &m_internalInfo;
 }
 
 void XCKPEDPBase::setInternalInfo(void *pInternalInfo)

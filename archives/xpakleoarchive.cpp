@@ -20,7 +20,6 @@
  */
 #include "xpakleoarchive.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -54,16 +53,15 @@ bool XPAKLEOArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XPAKLEOArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
     if (context.nInputSize < (PAKLEO_BANNER_SIZE + PAKLEO_RECORD_SIZE)) return false;
 
     const QByteArray baBanner = read_array_process(0, PAKLEO_BANNER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baBanner.size() != PAKLEO_BANNER_SIZE)) return false;
+    if (baBanner.size() != PAKLEO_BANNER_SIZE) return false;
     if (baBanner != QByteArray(PAKLEO_BANNER, (int)PAKLEO_BANNER_SIZE)) return false;
 
     qint64 nOffset = PAKLEO_BANNER_SIZE;
@@ -72,7 +70,7 @@ bool XPAKLEOArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (context.listMembers.size() >= PAKLEO_MAX_MEMBERS) break;
 
         const QByteArray baRecord = read_array_process(nOffset, PAKLEO_RECORD_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baRecord.size() != PAKLEO_RECORD_SIZE)) return false;
+        if (baRecord.size() != PAKLEO_RECORD_SIZE) return false;
         const uchar *pRecord = (const uchar *)baRecord.constData();
 
         // the method tag is the only thing the reference walk validates
@@ -91,7 +89,7 @@ bool XPAKLEOArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         QByteArray baName;
         if (nNameLength > 0) {
             baName = read_array_process(nNameOffset, nNameLength, pPdStruct);
-            if (!guardedThis || !guardedSource || (baName.size() != nNameLength)) return false;
+            if (baName.size() != nNameLength) return false;
         }
 
         const qint64 nDataOffset = nNameOffset + nNameLength;
@@ -122,7 +120,7 @@ bool XPAKLEOArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XPAKLEOArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -297,11 +295,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XPAKLEOArchive::getDefaultUnpackProperties(
 
 bool XPAKLEOArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XPAKLEOArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -311,8 +308,8 @@ bool XPAKLEOArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QV
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -325,15 +322,9 @@ bool XPAKLEOArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QV
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
-        pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

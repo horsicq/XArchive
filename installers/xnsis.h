@@ -73,7 +73,7 @@ public:
     static bool _fileEntryPosLess(const FILE_ENTRY &a, const FILE_ENTRY &b);
 
     struct UNPACK_CONTEXT {
-        QPointer<QIODevice> pOuterSourceDevice;
+        QIODevice *pOuterSourceDevice = nullptr;
         quint64 nOwnerDeviceGeneration;
         UNPACK_STATE *pOwnerState = nullptr;
         XArchive *pSourceValidator;
@@ -145,13 +145,6 @@ public:
     virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
-
-protected:
-    bool isDeviceReplacementAllowed() const override
-    {
-        return m_pUnpackLifetimeState && m_pUnpackLifetimeState->bOwnerAlive && !m_pUnpackLifetimeState->bOperationInProgress &&
-               m_pUnpackLifetimeState->setContexts.isEmpty();
-    }
 
 private:
     INTERNAL_INFO _getInternalInfo(PDSTRUCT *pPdStruct);

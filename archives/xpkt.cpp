@@ -5,7 +5,6 @@
 
 #include "xpkt.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -39,9 +38,8 @@ bool XPKT::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XPKT> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -50,7 +48,7 @@ bool XPKT::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nInputSize < PKT_HEADER_SIZE + PKT_MESSAGE_HEADER_SIZE) return false;
 
     const QByteArray baHeader = read_array_process(0, PKT_HEADER_SIZE + PKT_MESSAGE_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != PKT_HEADER_SIZE + PKT_MESSAGE_HEADER_SIZE)) return false;
+    if (baHeader.size() != PKT_HEADER_SIZE + PKT_MESSAGE_HEADER_SIZE) return false;
     const uchar *pHeader = reinterpret_cast<const uchar *>(baHeader.constData());
 
     // Headerless format: the whole detector is these cross-checks.
@@ -87,7 +85,6 @@ bool XPKT::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (context.listMessages.size() >= PKT_MAX_MESSAGES) return false;
 
         const QByteArray baMessageHeader = read_array_process(nOffset, PKT_MESSAGE_HEADER_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource) return false;
         if (baMessageHeader.size() < 2) break;
         const uchar *pMessage = reinterpret_cast<const uchar *>(baMessageHeader.constData());
         if (pktWord(pMessage, 0) == 0) break;
@@ -105,7 +102,7 @@ bool XPKT::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
             if ((nScan - nOffset) > PKT_MAX_MESSAGE_SIZE) return false;
             const qint32 nChunk = qint32(qMin<qint64>(nChunkSize, context.nInputSize - nScan));
             const QByteArray baChunk = read_array_process(nScan, nChunk, pPdStruct);
-            if (!guardedThis || !guardedSource || (baChunk.size() != nChunk)) return false;
+            if (baChunk.size() != nChunk) return false;
             for (qint32 i = 0; (i < nChunk) && (nFieldsFound < 5); ++i) {
                 if (baChunk.at(i) == '\0') {
                     ++nFieldsFound;
@@ -131,7 +128,7 @@ bool XPKT::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         // fail at the last check, so measure the rendering here from the very
         // same helper the codec uses.
         const QByteArray baRecord = read_array_process(message.nRecordOffset, qint32(message.nRecordSize), pPdStruct);
-        if (!guardedThis || !guardedSource || (baRecord.size() != message.nRecordSize)) return false;
+        if (baRecord.size() != message.nRecordSize) return false;
         message.nUncompressedSize = XPKTDecoder::renderedSize(baRecord);
         if (message.nUncompressedSize < 0) return false;
 
@@ -141,7 +138,7 @@ bool XPKT::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     }
 
     if (context.listMessages.isEmpty()) return false;
-    if (!guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!isPdStructNotCanceled(pPdStruct)) return false;
 
     context.nArchiveSize = nOffset;
     *pContext = context;
@@ -150,7 +147,7 @@ bool XPKT::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XPKT::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -302,11 +299,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XPKT::getDefaultUnpackProperties()
 
 bool XPKT::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XPKT> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -316,8 +312,8 @@ bool XPKT::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMessages.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMessages.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -331,15 +327,9 @@ bool XPKT::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     pState->nNumberOfRecords = pContext->listMessages.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
-        pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

@@ -22,7 +22,6 @@
 
 #include "Algos/xti99arcdecoder.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <cstring>
@@ -99,8 +98,7 @@ bool XTI99ARCArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XTI99ARCArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -112,7 +110,7 @@ bool XTI99ARCArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     if (context.nInputSize >= TI99_WRAPPER_SIZE) {
         const QByteArray baWrapper = read_array_process(0, TI99_WRAPPER_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baWrapper.size() != TI99_WRAPPER_SIZE)) return false;
+        if (!guardedSource || (baWrapper.size() != TI99_WRAPPER_SIZE)) return false;
         if (ti99IsTiFiles(baWrapper, context.nInputSize)) {
             nFlags = (quint8)baWrapper.at(0x0a);
             context.nPayloadOffset = TI99_WRAPPER_SIZE;
@@ -134,12 +132,12 @@ bool XTI99ARCArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     QByteArray baCatalogue;
     if (context.bCompressed) {
         const QByteArray baPayload = read_array_process(context.nPayloadOffset, context.nPayloadSize, pPdStruct);
-        if (!guardedThis || !guardedSource || (baPayload.size() != context.nPayloadSize)) return false;
+        if (!guardedSource || (baPayload.size() != context.nPayloadSize)) return false;
         if (!XTI99ARCDecoder::expand(baPayload, XTI99ARCDecoder::PROBE_SIZE, &baCatalogue, pPdStruct)) return false;
     } else {
         const qint64 nProbeSize = (context.nPayloadSize < XTI99ARCDecoder::PROBE_SIZE) ? context.nPayloadSize : XTI99ARCDecoder::PROBE_SIZE;
         baCatalogue = read_array_process(context.nPayloadOffset, nProbeSize, pPdStruct);
-        if (!guardedThis || !guardedSource || (baCatalogue.size() != nProbeSize)) return false;
+        if (!guardedSource || (baCatalogue.size() != nProbeSize)) return false;
     }
 
     // Walk the sector chain first; the entries are only read once the chain is
@@ -216,7 +214,7 @@ bool XTI99ARCArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XTI99ARCArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -378,11 +376,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XTI99ARCArchive::getDefaultUnpackProperties
 
 bool XTI99ARCArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XTI99ARCArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -392,8 +389,8 @@ bool XTI99ARCArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, Q
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -406,15 +403,10 @@ bool XTI99ARCArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, Q
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

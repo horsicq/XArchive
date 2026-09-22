@@ -5,7 +5,6 @@
 
 #include "xfld.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -108,13 +107,12 @@ bool XFLD::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XFLD> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = getSize();
-    if (!guardedThis || !guardedSource) return false;
+    if (!guardedSource) return false;
     if (context.nInputSize < FLD_RECORD_SIZE + FLD_TRAILER_SIZE) return false;
 
     qint64 nOffset = 0;
@@ -123,7 +121,7 @@ bool XFLD::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (context.listMembers.size() >= FLD_MAX_MEMBERS) return false;
 
         const QByteArray baRecord = read_array_process(nOffset, FLD_RECORD_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baRecord.size() != FLD_RECORD_SIZE)) return false;
+        if ((baRecord.size() != FLD_RECORD_SIZE)) return false;
         const char *pRecord = baRecord.constData();
         const uchar *pRaw = reinterpret_cast<const uchar *>(pRecord);
 
@@ -151,7 +149,7 @@ bool XFLD::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
             // exactly these two bytes of the first member.
             if (nCompressedSize < 3) break;
             const QByteArray baPrelude = read_array_process(nDataOffset, 2, pPdStruct);
-            if (!guardedThis || !guardedSource || (baPrelude.size() != 2)) return false;
+            if ((baPrelude.size() != 2)) return false;
             const quint8 nLiteralMode = static_cast<quint8>(baPrelude.at(0));
             const quint8 nDictionaryBits = static_cast<quint8>(baPrelude.at(1));
             if (nLiteralMode > 1) break;
@@ -187,12 +185,12 @@ bool XFLD::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     context.nArchiveSize = context.nInputSize;
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XFLD::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -354,11 +352,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XFLD::getDefaultUnpackProperties()
 
 bool XFLD::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XFLD> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -368,8 +365,8 @@ bool XFLD::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -383,15 +380,10 @@ bool XFLD::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

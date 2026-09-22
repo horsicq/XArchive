@@ -21,7 +21,6 @@
 
 #include "xpovlablzh.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <cstring>
@@ -88,13 +87,12 @@ XPovlabLzh::~XPovlabLzh()
 // One checked member parser shared by detection, enumeration and the file map.
 bool XPovlabLzh::readMember(qint64 nOffset, qint64 nInputSize, MEMBER *pMember, PDSTRUCT *pPdStruct)
 {
-    QPointer<XPovlabLzh> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pMember || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pMember || !isPdStructNotCanceled(pPdStruct)) return false;
     if (!povlabRangeWithin(nInputSize, nOffset, POVLAB_MIN_BASE_SIZE)) return false;
 
     const QByteArray baPrefix = read_array_process(nOffset, POVLAB_NAME_OFFSET, pPdStruct);
-    if (!guardedThis || !guardedSource || (baPrefix.size() != POVLAB_NAME_OFFSET)) return false;
+    if (baPrefix.size() != POVLAB_NAME_OFFSET) return false;
 
     const QByteArray baMethod = baPrefix.mid(2, 5);
     const bool bStored = (baMethod == "-ARS-");
@@ -109,7 +107,7 @@ bool XPovlabLzh::readMember(qint64 nOffset, qint64 nInputSize, MEMBER *pMember, 
     if (!povlabRangeWithin(nInputSize, nOffset, nBaseSize)) return false;
 
     QByteArray baHeader = read_array_process(nOffset, nBaseSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != nBaseSize)) return false;
+    if (baHeader.size() != nBaseSize) return false;
     if (!povlabChecksumValid(baHeader)) return false;
 
     const uchar *pHeader = reinterpret_cast<const uchar *>(baHeader.constData());
@@ -141,7 +139,6 @@ bool XPovlabLzh::readMember(qint64 nOffset, qint64 nInputSize, MEMBER *pMember, 
         if ((nExtTotal + nNextSize) > POVLAB_MAX_EXT_TOTAL) return false;
         if (!povlabRangeWithin(nInputSize, nExtOffset, nNextSize)) return false;
         baLengthWord = read_array_process(nExtOffset + nNextSize - 2, 2, pPdStruct);
-        if (!guardedThis || !guardedSource) return false;
         nExtTotal += nNextSize;
         nExtOffset += nNextSize;
     }
@@ -178,9 +175,8 @@ bool XPovlabLzh::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XPovlabLzh> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -193,12 +189,11 @@ bool XPovlabLzh::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (nOffset >= context.nInputSize) return false;
 
         const QByteArray baLead = read_array_process(nOffset, 1, pPdStruct);
-        if (!guardedThis || !guardedSource || (baLead.size() != 1)) return false;
+        if (baLead.size() != 1) return false;
         if (static_cast<quint8>(baLead.at(0)) == 0) break;  // end-of-archive marker
 
         MEMBER member = {};
         if (!readMember(nOffset, context.nInputSize, &member, pPdStruct)) return false;
-        if (!guardedThis || !guardedSource) return false;
         if (context.listMembers.size() >= POVLAB_MAX_MEMBERS) return false;
 
         context.listMembers.append(member);
@@ -214,18 +209,16 @@ bool XPovlabLzh::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nArchiveSize > context.nInputSize) return false;
 
     *pContext = context;
-    return guardedThis && guardedSource;
+    return true;
 }
 
 bool XPovlabLzh::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
-    const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
+    QIODevice *guardedSource = getDevice();
+    const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
-    if (guardedSource && (nSavedPosition >= 0)) {
-        guardedSource->seek(nSavedPosition);
-    }
+    guardedSource->seek(nSavedPosition);
     return bResult;
 }
 
@@ -413,15 +406,14 @@ QMap<XBinary::UNPACK_PROP, QVariant> XPovlabLzh::getDefaultUnpackProperties()
 
 bool XPovlabLzh::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XPovlabLzh> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) {
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) {
         return false;
     }
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -435,8 +427,8 @@ bool XPovlabLzh::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVaria
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -450,15 +442,10 @@ bool XPovlabLzh::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVaria
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

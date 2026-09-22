@@ -5,8 +5,6 @@
 
 #include "xsw.h"
 
-#include <QPointer>
-
 #include <new>
 
 namespace {
@@ -88,8 +86,7 @@ bool XSW::parseContext(CONTEXT *pContext, bool bHeaderOnly, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XSW> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -98,7 +95,7 @@ bool XSW::parseContext(CONTEXT *pContext, bool bHeaderOnly, PDSTRUCT *pPdStruct)
     if (context.nInputSize < SW_HEADER_SIZE + 2 + SW_MIN_NAME) return false;
 
     const QByteArray baHeader = read_array_process(0, SW_HEADER_SIZE + 2, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != SW_HEADER_SIZE + 2)) return false;
+    if (!guardedSource || (baHeader.size() != SW_HEADER_SIZE + 2)) return false;
     const char *pHeader = baHeader.constData();
 
     if (memcmp(pHeader, "im001V", 6) != 0) return false;
@@ -127,7 +124,7 @@ bool XSW::parseContext(CONTEXT *pContext, bool bHeaderOnly, PDSTRUCT *pPdStruct)
     qint64 nPosition = SW_HEADER_SIZE;
     while (isPdStructNotCanceled(pPdStruct)) {
         const QByteArray baBlock = read_array_process(nPosition, SW_SCAN_BLOCK, pPdStruct);
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
         const qint64 nBlockSize = baBlock.size();
         if (nBlockSize <= 5) break;
         const bool bLast = (nBlockSize < SW_SCAN_BLOCK);
@@ -177,11 +174,11 @@ bool XSW::parseContext(CONTEXT *pContext, bool bHeaderOnly, PDSTRUCT *pPdStruct)
         if (!isPdStructNotCanceled(pPdStruct)) return false;
         const qint64 nOffset = listOffsets.at(i);
         const QByteArray baLength = read_array_process(nOffset, 2, pPdStruct);
-        if (!guardedThis || !guardedSource || (baLength.size() != 2)) return false;
+        if (!guardedSource || (baLength.size() != 2)) return false;
         const qint32 nNameLength = (static_cast<qint32>(static_cast<quint8>(baLength.at(0))) << 8) | static_cast<qint32>(static_cast<quint8>(baLength.at(1)));
         if ((nNameLength <= 0) || (nNameLength > SW_MAX_NAME)) break;
         const QByteArray baName = read_array_process(nOffset + 2, nNameLength, pPdStruct);
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
         if (baName.size() != nNameLength) break;
 
         const qint64 nEnd = (i + 1 < listOffsets.size()) ? listOffsets.at(i + 1) : context.nInputSize;
@@ -199,12 +196,12 @@ bool XSW::parseContext(CONTEXT *pContext, bool bHeaderOnly, PDSTRUCT *pPdStruct)
     if (context.listMembers.isEmpty()) return false;
 
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XSW::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     // The 12 byte ASCII magic plus the two structural zero bytes is specific
@@ -367,11 +364,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XSW::getDefaultUnpackProperties()
 
 bool XSW::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSW> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -381,8 +377,8 @@ bool XSW::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &ma
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, false, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, false, pPdStruct) || !guardedSource || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -397,15 +393,10 @@ bool XSW::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &ma
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

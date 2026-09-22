@@ -24,7 +24,6 @@
 #include "../Formats/xformats.h"
 
 #include <QBuffer>
-#include <QPointer>
 #include <QTemporaryFile>
 
 #include <memory>
@@ -84,7 +83,7 @@ public:
     }
 
 private:
-    QPointer<QIODevice> m_pDevice;
+    QIODevice *m_pDevice;
     QByteArray m_name;
     QVariant m_oldValue;
     bool m_bHadProperty;
@@ -147,12 +146,12 @@ public:
         if (!m_bClosed && m_pArchive) {
             m_pArchive->finishUnpack(&m_state, nullptr);
         }
-        if (m_pArchive) delete m_pArchive.data();
+        if (m_pArchive) delete m_pArchive;
     }
 
     XArchive *archive() const
     {
-        return m_pArchive.data();
+        return m_pArchive;
     }
     XBinary::UNPACK_STATE *state()
     {
@@ -164,12 +163,12 @@ public:
         if (m_bClosed) return m_bFinishResult;
         m_bClosed = true;
         if (!m_pArchive) return false;
-        m_bFinishResult = m_pArchive->finishUnpack(&m_state, nullptr) && m_pArchive;
+        m_bFinishResult = m_pArchive->finishUnpack(&m_state, nullptr);
         return m_bFinishResult;
     }
 
 private:
-    QPointer<XArchive> m_pArchive;
+    XArchive *m_pArchive;
     XBinary::UNPACK_STATE m_state;
     bool m_bClosed;
     bool m_bFinishResult;
@@ -205,7 +204,7 @@ bool isOuterEnvelopeFullyConsumed(XBinary::FT fileType, XBinary::HANDLE_METHOD h
     return nStreamEnd == nDeviceSize;
 }
 
-bool isReadableSeekableDevice(const QPointer<QIODevice> &guardedDevice)
+bool isReadableSeekableDevice(QIODevice *guardedDevice)
 {
     if (!guardedDevice) return false;
     const bool bSequential = guardedDevice->isSequential();
@@ -216,7 +215,7 @@ bool isReadableSeekableDevice(const QPointer<QIODevice> &guardedDevice)
     return guardedDevice && bReadable;
 }
 
-bool getDevicePosition(const QPointer<QIODevice> &guardedDevice, qint64 *pnPosition)
+bool getDevicePosition(QIODevice *guardedDevice, qint64 *pnPosition)
 {
     if (pnPosition) *pnPosition = -1;
     if (!guardedDevice || !pnPosition) return false;
@@ -226,7 +225,7 @@ bool getDevicePosition(const QPointer<QIODevice> &guardedDevice, qint64 *pnPosit
     return true;
 }
 
-bool getDeviceSize(const QPointer<QIODevice> &guardedDevice, qint64 *pnSize)
+bool getDeviceSize(QIODevice *guardedDevice, qint64 *pnSize)
 {
     if (pnSize) *pnSize = -1;
     if (!guardedDevice || !pnSize) return false;
@@ -268,7 +267,7 @@ bool XFilteredArchive::FILTERED_UNPACK_CONTEXT::finishInner(PDSTRUCT *pPdStruct)
         return false;
     }
 
-    QPointer<XArchive> guardedInner(pInnerArchive);
+    XArchive *guardedInner = pInnerArchive;
     const bool bResult = guardedInner->finishUnpack(&innerState, pPdStruct) && guardedInner;
     if (!guardedInner) pInnerArchive = nullptr;
     bInnerInitialized = false;
@@ -293,25 +292,24 @@ XFilteredArchive::~XFilteredArchive()
 
 bool XFilteredArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<XFilteredArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const bool bUsableSource = isReadableSeekableDevice(guardedSource);
-    if (!guardedThis || !guardedSource || !bUsableSource) return false;
-    const bool bSuppressed = isRecursionSuppressed(guardedSource.data());
-    if (!guardedThis || !guardedSource || bSuppressed || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!guardedSource || !bUsableSource) return false;
+    const bool bSuppressed = isRecursionSuppressed(guardedSource);
+    if (!guardedSource || bSuppressed || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     qint64 nOriginalPosition = -1;
-    if (!getDevicePosition(guardedSource, &nOriginalPosition) || !guardedThis || !guardedSource) return false;
+    if (!getDevicePosition(guardedSource, &nOriginalPosition) || !guardedSource) return false;
 
     UNPACK_STATE state = {};
-    const bool bInitialized = guardedThis->initUnpack(&state, QMap<UNPACK_PROP, QVariant>(), pPdStruct);
-    if (!guardedThis || !guardedSource) return false;
-    const bool bFinished = guardedThis->finishUnpack(&state, nullptr);
-    if (!guardedThis || !guardedSource) return false;
+    const bool bInitialized = initUnpack(&state, QMap<UNPACK_PROP, QVariant>(), pPdStruct);
+    if (!guardedSource) return false;
+    const bool bFinished = finishUnpack(&state, nullptr);
+    if (!guardedSource) return false;
     const bool bPositionRestored = guardedSource->seek(nOriginalPosition);
-    return bInitialized && bFinished && bPositionRestored && guardedThis && guardedSource && XBinary::isPdStructNotCanceled(pPdStruct);
+    return bInitialized && bFinished && bPositionRestored && guardedSource && XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
 bool XFilteredArchive::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
@@ -338,7 +336,7 @@ const char *XFilteredArchive::depthPropertyName()
 
 bool XFilteredArchive::isRecursionSuppressed(QIODevice *pDevice)
 {
-    QPointer<QIODevice> guardedDevice(pDevice);
+    QIODevice *guardedDevice = pDevice;
     return guardedDevice && guardedDevice->property(FILTERED_RECURSION_PROPERTY).toBool();
 }
 
@@ -442,7 +440,7 @@ QMap<XBinary::UNPACK_PROP, QVariant> XFilteredArchive::getDefaultUnpackPropertie
 bool XFilteredArchive::readFilterDepth(QIODevice *pDevice, qint32 *pnDepth)
 {
     if (pnDepth) *pnDepth = 0;
-    QPointer<QIODevice> guardedDevice(pDevice);
+    QIODevice *guardedDevice = pDevice;
     if (!guardedDevice || !pnDepth) return false;
 
     const QVariant value = guardedDevice->property(FILTERED_DEPTH_PROPERTY);
@@ -460,7 +458,7 @@ bool XFilteredArchive::readFilterDepth(QIODevice *pDevice, qint32 *pnDepth)
 
 XBinary::FT XFilteredArchive::detectNativeFileType(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedDevice(pDevice);
+    QIODevice *guardedDevice = pDevice;
     const bool bUsableDevice = isReadableSeekableDevice(guardedDevice);
     if (!guardedDevice || !bUsableDevice || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return FT_UNKNOWN;
@@ -471,9 +469,9 @@ XBinary::FT XFilteredArchive::detectNativeFileType(QIODevice *pDevice, PDSTRUCT 
 
     FT result = FT_UNKNOWN;
     {
-        DevicePropertyOverride recursionGuard(guardedDevice.data(), FILTERED_RECURSION_PROPERTY, true);
+        DevicePropertyOverride recursionGuard(guardedDevice, FILTERED_RECURSION_PROPERTY, true);
         if (recursionGuard.isApplied() && guardedDevice) {
-            result = XFormats::getPrefFileType(guardedDevice.data(), FT_FLAG_ARCHIVES, pPdStruct);
+            result = XFormats::getPrefFileType(guardedDevice, FT_FLAG_ARCHIVES, pPdStruct);
         }
     }
 
@@ -485,14 +483,14 @@ XBinary::FT XFilteredArchive::detectNativeFileType(QIODevice *pDevice, PDSTRUCT 
 
 XArchive *XFilteredArchive::createNativeArchive(FT fileType, QIODevice *pDevice)
 {
-    QPointer<QIODevice> guardedDevice(pDevice);
+    QIODevice *guardedDevice = pDevice;
     if (!guardedDevice) return nullptr;
 
     XBinary *pBinary = nullptr;
     {
-        DevicePropertyOverride recursionGuard(guardedDevice.data(), FILTERED_RECURSION_PROPERTY, true);
+        DevicePropertyOverride recursionGuard(guardedDevice, FILTERED_RECURSION_PROPERTY, true);
         if (!recursionGuard.isApplied() || !guardedDevice) return nullptr;
-        pBinary = XFormats::createClass(fileType, guardedDevice.data());
+        pBinary = XFormats::createClass(fileType, guardedDevice);
     }
 
     if (!guardedDevice || !pBinary) {
@@ -534,32 +532,31 @@ void XFilteredArchive::copyInnerState(UNPACK_STATE *pState, const FILTERED_UNPAC
 QBuffer *XFilteredArchive::materializeLayer(QIODevice *pInputDevice, FT fileType, const QMap<UNPACK_PROP, QVariant> &mapProperties, UNPACK_STATE *pOuterState,
                                             PDSTRUCT *pPdStruct)
 {
-    QPointer<XFilteredArchive> guardedThis(this);
-    QPointer<QIODevice> guardedInput(pInputDevice);
+    QIODevice *guardedInput = pInputDevice;
     if (!guardedInput || !pOuterState || !isFilterFileType(fileType)) {
         return nullptr;
     }
     const bool bUsableInput = isReadableSeekableDevice(guardedInput);
-    if (!guardedThis || !guardedInput || !bUsableInput || !XBinary::isPdStructNotCanceled(pPdStruct)) return nullptr;
-    const bool bSourceCurrent = guardedThis->isUnpackSourceCurrent(pOuterState, pPdStruct);
-    if (!guardedThis || !guardedInput || !bSourceCurrent) return nullptr;
+    if (!guardedInput || !bUsableInput || !XBinary::isPdStructNotCanceled(pPdStruct)) return nullptr;
+    const bool bSourceCurrent = isUnpackSourceCurrent(pOuterState, pPdStruct);
+    if (!guardedInput || !bSourceCurrent) return nullptr;
 
     qint64 nOriginalPosition = -1;
-    if (!getDevicePosition(guardedInput, &nOriginalPosition) || !guardedThis || !guardedInput) return nullptr;
+    if (!getDevicePosition(guardedInput, &nOriginalPosition) || !guardedInput) return nullptr;
     qint64 nInputSize = -1;
-    if (!getDeviceSize(guardedInput, &nInputSize) || !guardedThis || !guardedInput || (nInputSize <= 0)) {
+    if (!getDeviceSize(guardedInput, &nInputSize) || !guardedInput || (nInputSize <= 0)) {
         return nullptr;
     }
 
-    NativeArchiveSession nativeSession(createNativeArchive(fileType, guardedInput.data()));
-    QPointer<XArchive> guardedNative(nativeSession.archive());
-    bool bResult = guardedNative && guardedThis && guardedInput;
+    NativeArchiveSession nativeSession(createNativeArchive(fileType, guardedInput));
+    XArchive *guardedNative = nativeSession.archive();
+    bool bResult = guardedNative && guardedInput;
     if (bResult) {
         bResult = guardedNative->initUnpack(nativeSession.state(), mapProperties, pPdStruct);
     }
-    if (!guardedThis || !guardedInput || !guardedNative) bResult = false;
+    if (!guardedInput || !guardedNative) bResult = false;
     if (bResult) {
-        bResult = guardedThis->isUnpackSourceCurrent(pOuterState, pPdStruct) && guardedThis && guardedInput && guardedNative && XBinary::isPdStructNotCanceled(pPdStruct);
+        bResult = isUnpackSourceCurrent(pOuterState, pPdStruct) && guardedInput && guardedNative && XBinary::isPdStructNotCanceled(pPdStruct);
     }
 
     UNPACK_STATE *pNativeState = nativeSession.state();
@@ -571,7 +568,7 @@ QBuffer *XFilteredArchive::materializeLayer(QIODevice *pInputDevice, FT fileType
     ARCHIVERECORD record = {};
     if (bResult) {
         record = guardedNative->infoCurrent(pNativeState, pPdStruct);
-        if (!guardedThis || !guardedInput || !guardedNative) {
+        if (!guardedInput || !guardedNative) {
             bResult = false;
         }
     }
@@ -594,7 +591,7 @@ QBuffer *XFilteredArchive::materializeLayer(QIODevice *pInputDevice, FT fileType
                                                      : (isOuterEnvelopeFullyConsumed(fileType, handleMethod, record, nInputSize) && bMethodOk &&
                                                         (handleMethod != HANDLE_METHOD_UNKNOWN));
         bResult = bEnvelopeOk && !record.mapProperties.value(FPART_PROP_ISFOLDER, false).toBool() && (pNativeState->nCurrentIndex == 0) &&
-                  (pNativeState->nNumberOfRecords == 1) && guardedThis->isUnpackSourceCurrent(pOuterState, pPdStruct) && guardedThis && guardedInput && guardedNative &&
+                  (pNativeState->nNumberOfRecords == 1) && isUnpackSourceCurrent(pOuterState, pPdStruct) && guardedInput && guardedNative &&
                   XBinary::isPdStructNotCanceled(pPdStruct);
     }
 
@@ -629,11 +626,11 @@ QBuffer *XFilteredArchive::materializeLayer(QIODevice *pInputDevice, FT fileType
         // is required here: it is what keeps the bounded buffer below from
         // being asked to publish an image of unknown length.
         const bool bDecoded = (nExpectedSize >= 0) && guardedNative->unpackCurrent(pNativeState, pDecoded.get(), pPdStruct);
-        if (!guardedThis || !guardedInput || !guardedNative || !bDecoded) {
+        if (!guardedInput || !guardedNative || !bDecoded) {
             bResult = false;
         }
     } else if (bResult) {
-        decompressState.pDeviceInput = guardedInput.data();
+        decompressState.pDeviceInput = guardedInput;
         decompressState.pDeviceOutput = pDecoded.get();
         decompressState.nInputOffset = record.nStreamOffset;
         decompressState.nInputLimit = record.nStreamSize;
@@ -644,7 +641,7 @@ QBuffer *XFilteredArchive::materializeLayer(QIODevice *pInputDevice, FT fileType
 
         XDecompress decompressor;
         bResult = decompressor.multiDecompress(&decompressState, pPdStruct);
-        if (!guardedThis || !guardedInput || !guardedNative) {
+        if (!guardedInput || !guardedNative) {
             bResult = false;
         }
     }
@@ -659,25 +656,25 @@ QBuffer *XFilteredArchive::materializeLayer(QIODevice *pInputDevice, FT fileType
                                            ? ((pNativeState->nCurrentOffset == nInputSize) && (pNativeState->nTotalSize == nInputSize))
                                            : ((decompressState.nCountInput == record.nStreamSize) && (decompressState.nCountOutput == nDecodedSize));
         bResult = !pDecoded->isLimitExceeded() && (nDecodedSize > 0) && (nDecodedSize <= nEffectiveLimit) && bEnvelopeConsumed &&
-                  ((nExpectedSize < 0) || (nDecodedSize == nExpectedSize)) && guardedThis->isUnpackSourceCurrent(pOuterState, pPdStruct) && guardedThis && guardedInput &&
+                  ((nExpectedSize < 0) || (nDecodedSize == nExpectedSize)) && isUnpackSourceCurrent(pOuterState, pPdStruct) && guardedInput &&
                   guardedNative && XBinary::isPdStructNotCanceled(pPdStruct);
     }
 
     if (bResult) {
         const bool bMoved = guardedNative->moveToNext(pNativeState, pPdStruct);
-        if (!guardedThis || !guardedInput || !guardedNative) {
+        if (!guardedInput || !guardedNative) {
             bResult = false;
         } else {
             bResult = !bMoved && (pNativeState->nCurrentIndex == 1) && (pNativeState->nNumberOfRecords == 1) && XBinary::isPdStructNotCanceled(pPdStruct) &&
-                      guardedThis->isUnpackSourceCurrent(pOuterState, pPdStruct) && guardedThis && guardedInput && guardedNative;
+                      isUnpackSourceCurrent(pOuterState, pPdStruct) && guardedInput && guardedNative;
         }
     }
 
     const bool bFinished = nativeSession.finish();
-    if (!guardedThis || !guardedInput) bResult = false;
+    if (!guardedInput) bResult = false;
     const bool bPositionRestored = guardedInput && guardedInput->seek(nOriginalPosition);
-    bResult = bResult && bFinished && bPositionRestored && guardedThis && guardedInput && XBinary::isPdStructNotCanceled(pPdStruct) &&
-              guardedThis->isUnpackSourceCurrent(pOuterState, pPdStruct) && guardedThis && guardedInput;
+    bResult = bResult && bFinished && bPositionRestored && guardedInput && XBinary::isPdStructNotCanceled(pPdStruct) &&
+              isUnpackSourceCurrent(pOuterState, pPdStruct) && guardedInput;
 
     if (!bResult || !pDecoded) return nullptr;
     pDecoded->close();
@@ -694,105 +691,104 @@ QBuffer *XFilteredArchive::materializeLayer(QIODevice *pInputDevice, FT fileType
 
 bool XFilteredArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XFilteredArchive> guardedThis(this);
-    if (!pState || m_bUnpackOperationInProgress || ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedThis->ownsUnpackSource(pState))) {
+    if (!pState || m_bUnpackOperationInProgress || ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState))) {
         return false;
     }
-    if (!guardedThis->finishUnpack(pState, nullptr) || !guardedThis) {
+    if (!finishUnpack(pState, nullptr)) {
         return false;
     }
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
 
-    QPointer<QIODevice> guardedSource(guardedThis->getDevice());
-    if (!guardedThis || !guardedSource) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!guardedSource) return false;
     const bool bUsableSource = isReadableSeekableDevice(guardedSource);
-    if (!guardedThis || !guardedSource || !bUsableSource) return false;
-    const bool bSuppressed = isRecursionSuppressed(guardedSource.data());
-    if (!guardedThis || !guardedSource || bSuppressed || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!guardedSource || !bUsableSource) return false;
+    const bool bSuppressed = isRecursionSuppressed(guardedSource);
+    if (!guardedSource || bSuppressed || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
     qint64 nOriginalPosition = -1;
-    if (!getDevicePosition(guardedSource, &nOriginalPosition) || !guardedThis || !guardedSource) return false;
+    if (!getDevicePosition(guardedSource, &nOriginalPosition) || !guardedSource) return false;
     qint64 nOuterSize = -1;
-    if (!getDeviceSize(guardedSource, &nOuterSize) || !guardedThis || !guardedSource || (nOuterSize <= 0)) {
+    if (!getDeviceSize(guardedSource, &nOuterSize) || !guardedSource || (nOuterSize <= 0)) {
         return false;
     }
 
-    const bool bBound = guardedThis->bindUnpackSource(pState, pPdStruct);
-    if (!guardedThis || !guardedSource || !bBound) return false;
+    const bool bBound = bindUnpackSource(pState, pPdStruct);
+    if (!guardedSource || !bBound) return false;
 
     qint32 nDepth = 0;
-    if (!readFilterDepth(guardedSource.data(), &nDepth) || !guardedThis || !guardedSource) {
-        return failUnpackInitialization(guardedThis.data(), pState);
+    if (!readFilterDepth(guardedSource, &nDepth) || !guardedSource) {
+        return failUnpackInitialization(this, pState);
     }
 
-    FT currentType = detectNativeFileType(guardedSource.data(), pPdStruct);
-    if (!guardedThis || !guardedSource || !guardedThis->isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis || !guardedSource ||
+    FT currentType = detectNativeFileType(guardedSource, pPdStruct);
+    if (!guardedSource || !isUnpackSourceCurrent(pState, pPdStruct) || !guardedSource ||
         ((m_outerFileTypeHint != FT_UNKNOWN) && (!isFilterFileType(m_outerFileTypeHint) || (currentType != m_outerFileTypeHint))) ||
         isDedicatedCompressedTarFileType(currentType) || !isFilterFileType(currentType)) {
-        return failUnpackInitialization(guardedThis.data(), pState);
+        return failUnpackInitialization(this, pState);
     }
     const FT outerFileType = currentType;
 
-    QIODevice *pCurrentDevice = guardedSource.data();
+    QIODevice *pCurrentDevice = guardedSource;
     std::unique_ptr<QBuffer> pCurrentOwned;
     while (isFilterFileType(filterEnvelopeType(currentType))) {
         if ((nDepth < 0) || (nDepth >= FILTERED_MAX_DEPTH) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
-            return failUnpackInitialization(guardedThis.data(), pState);
+            return failUnpackInitialization(this, pState);
         }
 
         const FT layerType = filterEnvelopeType(currentType);
 
-        std::unique_ptr<QBuffer> pDecoded(guardedThis->materializeLayer(pCurrentDevice, layerType, mapProperties, pState, pPdStruct));
-        if (!guardedThis || !guardedSource || !pDecoded) {
-            return failUnpackInitialization(guardedThis.data(), pState);
+        std::unique_ptr<QBuffer> pDecoded(materializeLayer(pCurrentDevice, layerType, mapProperties, pState, pPdStruct));
+        if (!guardedSource || !pDecoded) {
+            return failUnpackInitialization(this, pState);
         }
 
         ++nDepth;
         pDecoded->setProperty(FILTERED_DEPTH_PROPERTY, nDepth);
         if (pDecoded->property(FILTERED_DEPTH_PROPERTY).toInt() != nDepth) {
-            return failUnpackInitialization(guardedThis.data(), pState);
+            return failUnpackInitialization(this, pState);
         }
 
         pCurrentOwned.swap(pDecoded);
         pCurrentDevice = pCurrentOwned.get();
         currentType = detectNativeFileType(pCurrentDevice, pPdStruct);
-        if (!guardedThis || !guardedSource || !guardedThis->isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis || !guardedSource || (currentType == FT_UNKNOWN)) {
-            return failUnpackInitialization(guardedThis.data(), pState);
+        if (!guardedSource || !isUnpackSourceCurrent(pState, pPdStruct) || !guardedSource || (currentType == FT_UNKNOWN)) {
+            return failUnpackInitialization(this, pState);
         }
     }
 
     const FT innerFileType = currentType;
     if (!pCurrentOwned || !XFormats::isArchive(innerFileType) || isFilterFileType(innerFileType)) {
-        return failUnpackInitialization(guardedThis.data(), pState);
+        return failUnpackInitialization(this, pState);
     }
 
     std::unique_ptr<FILTERED_UNPACK_CONTEXT> pContext(new (std::nothrow) FILTERED_UNPACK_CONTEXT());
-    if (!pContext) return failUnpackInitialization(guardedThis.data(), pState);
+    if (!pContext) return failUnpackInitialization(this, pState);
     pContext->pDecodedDevice = pCurrentOwned.release();
     pContext->outerFileType = outerFileType;
     pContext->innerFileType = innerFileType;
     pContext->nFilterDepth = nDepth;
     pContext->nOuterSize = nOuterSize;
     pContext->pInnerArchive = createNativeArchive(innerFileType, pContext->pDecodedDevice);
-    QPointer<XArchive> guardedInner(pContext->pInnerArchive);
-    QPointer<QIODevice> guardedDecoded(pContext->pDecodedDevice);
-    if (!guardedInner || !guardedDecoded || !guardedThis || !guardedSource) {
-        return failUnpackInitialization(guardedThis.data(), pState);
+    XArchive *guardedInner = pContext->pInnerArchive;
+    QIODevice *guardedDecoded = pContext->pDecodedDevice;
+    if (!guardedInner || !guardedDecoded || !guardedSource) {
+        return failUnpackInitialization(this, pState);
     }
 
     bool bResult = guardedInner->initUnpack(&pContext->innerState, mapProperties, pPdStruct);
     if (bResult && guardedInner) pContext->bInnerInitialized = true;
-    if (!guardedThis || !guardedSource || !guardedInner || !guardedDecoded || !bResult || !XBinary::isPdStructNotCanceled(pPdStruct) ||
-        !guardedThis->isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis || !guardedSource) {
-        return failUnpackInitialization(guardedThis.data(), pState);
+    if (!guardedSource || !guardedInner || !guardedDecoded || !bResult || !XBinary::isPdStructNotCanceled(pPdStruct) ||
+        !isUnpackSourceCurrent(pState, pPdStruct) || !guardedSource) {
+        return failUnpackInitialization(this, pState);
     }
 
     const qint64 nDecodedSize = guardedDecoded->size();
-    if (!guardedThis || !guardedSource || !guardedInner || !guardedDecoded || (nDecodedSize < 0)) {
-        return failUnpackInitialization(guardedThis.data(), pState);
+    if (!guardedSource || !guardedInner || !guardedDecoded || (nDecodedSize < 0)) {
+        return failUnpackInitialization(this, pState);
     }
     const qint32 nInnerRecords = pContext->innerState.nNumberOfRecords;
     bResult = (pContext->innerState.nCurrentIndex == 0) && (nInnerRecords >= 0) && (pContext->innerState.nCurrentOffset >= 0) &&
@@ -801,34 +797,29 @@ bool XFilteredArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, 
     ARCHIVERECORD firstRecord = {};
     if (bResult && (nInnerRecords > 0)) {
         firstRecord = guardedInner->infoCurrent(&pContext->innerState, pPdStruct);
-        if (!guardedThis || !guardedSource || !guardedInner || !guardedDecoded) {
+        if (!guardedSource || !guardedInner || !guardedDecoded) {
             bResult = false;
         }
     }
     if (bResult && (nInnerRecords > 0)) {
         bResult = isArchiveRecordRangeValid(firstRecord, nDecodedSize) && (pContext->innerState.nCurrentIndex == 0) &&
                   (pContext->innerState.nNumberOfRecords == nInnerRecords) && XBinary::isPdStructNotCanceled(pPdStruct) &&
-                  guardedThis->isUnpackSourceCurrent(pState, pPdStruct) && guardedThis && guardedSource && guardedInner && guardedDecoded;
+                  isUnpackSourceCurrent(pState, pPdStruct) && guardedSource && guardedInner && guardedDecoded;
     }
-    if (!bResult) return failUnpackInitialization(guardedThis.data(), pState);
+    if (!bResult) return failUnpackInitialization(this, pState);
 
     const bool bPositionRestored = guardedSource->seek(nOriginalPosition);
-    if (!guardedThis || !guardedSource || !guardedInner || !guardedDecoded || !bPositionRestored || !guardedThis->isUnpackSourceCurrent(pState, pPdStruct) ||
-        !guardedThis || !guardedSource) {
-        return failUnpackInitialization(guardedThis.data(), pState);
+    if (!guardedSource || !guardedInner || !guardedDecoded || !bPositionRestored || !isUnpackSourceCurrent(pState, pPdStruct) || !guardedSource) {
+        return failUnpackInitialization(this, pState);
     }
 
     copyInnerState(pState, pContext.get());
     FILTERED_UNPACK_CONTEXT *pRawContext = pContext.release();
     pState->pContext = pRawContext;
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pRawContext, pPdStruct);
-    if (!guardedThis) {
-        *pState = UNPACK_STATE();
-        return false;
-    }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pRawContext, pPdStruct);
     if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pRawContext;
         *pState = UNPACK_STATE();
         return false;
@@ -840,8 +831,7 @@ XBinary::ARCHIVERECORD XFilteredArchive::infoCurrent(UNPACK_STATE *pState, PDSTR
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return ARCHIVERECORD();
-    QPointer<XFilteredArchive> guardedThis(this);
-    if (!pState || !XBinary::isPdStructNotCanceled(pPdStruct) || !guardedThis->isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis) {
+    if (!pState || !XBinary::isPdStructNotCanceled(pPdStruct) || !isUnpackSourceCurrent(pState, pPdStruct)) {
         return ARCHIVERECORD();
     }
 
@@ -850,9 +840,9 @@ XBinary::ARCHIVERECORD XFilteredArchive::infoCurrent(UNPACK_STATE *pState, PDSTR
         return ARCHIVERECORD();
     }
 
-    QPointer<XArchive> guardedInner(pContext->pInnerArchive);
-    QPointer<QIODevice> guardedDecoded(pContext->pDecodedDevice);
-    QPointer<QIODevice> guardedSource(guardedThis->getDevice());
+    XArchive *guardedInner = pContext->pInnerArchive;
+    QIODevice *guardedDecoded = pContext->pDecodedDevice;
+    QIODevice *guardedSource = getDevice();
     if (!guardedInner || !guardedDecoded || !guardedSource) {
         return ARCHIVERECORD();
     }
@@ -863,8 +853,8 @@ XBinary::ARCHIVERECORD XFilteredArchive::infoCurrent(UNPACK_STATE *pState, PDSTR
     ARCHIVERECORD result = guardedInner->infoCurrent(&pContext->innerState, pPdStruct);
     qint64 nDecodedSize = -1;
     if (guardedDecoded) nDecodedSize = guardedDecoded->size();
-    if (!guardedThis || !guardedInner || !guardedDecoded || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct) ||
-        !guardedThis->isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis || !guardedInner || !guardedDecoded || !guardedSource ||
+    if (!guardedInner || !guardedDecoded || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct) ||
+        !isUnpackSourceCurrent(pState, pPdStruct) || !guardedInner || !guardedDecoded || !guardedSource ||
         !isArchiveRecordRangeValid(result, nDecodedSize) || (pContext->innerState.nCurrentIndex != nIndex) || (pContext->innerState.nNumberOfRecords != nRecords)) {
         return ARCHIVERECORD();
     }
@@ -907,16 +897,15 @@ bool XFilteredArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, P
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
-    QPointer<XFilteredArchive> guardedThis(this);
     if (!pState || !pDevice || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
-    QPointer<QIODevice> guardedOutput(pDevice);
-    QPointer<QIODevice> guardedSource(guardedThis->getDevice());
-    if (!guardedOutput || !guardedSource || !guardedThis->isUnpackOutputSupported(guardedOutput.data()) || !guardedThis || !guardedOutput || !guardedSource ||
-        XBinary::devicesAlias(guardedSource.data(), guardedOutput.data()) || !guardedThis || !guardedOutput || !guardedSource ||
-        !guardedThis->isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis || !guardedOutput || !guardedSource) {
+    QIODevice *guardedOutput = pDevice;
+    QIODevice *guardedSource = getDevice();
+    if (!guardedOutput || !guardedSource || !isUnpackOutputSupported(guardedOutput) || !guardedOutput || !guardedSource ||
+        XBinary::devicesAlias(guardedSource, guardedOutput) || !guardedOutput || !guardedSource ||
+        !isUnpackSourceCurrent(pState, pPdStruct) || !guardedOutput || !guardedSource) {
         return false;
     }
 
@@ -925,9 +914,9 @@ bool XFilteredArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, P
         return false;
     }
 
-    QPointer<XArchive> guardedInner(pContext->pInnerArchive);
-    QPointer<QIODevice> guardedDecoded(pContext->pDecodedDevice);
-    if (!guardedInner || !guardedDecoded || XBinary::devicesAlias(guardedDecoded.data(), guardedOutput.data()) || !guardedThis || !guardedInner || !guardedDecoded ||
+    XArchive *guardedInner = pContext->pInnerArchive;
+    QIODevice *guardedDecoded = pContext->pDecodedDevice;
+    if (!guardedInner || !guardedDecoded || XBinary::devicesAlias(guardedDecoded, guardedOutput) || !guardedInner || !guardedDecoded ||
         !guardedOutput || !guardedSource) {
         return false;
     }
@@ -938,8 +927,8 @@ bool XFilteredArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, P
     ARCHIVERECORD record = guardedInner->infoCurrent(&pContext->innerState, pPdStruct);
     qint64 nDecodedSize = -1;
     if (guardedDecoded) nDecodedSize = guardedDecoded->size();
-    if (!guardedThis || !guardedInner || !guardedDecoded || !guardedOutput || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct) ||
-        !guardedThis->isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis || !guardedInner || !guardedDecoded || !guardedOutput || !guardedSource ||
+    if (!guardedInner || !guardedDecoded || !guardedOutput || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct) ||
+        !isUnpackSourceCurrent(pState, pPdStruct) || !guardedInner || !guardedDecoded || !guardedOutput || !guardedSource ||
         !isArchiveRecordRangeValid(record, nDecodedSize) || (pContext->innerState.nCurrentIndex != nIndex) || (pContext->innerState.nNumberOfRecords != nRecords)) {
         return false;
     }
@@ -963,9 +952,9 @@ bool XFilteredArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, P
             delete pTemporaryFile;
         }
     }
-    QPointer<QIODevice> guardedStage(pStage);
-    if (!guardedThis || !guardedInner || !guardedDecoded || !guardedOutput || !guardedSource || !guardedStage || !XBinary::isPdStructNotCanceled(pPdStruct) ||
-        !guardedThis->isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis) {
+    QIODevice *guardedStage = pStage;
+    if (!guardedInner || !guardedDecoded || !guardedOutput || !guardedSource || !guardedStage || !XBinary::isPdStructNotCanceled(pPdStruct) ||
+        !isUnpackSourceCurrent(pState, pPdStruct)) {
         if (!guardedStage) pStage = nullptr;
         XBinary::freeFileBuffer(&pStage);
         return false;
@@ -977,8 +966,8 @@ bool XFilteredArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, P
     // accounting, so no outer beginEntry/debit here.  The subsequent
     // publishUnpackOutput stage-to-caller copy is never charged.
     pContext->innerState.spOutputBudget = pState->spOutputBudget;
-    bool bResult = guardedInner->unpackCurrent(&pContext->innerState, guardedStage.data(), pPdStruct);
-    if (!guardedThis || !guardedInner || !guardedDecoded || !guardedOutput || !guardedSource || !guardedStage) {
+    bool bResult = guardedInner->unpackCurrent(&pContext->innerState, guardedStage, pPdStruct);
+    if (!guardedInner || !guardedDecoded || !guardedOutput || !guardedSource || !guardedStage) {
         bResult = false;
     }
     if (bResult) {
@@ -986,12 +975,12 @@ bool XFilteredArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, P
         bResult =
             (nStageSize >= 0) && XBinary::isUnpackOutputSizeAllowed(pState->mapUnpackProperties, nStageSize) && ((nExpectedSize < 0) || (nStageSize == nExpectedSize)) &&
             (pContext->innerState.nCurrentIndex == nIndex) && (pContext->innerState.nNumberOfRecords == nRecords) && XBinary::isPdStructNotCanceled(pPdStruct) &&
-            guardedThis->isUnpackSourceCurrent(pState, pPdStruct) && guardedThis && guardedInner && guardedDecoded && guardedOutput && guardedSource && guardedStage;
+            isUnpackSourceCurrent(pState, pPdStruct) && guardedInner && guardedDecoded && guardedOutput && guardedSource && guardedStage;
     }
     if (bResult) {
-        bResult = guardedThis->publishUnpackOutput(guardedStage.data(), guardedOutput.data(), pState, pPdStruct);
+        bResult = publishUnpackOutput(guardedStage, guardedOutput, pState, pPdStruct);
     }
-    if (bResult && guardedThis && guardedInner && guardedDecoded && guardedOutput && guardedSource && guardedStage) {
+    if (bResult && guardedInner && guardedDecoded && guardedOutput && guardedSource && guardedStage) {
         copyInnerState(pState, pContext);
     } else {
         bResult = false;
@@ -1006,8 +995,7 @@ bool XFilteredArchive::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
-    QPointer<XFilteredArchive> guardedThis(this);
-    if (!pState || !XBinary::isPdStructNotCanceled(pPdStruct) || !guardedThis->isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis) {
+    if (!pState || !XBinary::isPdStructNotCanceled(pPdStruct) || !isUnpackSourceCurrent(pState, pPdStruct)) {
         return false;
     }
 
@@ -1016,9 +1004,9 @@ bool XFilteredArchive::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         return false;
     }
 
-    QPointer<XArchive> guardedInner(pContext->pInnerArchive);
-    QPointer<QIODevice> guardedDecoded(pContext->pDecodedDevice);
-    QPointer<QIODevice> guardedSource(guardedThis->getDevice());
+    XArchive *guardedInner = pContext->pInnerArchive;
+    QIODevice *guardedDecoded = pContext->pDecodedDevice;
+    QIODevice *guardedSource = getDevice();
     if (!guardedInner || !guardedDecoded || !guardedSource) return false;
 
     pContext->innerState.mapUnpackProperties = pState->mapUnpackProperties;
@@ -1027,8 +1015,8 @@ bool XFilteredArchive::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     if ((nPreviousIndex < 0) || (nPreviousIndex >= nRecords)) return false;
 
     const bool bMoved = guardedInner->moveToNext(&pContext->innerState, pPdStruct);
-    if (!guardedThis || !guardedInner || !guardedDecoded || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct) ||
-        !guardedThis->isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis || !guardedInner || !guardedDecoded || !guardedSource ||
+    if (!guardedInner || !guardedDecoded || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct) ||
+        !isUnpackSourceCurrent(pState, pPdStruct) || !guardedInner || !guardedDecoded || !guardedSource ||
         (pContext->innerState.nNumberOfRecords != nRecords) || (pContext->innerState.nCurrentIndex != (nPreviousIndex + 1)) ||
         (bMoved != (pContext->innerState.nCurrentIndex < nRecords))) {
         return false;
@@ -1043,18 +1031,16 @@ bool XFilteredArchive::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     Q_UNUSED(pPdStruct)
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState) return false;
-    QPointer<XFilteredArchive> guardedThis(this);
 
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedThis->ownsUnpackSource(pState)) {
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) {
         return false;
     }
 
     FILTERED_UNPACK_CONTEXT *pContext = static_cast<FILTERED_UNPACK_CONTEXT *>(pState->pContext);
-    guardedThis->releaseUnpackSource(pState);
+    releaseUnpackSource(pState);
     pState->pContext = nullptr;
     const bool bInnerFinished = pContext ? pContext->finishInner(nullptr) : true;
     delete pContext;
-    if (!guardedThis) return false;
     *pState = UNPACK_STATE();
     return bInnerFinished;
 }

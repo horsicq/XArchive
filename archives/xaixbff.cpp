@@ -5,7 +5,6 @@
 
 #include "xaixbff.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <limits>
@@ -106,9 +105,8 @@ bool XAIXBFF::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XAIXBFF> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -116,8 +114,7 @@ bool XAIXBFF::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const QByteArray baVolume =
         read_array_process(0, BFF_VOLUME_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        baVolume.size() != BFF_VOLUME_HEADER_SIZE) {
+    if (baVolume.size() != BFF_VOLUME_HEADER_SIZE) {
         return false;
     }
     const uchar *pVolume =
@@ -137,7 +134,7 @@ bool XAIXBFF::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         // 0x40-byte header up front rejects otherwise perfect files.
         if (!bffRangeWithin(context.nInputSize, nOffset, 4)) return false;
         const QByteArray baLead = read_array_process(nOffset, 4, pPdStruct);
-        if (!guardedThis || !guardedSource || baLead.size() != 4) return false;
+        if (baLead.size() != 4) return false;
         const uchar *pLead =
             reinterpret_cast<const uchar *>(baLead.constData());
         const quint8 nHeaderWords = pLead[0];
@@ -161,7 +158,7 @@ bool XAIXBFF::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
                 (nPadded < 0) ? (nOffset + 4)
                               : qMin(context.nInputSize, nPadded);
             *pContext = context;
-            return guardedThis && guardedSource &&
+            return guardedSource &&
                    isPdStructNotCanceled(pPdStruct);
         }
         if (nRecordType != BFF_RECORD_MEMBER) return false;
@@ -174,8 +171,7 @@ bool XAIXBFF::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         }
         const QByteArray baHeader =
             read_array_process(nOffset, nNameAreaSize, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            baHeader.size() != nNameAreaSize) {
+        if (baHeader.size() != nNameAreaSize) {
             return false;
         }
         const uchar *pHeader =
@@ -251,7 +247,7 @@ bool XAIXBFF::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XAIXBFF::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -471,9 +467,8 @@ bool XAIXBFF::initUnpack(UNPACK_STATE *pState,
                          const QMap<UNPACK_PROP, QVariant> &mapProperties,
                          PDSTRUCT *pPdStruct)
 {
-    QPointer<XAIXBFF> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
     }
@@ -481,7 +476,7 @@ bool XAIXBFF::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -496,9 +491,9 @@ bool XAIXBFF::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource ||
+    if (!parseContext(pContext, pPdStruct) ||
         pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -516,16 +511,11 @@ bool XAIXBFF::initUnpack(UNPACK_STATE *pState,
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(
+    const bool bFinalized = validateAndFinalizeUnpackSource(
         pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

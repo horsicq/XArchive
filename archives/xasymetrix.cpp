@@ -5,7 +5,6 @@
 
 #include "xasymetrix.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -113,8 +112,7 @@ bool XAsymetrix::measureMemberChain(const CONTEXT &context, qint64 nDataOffset,
     if (!pnStreamSize) return false;
     *pnStreamSize = 0;
 
-    QPointer<XAsymetrix> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
 
     if ((nUncompressedSize < 0) || (nDataOffset < context.nDataOffset) ||
@@ -130,8 +128,7 @@ bool XAsymetrix::measureMemberChain(const CONTEXT &context, qint64 nDataOffset,
 
         const QByteArray baBlockHeader =
             read_array_process(nOffset, ASYMETRIX_BLOCK_HEADER_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            baBlockHeader.size() != ASYMETRIX_BLOCK_HEADER_SIZE) {
+        if (baBlockHeader.size() != ASYMETRIX_BLOCK_HEADER_SIZE) {
             return false;
         }
         const uchar *pBlockHeader =
@@ -168,16 +165,15 @@ bool XAsymetrix::measureMemberChain(const CONTEXT &context, qint64 nDataOffset,
     }
 
     *pnStreamSize = nOffset - nDataOffset;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XAsymetrix::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XAsymetrix> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -188,8 +184,7 @@ bool XAsymetrix::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const QByteArray baHeader =
         read_array_process(0, ASYMETRIX_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        baHeader.size() != ASYMETRIX_HEADER_SIZE) {
+    if (baHeader.size() != ASYMETRIX_HEADER_SIZE) {
         return false;
     }
     const uchar *pHeader = reinterpret_cast<const uchar *>(baHeader.constData());
@@ -237,8 +232,7 @@ bool XAsymetrix::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nVolume == 1) {
         const QByteArray baDirectory = read_array_process(
             ASYMETRIX_HEADER_SIZE, context.nDirectorySize, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            baDirectory.size() != context.nDirectorySize) {
+        if (baDirectory.size() != context.nDirectorySize) {
             return false;
         }
         const uchar *pDirectory =
@@ -316,7 +310,7 @@ bool XAsymetrix::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
                 member.bComplete = true;
                 ++context.nCompleteCount;
             }
-            if (!guardedThis || !guardedSource) return false;
+            if (!guardedSource) return false;
         }
     }
 
@@ -326,8 +320,7 @@ bool XAsymetrix::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     // header that every compressed block in this format carries.
     const QByteArray baFirstBlock = read_array_process(
         context.nDataOffset, ASYMETRIX_BLOCK_HEADER_SIZE + 2, pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        baFirstBlock.size() < ASYMETRIX_BLOCK_HEADER_SIZE) {
+    if (baFirstBlock.size() < ASYMETRIX_BLOCK_HEADER_SIZE) {
         return false;
     }
     const uchar *pFirstBlock =
@@ -363,12 +356,12 @@ bool XAsymetrix::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     context.nArchiveSize = context.nInputSize;
 
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XAsymetrix::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -436,8 +429,8 @@ QString XAsymetrix::getVersion()
 {
     // Deliberately a header-only read: the version string is queried on every
     // identification and must not pay for a full directory and block walk.
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential() ||
         (guardedSource->size() < ASYMETRIX_HEADER_SIZE)) {
         return QString();
     }
@@ -584,9 +577,8 @@ bool XAsymetrix::initUnpack(UNPACK_STATE *pState,
                             const QMap<UNPACK_PROP, QVariant> &mapProperties,
                             PDSTRUCT *pPdStruct)
 {
-    QPointer<XAsymetrix> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
     }
@@ -594,7 +586,7 @@ bool XAsymetrix::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -614,8 +606,8 @@ bool XAsymetrix::initUnpack(UNPACK_STATE *pState,
     // would lose the identification; reporting it as an empty archive without
     // saying why is the false-success mode this class exists to avoid, hence
     // the explicit info line below.
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct)) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -647,16 +639,11 @@ bool XAsymetrix::initUnpack(UNPACK_STATE *pState,
         pState->nCurrentOffset = pContext->listMembers.first().nRecordOffset;
     }
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(
+    const bool bFinalized = validateAndFinalizeUnpackSource(
         pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

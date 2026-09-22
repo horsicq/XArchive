@@ -5,7 +5,6 @@
 
 #include "xarq.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -73,9 +72,8 @@ bool XARQ::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XARQ> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -86,8 +84,7 @@ bool XARQ::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const QByteArray baContainer =
         read_array_process(0, ARQ_CONTAINER_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        baContainer.size() != ARQ_CONTAINER_HEADER_SIZE) {
+    if (baContainer.size() != ARQ_CONTAINER_HEADER_SIZE) {
         return false;
     }
     const uchar *pContainer =
@@ -121,8 +118,7 @@ bool XARQ::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         }
         const QByteArray baPrefix = read_array_process(
             nOffset, ARQ_MEMBER_PREFIX_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            baPrefix.size() != ARQ_MEMBER_PREFIX_SIZE) {
+        if (baPrefix.size() != ARQ_MEMBER_PREFIX_SIZE) {
             return false;
         }
         const uchar *pPrefix =
@@ -150,7 +146,7 @@ bool XARQ::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
             context.nFirstMemberOffset =
                 context.listMembers.first().nHeaderOffset;
             *pContext = context;
-            return guardedThis && guardedSource &&
+            return guardedSource &&
                    isPdStructNotCanceled(pPdStruct);
         }
         if (nNameSize > ARQ_MAX_NAME_SIZE) return false;
@@ -163,8 +159,7 @@ bool XARQ::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         }
         const QByteArray baHeader =
             read_array_process(nOffset, nHeaderSize, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            baHeader.size() != nHeaderSize) {
+        if (baHeader.size() != nHeaderSize) {
             return false;
         }
         const QByteArray baName =
@@ -218,8 +213,7 @@ bool XARQ::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         const quint32 nCalculatedCRC =
             _getCRC32(member.nDataOffset, member.nCompressedSize,
                       0xffffffffU, _getCRC32Table_EDB88320(), pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            !isPdStructNotCanceled(pPdStruct) ||
+        if (!isPdStructNotCanceled(pPdStruct) ||
             nCalculatedCRC != member.nPackedCRC32) {
             return false;
         }
@@ -240,7 +234,7 @@ bool XARQ::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XARQ::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition =
         guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
@@ -463,9 +457,8 @@ bool XARQ::initUnpack(
     const QMap<UNPACK_PROP, QVariant> &mapProperties,
     PDSTRUCT *pPdStruct)
 {
-    QPointer<XARQ> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
     }
@@ -473,7 +466,7 @@ bool XARQ::initUnpack(
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -489,9 +482,8 @@ bool XARQ::initUnpack(
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis ||
-        !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -507,16 +499,11 @@ bool XARQ::initUnpack(
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(
+    const bool bFinalized = validateAndFinalizeUnpackSource(
         pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

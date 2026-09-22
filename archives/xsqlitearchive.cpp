@@ -319,7 +319,7 @@ XSQLiteArchive::XSQLiteArchive(QIODevice *pDevice) : XArchive(pDevice) {}
 
 bool XSQLiteArchive::readSource(QIODevice *pDevice, QByteArray *pBytes, PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> source(pDevice);
+    QIODevice *source = pDevice;
     if (!source || !pBytes || !source->isOpen() || !source->isReadable() || source->isSequential()) return false;
     const qint64 position = source->pos();
     if (!source || position < 0) return false;
@@ -327,13 +327,13 @@ bool XSQLiteArchive::readSource(QIODevice *pDevice, QByteArray *pBytes, PDSTRUCT
     if (!source || size < 512 || size > MAX_SOURCE) return false;
     // Archive probes share this route: reject unrelated inputs after only
     // the signature, before materializing a candidate database.
-    const QByteArray signature = XBinary::read_array_process(source.data(), 0, 16, pPdStruct);
+    const QByteArray signature = XBinary::read_array_process(source, 0, 16, pPdStruct);
     if (!source) return false;
     if (signature != QByteArray("SQLite format 3\0", 16) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         source->seek(position);
         return false;
     }
-    *pBytes = XBinary::read_array_process(source.data(), 0, size, pPdStruct);
+    *pBytes = XBinary::read_array_process(source, 0, size, pPdStruct);
     const bool restored = source && source->seek(position);
     return restored && source && pBytes->size() == size && XBinary::isPdStructNotCanceled(pPdStruct);
 }
@@ -401,7 +401,6 @@ XBinary *XSQLiteArchive::createInstance(QIODevice *pDevice, bool bIsImage, XADDR
 
 bool XSQLiteArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &properties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSQLiteArchive> self(this);
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);
     if (!guard.isAcquired() || !pState || ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState))) return false;
     OUTPUT_POLICY policy = {};
@@ -410,13 +409,12 @@ bool XSQLiteArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QV
     releaseUnpackSource(pState);
     *pState = UNPACK_STATE();
     delete old;
-    if (!self) return false;
     const bool bound = bindUnpackSource(pState, pPdStruct);
-    if (!self || !bound) { *pState = UNPACK_STATE(); return false; }
+    if (!bound) { *pState = UNPACK_STATE(); return false; }
     std::unique_ptr<CONTEXT> context(new (std::nothrow) CONTEXT);
     QByteArray bytes;
-    if (!context || !readSource(getDevice(), &bytes, pPdStruct) || !self || !parse(bytes, &context->items, true, pPdStruct, &policy)) {
-        if (self) releaseUnpackSource(pState);
+    if (!context || !readSource(getDevice(), &bytes, pPdStruct) || !parse(bytes, &context->items, true, pPdStruct, &policy)) {
+        releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
         return false;
     }
@@ -425,7 +423,6 @@ bool XSQLiteArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QV
     pState->nNumberOfRecords = context->items.size();
     pState->mapUnpackProperties = properties;
     const bool finalized = validateAndFinalizeUnpackSource(pState, context.get(), pPdStruct);
-    if (!self) { context.release(); *pState = UNPACK_STATE(); return false; }
     if (!finalized) { releaseUnpackSource(pState); *pState = UNPACK_STATE(); return false; }
     context.release();
     return true;
@@ -433,9 +430,8 @@ bool XSQLiteArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QV
 
 XBinary::ARCHIVERECORD XSQLiteArchive::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSQLiteArchive> self(this);
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
-    if (!guard.isAllowed() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || !self ||
+    if (!guard.isAllowed() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) ||
         pState->nCurrentIndex < 0 || pState->nCurrentIndex >= pState->nNumberOfRecords) return ARCHIVERECORD();
     const CONTEXT *context = static_cast<const CONTEXT *>(pState->pContext);
     if (context->items.size() != pState->nNumberOfRecords) return ARCHIVERECORD();
@@ -453,13 +449,14 @@ XBinary::ARCHIVERECORD XSQLiteArchive::infoCurrent(UNPACK_STATE *pState, PDSTRUC
 
 bool XSQLiteArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSQLiteArchive> self(this);
-    QPointer<QIODevice> destination(pDevice), source(getDevice());
+    QIODevice *destination = pDevice;
+    QIODevice *source = getDevice();
+    XSQLiteArchive *self = this;
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);
     if (!guard.isAcquired() || !pState || !pState->pContext || !destination || !source ||
-        !isUnpackOutputSupported(destination.data()) || !self || !destination || !source ||
-        !isUnpackSourceCurrent(pState, pPdStruct) || !self || !destination || !source ||
-        pState->nCurrentIndex < 0 || pState->nCurrentIndex >= pState->nNumberOfRecords || devicesAlias(source.data(), destination.data())) return false;
+        !isUnpackOutputSupported(destination) || !destination || !source ||
+        !isUnpackSourceCurrent(pState, pPdStruct) || !destination || !source ||
+        pState->nCurrentIndex < 0 || pState->nCurrentIndex >= pState->nNumberOfRecords || devicesAlias(source, destination)) return false;
     const CONTEXT *context = static_cast<const CONTEXT *>(pState->pContext);
     if (context->items.size() != pState->nNumberOfRecords) return false;
     const ITEM item = context->items.at(pState->nCurrentIndex);
@@ -481,21 +478,20 @@ bool XSQLiteArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDS
     output.pDeviceOutput = stage.get();
     qint64 offset = 0;
     while (offset < item.bytes.size()) {
-        if (!self || !source || !destination || !isPdStructNotCanceled(pPdStruct)) return false;
+        if (!source || !destination || !isPdStructNotCanceled(pPdStruct)) return false;
         const qint32 amount = qint32(qMin(qint64(65536), item.bytes.size() - offset));
         if (_writeDevice(item.bytes.constData() + offset, amount, &output) != amount) return false;
         offset += amount;
     }
-    if (output.bWriteError || !self || !source || !destination || !isUnpackSourceCurrent(pState, pPdStruct) || !self || !source || !destination ||
+    if (output.bWriteError || !source || !destination || !isUnpackSourceCurrent(pState, pPdStruct) || !source || !destination ||
         !isPdStructNotCanceled(pPdStruct)) return false;
-    return publishUnpackOutput(stage.get(), destination.data(), pState, pPdStruct);
+    return publishUnpackOutput(stage.get(), destination, pState, pPdStruct);
 }
 
 bool XSQLiteArchive::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSQLiteArchive> self(this);
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);
-    if (!guard.isAcquired() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || !self ||
+    if (!guard.isAcquired() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) ||
         pState->nCurrentIndex < 0 || pState->nCurrentIndex >= pState->nNumberOfRecords) return false;
     if (static_cast<const CONTEXT *>(pState->pContext)->items.size() != pState->nNumberOfRecords) return false;
     ++pState->nCurrentIndex;

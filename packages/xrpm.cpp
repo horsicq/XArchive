@@ -554,22 +554,22 @@ QMap<XBinary::UNPACK_PROP, QVariant> XRPM::getDefaultUnpackProperties()
 
 bool XRPM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
+    XRPM *guardedArchive = this;
     if (m_bUnpackOperationInProgress) {
         return false;
     }
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
-    QPointer<XRPM> guardedArchive(this);
 
     if (!pState) {
         return false;
     }
 
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedArchive->ownsUnpackSource(pState)) {
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) {
         return false;
     }
     RPM_UNPACK_CONTEXT *pOldContext = static_cast<RPM_UNPACK_CONTEXT *>(pState->pContext);
-    guardedArchive->releaseUnpackSource(pState);
+    releaseUnpackSource(pState);
     pState->pContext = nullptr;
     delete pOldContext;
     if (!guardedArchive) return false;
@@ -577,30 +577,30 @@ bool XRPM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     if (!isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
-    const bool bBound = guardedArchive->bindUnpackSource(pState, pPdStruct);
-    if (!guardedArchive || !bBound) return false;
+    const bool bBound = bindUnpackSource(pState, pPdStruct);
+    if (!bBound) return false;
 
-    const bool bValid = guardedArchive->isValid(pPdStruct);
+    const bool bValid = isValid(pPdStruct);
     if (!guardedArchive) return false;
     if (!bValid) {
-        guardedArchive->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
         return false;
     }
 
-    qint64 nPayloadOffset = guardedArchive->getPayloadOffset(pPdStruct);
+    qint64 nPayloadOffset = getPayloadOffset(pPdStruct);
     if (!guardedArchive) return false;
-    const qint64 nFileSize = guardedArchive->getSize();
+    const qint64 nFileSize = getSize();
     if (!guardedArchive) return false;
     if ((nPayloadOffset <= 0) || (nPayloadOffset >= nFileSize)) {
-        guardedArchive->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
         return false;
     }
 
     RPM_UNPACK_CONTEXT *pContext = new (std::nothrow) RPM_UNPACK_CONTEXT;
     if (!pContext) {
-        guardedArchive->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
         return false;
     }
@@ -609,13 +609,13 @@ bool XRPM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     pContext->nUncompressedSize = -1;
     pContext->nCRC32 = 0;
     pContext->bHasCRC32 = false;
-    pContext->compressMethod = guardedArchive->getPayloadCompression(nPayloadOffset);
+    pContext->compressMethod = getPayloadCompression(nPayloadOffset);
     if (!guardedArchive) {
         delete pContext;
         return false;
     }
     if ((pContext->compressMethod == HANDLE_METHOD_UNKNOWN) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
-        guardedArchive->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -626,19 +626,19 @@ bool XRPM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     // Validate it with the caller's limits, then recover the verified physical
     // member parts for RPM's raw-DEFLATE record and its footer CRC.
     if (pContext->compressMethod == HANDLE_METHOD_DEFLATE) {
-        QPointer<QIODevice> guardedSource(guardedArchive->getDevice());
-        if (!guardedArchive || !guardedSource) {
+        QIODevice *guardedSource = getDevice();
+        if (!guardedSource) {
             delete pContext;
             return false;
         }
-        SubDevice payloadDevice(guardedSource.data(), nPayloadOffset, pContext->nPayloadSize);
+        SubDevice payloadDevice(guardedSource, nPayloadOffset, pContext->nPayloadSize);
         XBinary::UNPACK_STATE gzipState = {};
         bool bGzipValid = payloadDevice.open(QIODevice::ReadOnly);
         XGzip gzip(&payloadDevice);
         if (bGzipValid) {
             bGzipValid = gzip.initUnpack(&gzipState, mapProperties, pPdStruct);
         }
-        if (!guardedArchive || !guardedSource) {
+        if (!guardedSource) {
             gzip.finishUnpack(&gzipState, nullptr);
             delete pContext;
             return false;
@@ -650,7 +650,7 @@ bool XRPM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         quint32 nCRC32 = 0;
         if (bGzipValid) {
             const XBinary::ARCHIVERECORD gzipRecord = gzip.infoCurrent(&gzipState, pPdStruct);
-            if (!guardedArchive || !guardedSource) {
+            if (!guardedSource) {
                 gzip.finishUnpack(&gzipState, nullptr);
                 delete pContext;
                 return false;
@@ -663,7 +663,7 @@ bool XRPM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
                 // footer must end at the payload boundary: a second member is
                 // not representable by RPM's single raw-DEFLATE record.
                 const QList<FPART> parts = gzip.getFileParts(FILEPART_REGION | FILEPART_FOOTER, 2, pPdStruct);
-                if (!guardedArchive || !guardedSource) {
+                if (!guardedSource) {
                     gzip.finishUnpack(&gzipState, nullptr);
                     delete pContext;
                     return false;
@@ -678,7 +678,7 @@ bool XRPM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
                                  (nFooterOffset == (nStreamOffset + nStreamSize)) && (nFooterOffset == (pContext->nPayloadSize - 8));
                     if (bGzipValid) {
                         const QByteArray footer = gzip.read_array_process(nFooterOffset, 8, pPdStruct);
-                        if (!guardedArchive || !guardedSource) {
+                        if (!guardedSource) {
                             gzip.finishUnpack(&gzipState, nullptr);
                             delete pContext;
                             return false;
@@ -700,7 +700,7 @@ bool XRPM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         payloadDevice.close();
 
         if (!bGzipValid || !XBinary::isPdStructNotCanceled(pPdStruct)) {
-            guardedArchive->releaseUnpackSource(pState);
+            releaseUnpackSource(pState);
             delete pContext;
             *pState = UNPACK_STATE();
             return false;
@@ -712,22 +712,22 @@ bool XRPM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         pContext->nCRC32 = nCRC32;
         pContext->bHasCRC32 = true;
     } else if (pContext->compressMethod == HANDLE_METHOD_STORE) {
-        QPointer<QIODevice> guardedSource(guardedArchive->getDevice());
-        if (!guardedArchive || !guardedSource) {
+        QIODevice *guardedSource = getDevice();
+        if (!guardedSource) {
             delete pContext;
             return false;
         }
-        SubDevice payloadDevice(guardedSource.data(), nPayloadOffset, pContext->nPayloadSize);
+        SubDevice payloadDevice(guardedSource, nPayloadOffset, pContext->nPayloadSize);
         const bool bOpened = payloadDevice.open(QIODevice::ReadOnly);
         XCPIO cpio(&payloadDevice);
         const bool bCpioValid = bOpened && cpio.isValid(pPdStruct);
         payloadDevice.close();
-        if (!guardedArchive || !guardedSource) {
+        if (!guardedSource) {
             delete pContext;
             return false;
         }
         if (!bCpioValid || !XBinary::isPdStructNotCanceled(pPdStruct)) {
-            guardedArchive->releaseUnpackSource(pState);
+            releaseUnpackSource(pState);
             delete pContext;
             *pState = UNPACK_STATE();
             return false;
@@ -735,14 +735,14 @@ bool XRPM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         pContext->nUncompressedSize = pContext->nPayloadSize;
     }
 
-    QPointer<QIODevice> guardedSource(guardedArchive->getDevice());
-    if (!guardedArchive || !guardedSource) {
+    QIODevice *guardedSource = getDevice();
+    if (!guardedSource) {
         delete pContext;
         return false;
     }
-    QString sBaseName = XBinary::getDeviceFileBaseName(guardedSource.data());
-    if (!guardedArchive || !guardedSource) {
-        if (guardedArchive) guardedArchive->releaseUnpackSource(pState);
+    QString sBaseName = XBinary::getDeviceFileBaseName(guardedSource);
+    if (!guardedSource) {
+        if (guardedArchive) releaseUnpackSource(pState);
         delete pContext;
         return false;
     }
@@ -758,10 +758,10 @@ bool XRPM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     pState->nTotalSize = nFileSize;
     pState->mapUnpackProperties = mapProperties;
 
-    if (!guardedArchive->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
+    if (!validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
         if (!guardedArchive) return false;
         pState->pContext = nullptr;
-        guardedArchive->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -774,16 +774,15 @@ XBinary::ARCHIVERECORD XRPM::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
-    QPointer<XRPM> guardedArchive(this);
 
     ARCHIVERECORD result = {};
 
-    if (!pState || !pState->pContext || !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive || (pState->nCurrentIndex < 0) ||
+    if (!pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return result;
     }
-    const qint64 nCurrentSize = guardedArchive->getSize();
-    if (!guardedArchive || (pState->nTotalSize != nCurrentSize)) return result;
+    const qint64 nCurrentSize = getSize();
+    if ((pState->nTotalSize != nCurrentSize)) return result;
 
     RPM_UNPACK_CONTEXT *pContext = (RPM_UNPACK_CONTEXT *)pState->pContext;
 
@@ -812,14 +811,13 @@ bool XRPM::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
-    QPointer<XRPM> guardedArchive(this);
 
-    if (!pState || !pState->pContext || !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive || (pState->nCurrentIndex < 0) ||
+    if (!pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }
-    const qint64 nCurrentSize = guardedArchive->getSize();
-    if (!guardedArchive || (pState->nTotalSize != nCurrentSize)) return false;
+    const qint64 nCurrentSize = getSize();
+    if ((pState->nTotalSize != nCurrentSize)) return false;
 
     pState->nCurrentIndex++;
 
@@ -828,9 +826,9 @@ bool XRPM::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 bool XRPM::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    XRPM *guardedArchive = this;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
-    QPointer<XRPM> guardedArchive(this);
 
     Q_UNUSED(pPdStruct)
 
@@ -838,8 +836,8 @@ bool XRPM::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         return false;
     }
 
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedArchive->ownsUnpackSource(pState)) return false;
-    guardedArchive->releaseUnpackSource(pState);
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
+    releaseUnpackSource(pState);
     if (pState->pContext) {
         RPM_UNPACK_CONTEXT *pContext = (RPM_UNPACK_CONTEXT *)pState->pContext;
         pState->pContext = nullptr;
@@ -859,27 +857,25 @@ bool XRPM::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 bool XRPM::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XRPM> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
-        if (!guardedThis || !bResult) return false;
-        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(guardedThis->XArchive::getInternalInfo(pPdStruct));
-        if (!guardedThis || !pInfo) return false;
-        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        if (!bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        if (!pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) = *pInfo;
     }
 
-    return guardedThis && bResult;
+    return bResult;
 }
 
 void *XRPM::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XRPM> guardedThis(this);
-    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
-    if (!guardedThis || !bHandled) return nullptr;
+    const bool bHandled = handleInternalInfo(pPdStruct);
+    if (!bHandled) return nullptr;
 
-    return &guardedThis->m_internalInfo;
+    return &m_internalInfo;
 }
 
 void XRPM::setInternalInfo(void *pInternalInfo)

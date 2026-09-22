@@ -10,7 +10,6 @@
 
 #include <QtEndian>
 #include <QHash>
-#include <QPointer>
 #include <QSet>
 #if (QT_VERSION_MAJOR < 6) || defined(QT_CORE5COMPAT_LIB)
 #include <QTextCodec>  // Qt5 Compat; removed from Qt6 core
@@ -974,15 +973,14 @@ bool XLegacyStoreArchive::scanFormat(QList<ENTRY> *pEntries,
                                      qint64 *pArchiveEnd,
                                      PDSTRUCT *pPdStruct)
 {
-    QPointer<XLegacyStoreArchive> guardedThis(this);
     const FT ft = getFileType();
     const qint64 total = getSize();
-    if (!guardedThis || !isLegacyStoreType(ft) || total < 8 ||
+    if (!isLegacyStoreType(ft) || total < 8 ||
         total > MAX_LEGACY_STORE_SIZE ||
         total > (std::numeric_limits<int>::max)() ||
         !isPdStructNotCanceled(pPdStruct)) return false;
     const QByteArray data = read_array_process(0, total, pPdStruct);
-    if (!guardedThis || data.size() != total) return false;
+    if (data.size() != total) return false;
     const uchar *p = reinterpret_cast<const uchar *>(data.constData());
 
     QList<ENTRY> entries;

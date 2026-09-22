@@ -57,13 +57,12 @@ quint32 XHETLKB::readBE32(const uchar *pData)
 bool XHETLKB::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
                          PDSTRUCT *pPdStruct)
 {
-    QPointer<XHETLKB> guardedThis(this);
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || (nTotalSize < HE_MIN_FILE_SIZE) ||
+    if ((nTotalSize < HE_MIN_FILE_SIZE) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
     QByteArray baRoot = read_array_process(0, HE_CHUNK_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || (baRoot.size() != HE_CHUNK_HEADER_SIZE)) return false;
+    if ((baRoot.size() != HE_CHUNK_HEADER_SIZE)) return false;
     for (qint32 i = 0; i < baRoot.size(); ++i) {
         baRoot[i] = char(quint8(baRoot.at(i)) ^ HE_XOR_KEY);
     }
@@ -89,7 +88,7 @@ bool XHETLKB::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
 
         QByteArray baChunk =
             read_array_process(nOffset, HE_CHUNK_HEADER_SIZE, pPdStruct);
-        if (!guardedThis || (baChunk.size() != HE_CHUNK_HEADER_SIZE))
+        if ((baChunk.size() != HE_CHUNK_HEADER_SIZE))
             return false;
         for (qint32 i = 0; i < baChunk.size(); ++i) {
             baChunk[i] = char(quint8(baChunk.at(i)) ^ HE_XOR_KEY);

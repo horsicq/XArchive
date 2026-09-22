@@ -6,8 +6,6 @@
 #include "xdmapacked.h"
 
 #include "Algos/xdcldecoder.h"
-
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -118,9 +116,7 @@ bool XDMAPacked::parseContext(CONTEXT *pContext, bool bVerifyPayload,
                               PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
-
-    QPointer<XDMAPacked> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -131,7 +127,7 @@ bool XDMAPacked::parseContext(CONTEXT *pContext, bool bVerifyPayload,
 
     const QByteArray baHeader =
         read_array_process(0, DMAPACKED_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || !dmaPackedIsHeader(baHeader)) {
+    if (!guardedSource || !dmaPackedIsHeader(baHeader)) {
         return false;
     }
 
@@ -169,14 +165,14 @@ bool XDMAPacked::parseContext(CONTEXT *pContext, bool bVerifyPayload,
 
     const QByteArray baPrelude =
         read_array_process(member.nDataOffset, 2, pPdStruct);
-    if (!guardedThis || !guardedSource || !dmaPackedIsDclPrelude(baPrelude)) {
+    if (!guardedSource || !dmaPackedIsDclPrelude(baPrelude)) {
         return false;
     }
 
     if (bVerifyPayload) {
         const QByteArray baPacked = read_array_process(
             member.nDataOffset, member.nCompressedSize, pPdStruct);
-        if (!guardedThis || !guardedSource ||
+        if (!guardedSource ||
             (baPacked.size() != member.nCompressedSize)) {
             return false;
         }
@@ -207,12 +203,12 @@ bool XDMAPacked::parseContext(CONTEXT *pContext, bool bVerifyPayload,
     context.listEntries.append(member);
     context.nArchiveSize = context.nInputSize;
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XDMAPacked::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     // The reference implementation gates on the magic, the sign of the size
@@ -388,8 +384,7 @@ bool XDMAPacked::initUnpack(UNPACK_STATE *pState,
                             const QMap<UNPACK_PROP, QVariant> &mapProperties,
                             PDSTRUCT *pPdStruct)
 {
-    QPointer<XDMAPacked> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
@@ -398,7 +393,7 @@ bool XDMAPacked::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) || !guardedSource ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -415,9 +410,8 @@ bool XDMAPacked::initUnpack(UNPACK_STATE *pState,
     }
     // bVerifyPayload = true: the DCL handler takes the plaintext length as an
     // INPUT, so a length the decoder cannot reproduce would silently truncate.
-    if (!parseContext(pContext, true, pPdStruct) || !guardedThis ||
-        !guardedSource || pContext->listEntries.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, true, pPdStruct) || !guardedSource || pContext->listEntries.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -434,16 +428,11 @@ bool XDMAPacked::initUnpack(UNPACK_STATE *pState,
     pState->pContext = pContext;
 
     const bool bFinalized =
-        guardedThis->validateAndFinalizeUnpackSource(pState, pContext,
+        validateAndFinalizeUnpackSource(pState, pContext,
                                                      pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

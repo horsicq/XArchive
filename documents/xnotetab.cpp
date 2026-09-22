@@ -5,7 +5,6 @@
 
 #include "xnotetab.h"
 
-#include <QPointer>
 
 #include <new>
 
@@ -75,7 +74,6 @@ bool XNoteTab::canAppendPart(qint32 nLimit, qint32 nCurrentCount)
 
 XNoteTab::LINERESULT XNoteTab::_readLine(qint64 *pnPosition, qint64 nInputSize, qint64 *pnLineOffset, qint64 *pnLineSize, PDSTRUCT *pPdStruct)
 {
-    QPointer<XNoteTab> guardedThis(this);
 
     if (!pnPosition || !pnLineOffset || !pnLineSize) return LINERESULT_ERROR;
 
@@ -95,7 +93,7 @@ XNoteTab::LINERESULT XNoteTab::_readLine(qint64 *pnPosition, qint64 nInputSize, 
     while ((nCurrent < nInputSize) && !bTerminated) {
         const qint64 nChunkSize = qMin<qint64>(NOTETAB_SCAN_CHUNK, nInputSize - nCurrent);
         const QByteArray baChunk = read_array_process(nCurrent, nChunkSize, pPdStruct);
-        if (!guardedThis || (baChunk.size() != nChunkSize)) return LINERESULT_ERROR;
+        if ((baChunk.size() != nChunkSize)) return LINERESULT_ERROR;
 
         for (qint32 i = 0; i < baChunk.size(); i++) {
             const char cCharacter = baChunk.at(i);
@@ -109,7 +107,7 @@ XNoteTab::LINERESULT XNoteTab::_readLine(qint64 *pnPosition, qint64 nInputSize, 
                         cNext = baChunk.at(i + 1);
                     } else {
                         const QByteArray baNext = read_array_process(nCurrent, 1, pPdStruct);
-                        if (!guardedThis || (baNext.size() != 1)) return LINERESULT_ERROR;
+                        if ((baNext.size() != 1)) return LINERESULT_ERROR;
                         cNext = baNext.at(0);
                     }
 
@@ -137,20 +135,18 @@ XNoteTab::LINERESULT XNoteTab::_readLine(qint64 *pnPosition, qint64 nInputSize, 
 
 bool XNoteTab::_isHeadingLine(qint64 nLineOffset, qint64 nLineSize, PDSTRUCT *pPdStruct)
 {
-    QPointer<XNoteTab> guardedThis(this);
 
     if (nLineSize < NOTETAB_HEADING_TAG_SIZE) return false;
 
     const QByteArray baTag = read_array_process(nLineOffset, NOTETAB_HEADING_TAG_SIZE, pPdStruct);
-    if (!guardedThis || (baTag.size() != NOTETAB_HEADING_TAG_SIZE)) return false;
+    if ((baTag.size() != NOTETAB_HEADING_TAG_SIZE)) return false;
 
     return (baTag == QByteArray(NOTETAB_HEADING_TAG, NOTETAB_HEADING_TAG_SIZE));
 }
 
 bool XNoteTab::checkDeclaration(QString *psDeclaration, PDSTRUCT *pPdStruct)
 {
-    QPointer<XNoteTab> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
 
     if (!guardedSource || guardedSource->isSequential()) return false;
 
@@ -158,7 +154,7 @@ bool XNoteTab::checkDeclaration(QString *psDeclaration, PDSTRUCT *pPdStruct)
     if (nInputSize < NOTETAB_TAG_SIZE) return false;
 
     const QByteArray baTag = read_array_process(0, NOTETAB_TAG_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baTag.size() != NOTETAB_TAG_SIZE)) return false;
+    if (!guardedSource || (baTag.size() != NOTETAB_TAG_SIZE)) return false;
 
     if (!baTag.startsWith(QByteArray(NOTETAB_TAG, 3))) return false;
     if (!notetabIsVersionDigit(baTag.at(3))) return false;
@@ -166,7 +162,7 @@ bool XNoteTab::checkDeclaration(QString *psDeclaration, PDSTRUCT *pPdStruct)
 
     const qint64 nProbeSize = qMin<qint64>(NOTETAB_DECLARATION_LIMIT, nInputSize);
     const QByteArray baProbe = read_array_process(0, nProbeSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baProbe.size() != nProbeSize)) return false;
+    if (!guardedSource || (baProbe.size() != nProbeSize)) return false;
 
     qint32 nLineEnd = baProbe.indexOf('\r');
     const qint32 nLineFeed = baProbe.indexOf('\n');
@@ -191,13 +187,12 @@ bool XNoteTab::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XNoteTab> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
 
     CONTEXT context = {};
     context.nInputSize = 0;
 
-    if (!checkDeclaration(&context.sDeclaration, pPdStruct) || !guardedThis || !guardedSource) return false;
+    if (!checkDeclaration(&context.sDeclaration, pPdStruct) || !guardedSource) return false;
 
     context.nInputSize = guardedSource->size();
 
@@ -208,9 +203,9 @@ bool XNoteTab::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     // Line 1 is the declaration, line 2 is skipped unconditionally - it is
     // blank in every known document but the reader never inspects it.
     if (_readLine(&nPosition, context.nInputSize, &nLineOffset, &nLineSize, pPdStruct) != LINERESULT_OK) return false;
-    if (!guardedThis || !guardedSource) return false;
+    if (!guardedSource) return false;
     if (_readLine(&nPosition, context.nInputSize, &nLineOffset, &nLineSize, pPdStruct) != LINERESULT_OK) return false;
-    if (!guardedThis || !guardedSource) return false;
+    if (!guardedSource) return false;
 
     context.nHeaderSize = nPosition;
 
@@ -220,11 +215,11 @@ bool XNoteTab::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     while (isPdStructNotCanceled(pPdStruct)) {
         const LINERESULT lineResult = _readLine(&nPosition, context.nInputSize, &nLineOffset, &nLineSize, pPdStruct);
-        if (!guardedThis || !guardedSource || (lineResult == LINERESULT_ERROR)) return false;
+        if (!guardedSource || (lineResult == LINERESULT_ERROR)) return false;
         if (lineResult == LINERESULT_END) break;
 
         const bool bHeading = _isHeadingLine(nLineOffset, nLineSize, pPdStruct);
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
 
         if (bHeading) {
             // A heading closes the clip that was open; the body of that clip
@@ -239,7 +234,7 @@ bool XNoteTab::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
                 clip.nBodySize = nLineOffset - nBodyOffset;
 
                 const QByteArray baName = (nNameSize > 0) ? read_array_process(clip.nNameOffset, nNameSize, pPdStruct) : QByteArray();
-                if (!guardedThis || !guardedSource || (baName.size() != nNameSize)) return false;
+                if (!guardedSource || (baName.size() != nNameSize)) return false;
 
                 clip.baPrefix = baName;
                 clip.baPrefix.append("\r\n\r\n", 4);
@@ -264,7 +259,7 @@ bool XNoteTab::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
             nNameOffset = nLineOffset + NOTETAB_HEADING_TAG_SIZE;
 
             const QByteArray baProbe = (nProbeSize > 0) ? read_array_process(nNameOffset, nProbeSize, pPdStruct) : QByteArray();
-            if (!guardedThis || !guardedSource || (baProbe.size() != nProbeSize)) return false;
+            if (!guardedSource || (baProbe.size() != nProbeSize)) return false;
 
             const qint32 nQuote = baProbe.indexOf('"');
             if (nQuote >= 0) {
@@ -297,7 +292,7 @@ bool XNoteTab::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         clip.nBodySize = context.nInputSize - nBodyOffset;
 
         const QByteArray baName = (nNameSize > 0) ? read_array_process(clip.nNameOffset, nNameSize, pPdStruct) : QByteArray();
-        if (!guardedThis || !guardedSource || (baName.size() != nNameSize)) return false;
+        if (!guardedSource || (baName.size() != nNameSize)) return false;
 
         clip.baPrefix = baName;
         clip.baPrefix.append("\r\n\r\n", 4);
@@ -310,19 +305,18 @@ bool XNoteTab::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     *pContext = context;
 
-    return guardedThis && guardedSource;
+    return guardedSource;
 }
 
 bool XNoteTab::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<XNoteTab> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
 
     bool bResult = false;
 
     QString sDeclaration;
-    if (checkDeclaration(&sDeclaration, pPdStruct) && guardedThis && guardedSource) {
+    if (checkDeclaration(&sDeclaration, pPdStruct) && guardedSource) {
         const qint64 nInputSize = guardedSource->size();
 
         qint64 nPosition = 0;
@@ -334,11 +328,11 @@ bool XNoteTab::isValid(PDSTRUCT *pPdStruct)
         // the smallest shape that yields one member, and it is what separates
         // this dialect from the unquoted-heading and no-heading documents the
         // reference tool also refuses.
-        if ((_readLine(&nPosition, nInputSize, &nLineOffset, &nLineSize, pPdStruct) == LINERESULT_OK) && guardedThis && guardedSource &&
-            (_readLine(&nPosition, nInputSize, &nLineOffset, &nLineSize, pPdStruct) == LINERESULT_OK) && guardedThis && guardedSource &&
-            (_readLine(&nPosition, nInputSize, &nLineOffset, &nLineSize, pPdStruct) == LINERESULT_OK) && guardedThis && guardedSource) {
-            if (_isHeadingLine(nLineOffset, nLineSize, pPdStruct) && guardedThis && guardedSource) {
-                bResult = (_readLine(&nPosition, nInputSize, &nLineOffset, &nLineSize, pPdStruct) == LINERESULT_OK) && guardedThis && guardedSource;
+        if ((_readLine(&nPosition, nInputSize, &nLineOffset, &nLineSize, pPdStruct) == LINERESULT_OK) && guardedSource &&
+            (_readLine(&nPosition, nInputSize, &nLineOffset, &nLineSize, pPdStruct) == LINERESULT_OK) && guardedSource &&
+            (_readLine(&nPosition, nInputSize, &nLineOffset, &nLineSize, pPdStruct) == LINERESULT_OK) && guardedSource) {
+            if (_isHeadingLine(nLineOffset, nLineSize, pPdStruct) && guardedSource) {
+                bResult = (_readLine(&nPosition, nInputSize, &nLineOffset, &nLineSize, pPdStruct) == LINERESULT_OK) && guardedSource;
             }
         }
     }
@@ -534,14 +528,13 @@ QMap<XBinary::UNPACK_PROP, QVariant> XNoteTab::getDefaultUnpackProperties()
 
 bool XNoteTab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XNoteTab> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
 
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
 
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
 
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -552,8 +545,8 @@ bool XNoteTab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
         return false;
     }
 
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listClips.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource || pContext->listClips.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -567,15 +560,10 @@ bool XNoteTab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
     pState->nNumberOfRecords = pContext->listClips.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

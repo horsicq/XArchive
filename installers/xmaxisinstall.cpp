@@ -5,7 +5,6 @@
 
 #include "xmaxisinstall.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <algorithm>
@@ -108,15 +107,10 @@ bool XMaxisInstall::probeMember(const MEMBER &member, PDSTRUCT *pPdStruct)
         (member.nCompressedSize > MAXIS_PROBE_PACKED_LIMIT)) {
         return false;
     }
-
-    QPointer<XMaxisInstall> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource) return false;
-
+    QIODevice *guardedSource = getDevice();
     const QByteArray baPacked = read_array_process(
         member.nDataOffset, member.nCompressedSize, pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        baPacked.size() != member.nCompressedSize) {
+    if (baPacked.size() != member.nCompressedSize) {
         return false;
     }
 
@@ -130,10 +124,8 @@ bool XMaxisInstall::probeMember(const MEMBER &member, PDSTRUCT *pPdStruct)
 bool XMaxisInstall::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
-
-    QPointer<XMaxisInstall> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -153,8 +145,7 @@ bool XMaxisInstall::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         }
         const QByteArray baHeader = read_array_process(
             nOffset, MAXIS_HEADER_SIZE + MAXIS_SIZE_PREFIX_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            baHeader.size() != MAXIS_HEADER_SIZE + MAXIS_SIZE_PREFIX_SIZE) {
+        if (baHeader.size() != MAXIS_HEADER_SIZE + MAXIS_SIZE_PREFIX_SIZE) {
             return false;
         }
         const uchar *pHeader =
@@ -246,8 +237,7 @@ bool XMaxisInstall::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         } else if (member.nUncompressedSize > MAXIS_PROBE_MEMBER_LIMIT) {
             return false;
         }
-        if (!probeMember(member, pPdStruct) || !guardedThis ||
-            !guardedSource) {
+        if (!probeMember(member, pPdStruct)) {
             return false;
         }
         nProbedBytes += member.nUncompressedSize;
@@ -258,12 +248,12 @@ bool XMaxisInstall::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     context.nArchiveSize = nOffset;
     context.nFirstMemberOffset = context.listMembers.first().nHeaderOffset;
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XMaxisInstall::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -469,9 +459,8 @@ bool XMaxisInstall::initUnpack(UNPACK_STATE *pState,
                                const QMap<UNPACK_PROP, QVariant> &mapProperties,
                                PDSTRUCT *pPdStruct)
 {
-    QPointer<XMaxisInstall> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
     }
@@ -479,7 +468,7 @@ bool XMaxisInstall::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -494,9 +483,9 @@ bool XMaxisInstall::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource ||
+    if (!parseContext(pContext, pPdStruct) ||
         pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -513,16 +502,14 @@ bool XMaxisInstall::initUnpack(UNPACK_STATE *pState,
     pState->pContext = pContext;
 
     const bool bFinalized =
-        guardedThis->validateAndFinalizeUnpackSource(pState, pContext,
+        validateAndFinalizeUnpackSource(pState, pContext,
                                                      pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
+    if (!bFinalized) {
             delete pContext;
             *pState = UNPACK_STATE();
             return false;
-        }
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

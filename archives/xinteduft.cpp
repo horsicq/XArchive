@@ -5,7 +5,6 @@
 
 #include "xinteduft.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -63,16 +62,15 @@ bool XINTEDUFT::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XINTEDUFT> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
     if (context.nInputSize < INTEDUFT_HEADER_SIZE + 6 + INTEDUFT_MEMBER_HEADER_SIZE) return false;
 
     const QByteArray baHeader = read_array_process(0, INTEDUFT_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != INTEDUFT_HEADER_SIZE)) return false;
+    if ((baHeader.size() != INTEDUFT_HEADER_SIZE)) return false;
     const uchar *pHeader = reinterpret_cast<const uchar *>(baHeader.constData());
 
     if (qFromLittleEndian<quint32>(pHeader) != INTEDUFT_MAGIC) return false;
@@ -83,7 +81,7 @@ bool XINTEDUFT::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     const qint64 nIndexBound = qMin<qint64>(context.nInputSize - INTEDUFT_HEADER_SIZE, static_cast<qint64>(nCount) * (5 + INTEDUFT_MAX_NAME));
     if (nIndexBound < static_cast<qint64>(nCount) * 6) return false;
     const QByteArray baIndex = read_array_process(INTEDUFT_HEADER_SIZE, nIndexBound, pPdStruct);
-    if (!guardedThis || !guardedSource || (baIndex.size() != nIndexBound)) return false;
+    if ((baIndex.size() != nIndexBound)) return false;
 
     struct RAWENTRY {
         qint64 nOffset;
@@ -116,7 +114,7 @@ bool XINTEDUFT::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (!inteduRangeWithin(context.nInputSize, raw.nOffset, INTEDUFT_MEMBER_HEADER_SIZE)) return false;
 
         const QByteArray baMember = read_array_process(raw.nOffset, INTEDUFT_MEMBER_HEADER_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baMember.size() != INTEDUFT_MEMBER_HEADER_SIZE)) return false;
+        if ((baMember.size() != INTEDUFT_MEMBER_HEADER_SIZE)) return false;
         const uchar *pMember = reinterpret_cast<const uchar *>(baMember.constData());
 
         const quint16 nMethod = qFromLittleEndian<quint16>(pMember + 2);
@@ -146,16 +144,16 @@ bool XINTEDUFT::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     context.nArchiveSize = nMaxEnd;
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return isPdStructNotCanceled(pPdStruct);
 }
 
 bool XINTEDUFT::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
-    const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
+    QIODevice *guardedSource = getDevice();
+    const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
-    if (guardedSource && (nSavedPosition >= 0)) {
+    if ((nSavedPosition >= 0)) {
         guardedSource->seek(nSavedPosition);
     }
     return bResult;
@@ -315,11 +313,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XINTEDUFT::getDefaultUnpackProperties()
 
 bool XINTEDUFT::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XINTEDUFT> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -329,8 +326,8 @@ bool XINTEDUFT::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -344,15 +341,10 @@ bool XINTEDUFT::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

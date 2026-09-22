@@ -4,7 +4,6 @@
  */
 #include "xspissfx.h"
 
-#include <QPointer>
 #include <QScopedValueRollback>
 #include <QtEndian>
 
@@ -107,22 +106,11 @@ XSpisSFX::UNPACK_DEFERRED_CLEANUP::~UNPACK_DEFERRED_CLEANUP()
 
 XSpisSFX::XSpisSFX(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress) : XBinary(pDevice, bIsImage, nModuleAddress)
 {
-    m_pUnpackDeferredCleanup = QSharedPointer<UNPACK_DEFERRED_CLEANUP>::create();
-    const QSharedPointer<UNPACK_DEFERRED_CLEANUP> pDeferredCleanup = m_pUnpackDeferredCleanup;
-    m_pUnpackOperationState = QSharedPointer<bool>(
-        new bool(false), SPISSFX_OPERATION_STATE_DELETER(pDeferredCleanup));
     setIsArchive(true);
 }
 
 XSpisSFX::~XSpisSFX()
 {
-    if (m_pUnpackOperationState) *m_pUnpackOperationState = true;
-    if (m_pUnpackDeferredCleanup) {
-        m_pUnpackDeferredCleanup->setContexts.unite(m_setUnpackContexts);
-        m_setUnpackContexts.clear();
-    }
-    m_pUnpackDeferredCleanup.clear();
-    m_pUnpackOperationState.clear();
 }
 
 QString XSpisSFX::resourceToken(bool bIsName, quint32 nID, const QString &sName)
@@ -151,16 +139,15 @@ bool XSpisSFX::appendBlob(INTERNAL_INFO *pInfo, qint64 nOffset, qint64 nSize, co
         return false;
     }
 
-    QPointer<XSpisSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedThis || !guardedSource) return false;
-    SubDevice subDevice(guardedSource.data(), nOffset, nSize);
+    QIODevice *guardedSource = getDevice();
+    if (!guardedSource) return false;
+    SubDevice subDevice(guardedSource, nOffset, nSize);
     subDevice.setProperty("FileName", sHint);
     if (!subDevice.open(QIODevice::ReadOnly)) return false;
 
     XSPIS archive(&subDevice);
     const XSPIS::INTERNAL_INFO *pSpisInfo = static_cast<const XSPIS::INTERNAL_INFO *>(archive.getInternalInfo(pPdStruct));
-    if (!guardedThis || !guardedSource || !pSpisInfo || !pSpisInfo->bIsValid || (pSpisInfo->nFileSize != nSize) || pSpisInfo->listMembers.isEmpty() ||
+    if (!guardedSource || !pSpisInfo || !pSpisInfo->bIsValid || (pSpisInfo->nFileSize != nSize) || pSpisInfo->listMembers.isEmpty() ||
         (pSpisInfo->listMembers.count() > SPISSFX_MAX_RECORDS - pInfo->listLocations.count())) {
         subDevice.close();
         return false;
@@ -180,22 +167,21 @@ bool XSpisSFX::appendBlob(INTERNAL_INFO *pInfo, qint64 nOffset, qint64 nSize, co
         pInfo->listLocations.append(location);
     }
     subDevice.close();
-    return guardedThis && guardedSource && XBinary::isPdStructNotCanceled(pPdStruct);
+    return guardedSource && XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
 bool XSpisSFX::discover(INTERNAL_INFO *pInfo, PDSTRUCT *pPdStruct)
 {
     if (pInfo) *pInfo = INTERNAL_INFO();
     if (!pInfo || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
-    QPointer<XSpisSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedThis || !guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!guardedSource || guardedSource->isSequential()) return false;
 
-    XPE pe(guardedSource.data(), isImage(), getModuleAddress());
+    XPE pe(guardedSource, isImage(), getModuleAddress());
     const bool bIsPE = pe.isValid(pPdStruct);
-    if (!guardedThis || !guardedSource) return false;
+    if (!guardedSource) return false;
     const qint64 nFileSize = getSize();
-    if (!guardedThis || !guardedSource || (nFileSize <= 0)) return false;
+    if (!guardedSource || (nFileSize <= 0)) return false;
 
     if (!bIsPE) {
         // InstallUs ships the same SPIS payload behind an NE stub. NE has no
@@ -203,17 +189,17 @@ bool XSpisSFX::discover(INTERNAL_INFO *pInfo, PDSTRUCT *pPdStruct)
         // segments and ignores the resource table, which in this family sits
         // between the two - so the prologue is located by search, bounded below
         // by whatever overlay the NE loader does report.
-        XNE ne(guardedSource.data(), isImage(), getModuleAddress());
-        if (!ne.isValid(pPdStruct) || !guardedThis || !guardedSource) return false;
+        XNE ne(guardedSource, isImage(), getModuleAddress());
+        if (!ne.isValid(pPdStruct) || !guardedSource) return false;
         const qint64 nNeOverlay = ne.getOverlayOffset(pPdStruct);
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
         return discoverInstallUs(pInfo, nNeOverlay, pPdStruct);
     }
 
     // Prefer a completely framed overlay chain. A single malformed/trailing
     // byte invalidates the candidate and falls through to resource discovery.
     const qint64 nOverlayOffset = pe.getOverlayOffset(pPdStruct);
-    if (!guardedThis || !guardedSource) return false;
+    if (!guardedSource) return false;
     if ((nOverlayOffset >= 0) && (nOverlayOffset < nFileSize) && (nFileSize - nOverlayOffset >= 4 + SPISSFX_MIN_BLOB_SIZE)) {
         INTERNAL_INFO overlayInfo;
         overlayInfo.nFileSize = nFileSize;
@@ -226,7 +212,7 @@ bool XSpisSFX::discover(INTERNAL_INFO *pInfo, PDSTRUCT *pPdStruct)
                 break;
             }
             const QByteArray baHead = read_array_process(nOffset, 12, pPdStruct);
-            if (!guardedThis || !guardedSource || (baHead.size() != 12)) return false;
+            if (!guardedSource || (baHead.size() != 12)) return false;
             const qint64 nBlobSize = qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(baHead.constData()));
             if ((nBlobSize < SPISSFX_MIN_BLOB_SIZE) || (nBlobSize > nFileSize - nOffset - 4) || !spisHeaderPrefix(baHead.mid(4, 8))) {
                 bChainValid = false;
@@ -242,22 +228,22 @@ bool XSpisSFX::discover(INTERNAL_INFO *pInfo, PDSTRUCT *pPdStruct)
         if (bChainValid && (nOffset == nFileSize) && !overlayInfo.listBlobs.isEmpty() && !overlayInfo.listLocations.isEmpty()) {
             overlayInfo.bIsValid = true;
             *pInfo = overlayInfo;
-            return guardedThis && guardedSource;
+            return true;
         }
     }
 
     INTERNAL_INFO resourceInfo;
     resourceInfo.nFileSize = nFileSize;
     const QList<XPE::RESOURCE_RECORD> listResources = pe.getResources(SPISSFX_MAX_BLOBS, pPdStruct);
-    if (!guardedThis || !guardedSource) return false;
+    if (!guardedSource) return false;
     QList<XPE::RESOURCE_RECORD> listSorted = listResources;
     std::sort(listSorted.begin(), listSorted.end(), spisResourceLess);
 
     for (const XPE::RESOURCE_RECORD &resource : listSorted) {
-        if (!guardedThis || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+        if (!guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
         if ((resource.nSize < SPISSFX_MIN_BLOB_SIZE) || !checkOffsetSize(resource.nOffset, resource.nSize)) continue;
         const QByteArray baPrefix = read_array_process(resource.nOffset, 8, pPdStruct);
-        if (!guardedThis || !guardedSource || (baPrefix.size() != 8)) return false;
+        if (!guardedSource || (baPrefix.size() != 8)) return false;
         if (!spisHeaderPrefix(baPrefix)) continue;
 
         const QString sHint = QStringLiteral("%1_%2_%3")
@@ -266,7 +252,7 @@ bool XSpisSFX::discover(INTERNAL_INFO *pInfo, PDSTRUCT *pPdStruct)
                                        resourceToken(resource.irin[2].bIsName, resource.irin[2].nID, resource.irin[2].sName));
         appendBlob(&resourceInfo, resource.nOffset, resource.nSize, sHint, pPdStruct);
     }
-    if (!guardedThis || !guardedSource || resourceInfo.listBlobs.isEmpty() || resourceInfo.listLocations.isEmpty()) return false;
+    if (!guardedSource || resourceInfo.listBlobs.isEmpty() || resourceInfo.listLocations.isEmpty()) return false;
     resourceInfo.bIsValid = true;
     *pInfo = resourceInfo;
     return XBinary::isPdStructNotCanceled(pPdStruct);
@@ -275,29 +261,28 @@ bool XSpisSFX::discover(INTERNAL_INFO *pInfo, PDSTRUCT *pPdStruct)
 bool XSpisSFX::discoverInstallUs(INTERNAL_INFO *pInfo, qint64 nSearchStart, PDSTRUCT *pPdStruct)
 {
     if (!pInfo || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
-    QPointer<XSpisSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedThis || !guardedSource) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!guardedSource) return false;
 
     const qint64 nFileSize = getSize();
-    if (!guardedThis || !guardedSource || (nFileSize <= INSTALLUS_PROLOGUE_SIZE + INSTALLUS_TRAILER_SIZE)) return false;
+    if (!guardedSource || (nFileSize <= INSTALLUS_PROLOGUE_SIZE + INSTALLUS_TRAILER_SIZE)) return false;
     if ((nSearchStart < 0) || (nSearchStart >= nFileSize)) nSearchStart = 0;
 
     const qint64 nPrologue = find_array(nSearchStart, nFileSize - nSearchStart, INSTALLUS_PROLOGUE, INSTALLUS_PROLOGUE_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (nPrologue < 0)) return false;
+    if (!guardedSource || (nPrologue < 0)) return false;
 
     qint64 nOffset = nPrologue;
     for (qint32 i = 0; i < INSTALLUS_PROLOGUE_STRINGS; ++i) {
         if (!checkOffsetSize(nOffset, 1)) return false;
         const quint8 nLength = read_uint8(nOffset);
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
         nOffset += 1 + static_cast<qint64>(nLength);
         if ((nOffset <= 0) || (nOffset >= nFileSize)) return false;
     }
 
     QList<qint64> listSizes;
     const QByteArray baPeek = read_array_process(nOffset, 5, pPdStruct);
-    if (!guardedThis || !guardedSource || (baPeek.size() != 5)) return false;
+    if (!guardedSource || (baPeek.size() != 5)) return false;
     if (memcmp(baPeek.constData(), "SPIS\x1a", 5) == 0) {
         // The one-blob layout carries no size strings at all: the payload runs
         // from here to the four-byte trailer.
@@ -308,9 +293,9 @@ bool XSpisSFX::discoverInstallUs(INTERNAL_INFO *pInfo, qint64 nSearchStart, PDST
         for (qint32 i = 0; i < INSTALLUS_BLOBS; ++i) {
             if (!checkOffsetSize(nOffset, 1)) return false;
             const quint8 nLength = read_uint8(nOffset);
-            if (!guardedThis || !guardedSource || (nLength == 0) || (nLength > INSTALLUS_MAX_DIGITS)) return false;
+            if (!guardedSource || (nLength == 0) || (nLength > INSTALLUS_MAX_DIGITS)) return false;
             const QByteArray baDigits = read_array_process(nOffset + 1, nLength, pPdStruct);
-            if (!guardedThis || !guardedSource || (baDigits.size() != nLength)) return false;
+            if (!guardedSource || (baDigits.size() != nLength)) return false;
             qint64 nBlobSize = 0;
             if (!installusDecimal(baDigits, &nBlobSize) || (nBlobSize < SPISSFX_MIN_BLOB_SIZE)) return false;
             listSizes.append(nBlobSize);
@@ -334,7 +319,7 @@ bool XSpisSFX::discoverInstallUs(INTERNAL_INFO *pInfo, qint64 nSearchStart, PDST
     qint64 nBlobOffset = nOffset;
     for (qint32 i = 0; i < listSizes.count(); ++i) {
         const QString sHint = QStringLiteral("spis_%1").arg(nBlobOffset, 0, 16);
-        if (!appendBlob(&installusInfo, nBlobOffset, listSizes.at(i), sHint, pPdStruct) || !guardedThis || !guardedSource) return false;
+        if (!appendBlob(&installusInfo, nBlobOffset, listSizes.at(i), sHint, pPdStruct) || !guardedSource) return false;
         nBlobOffset += listSizes.at(i);
     }
     if (installusInfo.listBlobs.isEmpty() || installusInfo.listLocations.isEmpty()) return false;
@@ -357,13 +342,12 @@ bool XSpisSFX::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 
 bool XSpisSFX::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XSpisSFX> guardedThis(this);
     if (!isInternalInfoHandled()) {
         INTERNAL_INFO info;
-        if (!discover(&info, pPdStruct) || !guardedThis) return false;
-        if (!XBinary::handleInternalInfo(pPdStruct) || !guardedThis) return false;
+        if (!discover(&info, pPdStruct)) return false;
+        if (!XBinary::handleInternalInfo(pPdStruct)) return false;
         XBinary::INTERNAL_INFO *pBase = static_cast<XBinary::INTERNAL_INFO *>(XBinary::getInternalInfo(pPdStruct));
-        if (!guardedThis || !pBase) return false;
+        if (!pBase) return false;
         static_cast<XBinary::INTERNAL_INFO &>(info) = *pBase;
         m_internalInfo = info;
     }
@@ -432,7 +416,7 @@ bool XSpisSFX::bindLocation(UNPACK_CONTEXT *pContext, qint32 nGlobalIndex, PDSTR
     if (!releaseBlob(pContext)) return false;
 
     const BLOB blob = pContext->info.listBlobs.at(location.nBlob);
-    SubDevice *pSubDevice = new (std::nothrow) SubDevice(pContext->pOuterSourceDevice.data(), blob.nOffset, blob.nSize);
+    SubDevice *pSubDevice = new (std::nothrow) SubDevice(pContext->pOuterSourceDevice, blob.nOffset, blob.nSize);
     if (!pSubDevice) return false;
     pSubDevice->setProperty("FileName", blob.sHint);
     if (!pSubDevice->open(QIODevice::ReadOnly)) {
@@ -466,35 +450,30 @@ bool XSpisSFX::bindLocation(UNPACK_CONTEXT *pContext, qint32 nGlobalIndex, PDSTR
 
 bool XSpisSFX::isOwnContext(const UNPACK_STATE *pState) const
 {
-    return pState && pState->pContext && m_setUnpackContexts.contains(static_cast<UNPACK_CONTEXT *>(pState->pContext));
+    return pState && pState->pContext;
 }
 
 bool XSpisSFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     if (!pState || !pState->baUnpackSourceToken.isEmpty()) return false;
-    QSharedPointer<bool> pOperationState = m_pUnpackOperationState;
-    if (!pOperationState || *pOperationState) return false;
-    QScopedValueRollback<bool> operationGuard(*pOperationState, true);
-    QPointer<XSpisSFX> guardedThis(this);
 
     if (pState->pContext) {
         if (!isOwnContext(pState)) return false;
         UNPACK_CONTEXT *pOldContext = static_cast<UNPACK_CONTEXT *>(pState->pContext);
         if (pOldContext->pOwnerState != pState) return false;
-        m_setUnpackContexts.remove(pOldContext);
         pState->pContext = nullptr;
         const bool bReleased = releaseBlob(pOldContext);
         delete pOldContext;
         *pState = UNPACK_STATE();
-        if (!guardedThis || !bReleased) return false;
+        if (!bReleased) return false;
     }
 
     qint64 nOutputLimit = -1;
     if (!XBinary::getUnpackOutputLimit(mapProperties, &nOutputLimit)) return false;
     Q_UNUSED(nOutputLimit)
     INTERNAL_INFO info;
-    if (!discover(&info, pPdStruct) || !guardedThis) return false;
-    QPointer<QIODevice> guardedSource(getDevice());
+    if (!discover(&info, pPdStruct)) return false;
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     UNPACK_CONTEXT *pContext = new (std::nothrow) UNPACK_CONTEXT;
@@ -504,8 +483,8 @@ bool XSpisSFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
     pContext->nOwnerDeviceGeneration = getDeviceGeneration();
     pContext->pOwnerState = pState;
     pContext->mapUnpackProperties = mapProperties;
-    if (!bindLocation(pContext, 0, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) releaseBlob(pContext);
+    if (!bindLocation(pContext, 0, pPdStruct) || !guardedSource) {
+        releaseBlob(pContext);
         delete pContext;
         return false;
     }
@@ -518,20 +497,16 @@ bool XSpisSFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
     pState->nNumberOfRecords = info.listLocations.count();
     pState->nCurrentOffset = info.listBlobs.at(0).nOffset + pContext->innerState.nCurrentOffset;
     pState->nTotalSize = info.nFileSize;
-    m_setUnpackContexts.insert(pContext);
     return true;
 }
 
 XBinary::ARCHIVERECORD XSpisSFX::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     ARCHIVERECORD result = {};
-    QSharedPointer<bool> pOperationState = m_pUnpackOperationState;
-    if (!pOperationState || *pOperationState || !isOwnContext(pState)) return result;
-    QScopedValueRollback<bool> operationGuard(*pOperationState, true);
-    QPointer<XSpisSFX> guardedThis(this);
+    if (!isOwnContext(pState)) return result;
 
     UNPACK_CONTEXT *pContext = static_cast<UNPACK_CONTEXT *>(pState->pContext);
-    if (!pContext || !m_setUnpackContexts.contains(pContext) || (pContext->pOwnerState != pState) || !pContext->pOuterSourceDevice ||
+    if (!pContext || (pContext->pOwnerState != pState) || !pContext->pOuterSourceDevice ||
         (pContext->pOuterSourceDevice != getDevice()) || (pContext->nOwnerDeviceGeneration != getDeviceGeneration()) ||
         (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pContext->info.listLocations.count()) || !pContext->pArchive ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
@@ -541,7 +516,7 @@ XBinary::ARCHIVERECORD XSpisSFX::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPd
     const LOCATION location = pContext->info.listLocations.at(pState->nCurrentIndex);
     if ((pContext->nBoundBlob != location.nBlob) || (pContext->innerState.nCurrentIndex != location.nRecord)) return result;
     result = pContext->pArchive->infoCurrent(&pContext->innerState, pPdStruct);
-    if (!guardedThis || !m_setUnpackContexts.contains(pContext) || (pState->pContext != pContext) || result.mapProperties.isEmpty() ||
+    if ((pState->pContext != pContext) || result.mapProperties.isEmpty() ||
         !XBinary::isArchiveRecordExtentValid(result)) {
         return ARCHIVERECORD();
     }
@@ -555,16 +530,13 @@ XBinary::ARCHIVERECORD XSpisSFX::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPd
 
 bool XSpisSFX::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    QSharedPointer<bool> pOperationState = m_pUnpackOperationState;
-    if (!pOperationState || *pOperationState || !isOwnContext(pState)) return false;
-    QScopedValueRollback<bool> operationGuard(*pOperationState, true);
-    QPointer<XSpisSFX> guardedThis(this);
-    QPointer<QIODevice> guardedOutput(pDevice);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedOutput || !guardedSource || XBinary::devicesAlias(guardedSource.data(), guardedOutput.data()) || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    if (!isOwnContext(pState)) return false;
+    QIODevice *guardedOutput = pDevice;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || !guardedOutput || !guardedSource || XBinary::devicesAlias(guardedSource, guardedOutput) || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_CONTEXT *pContext = static_cast<UNPACK_CONTEXT *>(pState->pContext);
-    if (!pContext || !m_setUnpackContexts.contains(pContext) || (pContext->pOwnerState != pState) || (pContext->pOuterSourceDevice != guardedSource) ||
+    if (!pContext || (pContext->pOwnerState != pState) || (pContext->pOuterSourceDevice != guardedSource) ||
         (pContext->nOwnerDeviceGeneration != getDeviceGeneration()) || (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pContext->info.listLocations.count()) || !pContext->pArchive) {
         return false;
@@ -572,8 +544,8 @@ bool XSpisSFX::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT 
     const LOCATION location = pContext->info.listLocations.at(pState->nCurrentIndex);
     if ((pContext->nBoundBlob != location.nBlob) || (pContext->innerState.nCurrentIndex != location.nRecord)) return false;
     pContext->innerState.spOutputBudget = pState->spOutputBudget;
-    const bool bResult = pContext->pArchive->unpackCurrent(&pContext->innerState, guardedOutput.data(), pPdStruct);
-    if (!guardedThis || !guardedOutput || !guardedSource || !m_setUnpackContexts.contains(pContext) || (pState->pContext != pContext)) return false;
+    const bool bResult = pContext->pArchive->unpackCurrent(&pContext->innerState, guardedOutput, pPdStruct);
+    if (!guardedOutput || !guardedSource || (pState->pContext != pContext)) return false;
     pState->nCurrentOffset = pContext->info.listBlobs.at(location.nBlob).nOffset + pContext->innerState.nCurrentOffset;
     pState->mapArchiveProperties = pContext->innerState.mapArchiveProperties;
     return bResult;
@@ -581,12 +553,9 @@ bool XSpisSFX::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT 
 
 bool XSpisSFX::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QSharedPointer<bool> pOperationState = m_pUnpackOperationState;
-    if (!pOperationState || *pOperationState || !isOwnContext(pState)) return false;
-    QScopedValueRollback<bool> operationGuard(*pOperationState, true);
-    QPointer<XSpisSFX> guardedThis(this);
+    if (!isOwnContext(pState)) return false;
     UNPACK_CONTEXT *pContext = static_cast<UNPACK_CONTEXT *>(pState->pContext);
-    if (!pContext || !m_setUnpackContexts.contains(pContext) || (pContext->pOwnerState != pState) || !pContext->pOuterSourceDevice ||
+    if (!pContext || (pContext->pOwnerState != pState) || !pContext->pOuterSourceDevice ||
         (pContext->pOuterSourceDevice != getDevice()) || (pContext->nOwnerDeviceGeneration != getDeviceGeneration()) ||
         (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
@@ -598,7 +567,7 @@ bool XSpisSFX::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         pState->nCurrentOffset = pState->nTotalSize;
         return false;
     }
-    if (!bindLocation(pContext, pState->nCurrentIndex, pPdStruct) || !guardedThis) return false;
+    if (!bindLocation(pContext, pState->nCurrentIndex, pPdStruct)) return false;
     const LOCATION location = pContext->info.listLocations.at(pState->nCurrentIndex);
     pState->nCurrentOffset = pContext->info.listBlobs.at(location.nBlob).nOffset + pContext->innerState.nCurrentOffset;
     pState->mapArchiveProperties = pContext->innerState.mapArchiveProperties;
@@ -609,18 +578,12 @@ bool XSpisSFX::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
     if (!pState || !pState->baUnpackSourceToken.isEmpty() || !isOwnContext(pState)) return false;
-    QSharedPointer<bool> pOperationState = m_pUnpackOperationState;
-    if (!pOperationState || *pOperationState) return false;
-    QScopedValueRollback<bool> operationGuard(*pOperationState, true);
-    QPointer<XSpisSFX> guardedThis(this);
 
     UNPACK_CONTEXT *pContext = static_cast<UNPACK_CONTEXT *>(pState->pContext);
-    if (!m_setUnpackContexts.contains(pContext) || (pContext->pOwnerState != pState)) return false;
-    m_setUnpackContexts.remove(pContext);
+    if (pContext->pOwnerState != pState) return false;
     pState->pContext = nullptr;
     const bool bResult = releaseBlob(pContext);
     delete pContext;
-    if (!guardedThis) return false;
     *pState = UNPACK_STATE();
     return bResult;
 }

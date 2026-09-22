@@ -54,7 +54,7 @@ bool hasKwajSignature(XKwajSFX *pOwner, qint64 nOffset, qint64 nSize)
     return (baSignature.size() == 8) && (memcmp(baSignature.constData(), KWAJ_SIGNATURE, sizeof(KWAJ_SIGNATURE)) == 0);
 }
 
-QString readNeResourceName(const QPointer<XKwajSFX> &pOwner,
+QString readNeResourceName(XKwajSFX *pOwner,
                            qint64 nTableOffset, quint16 nToken)
 {
     if ((nToken & 0x8000) || !pOwner) return QString();
@@ -138,12 +138,10 @@ XKwajSFX::~XKwajSFX()
 bool XKwajSFX::isValid(PDSTRUCT *pPdStruct)
 {
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
-    QPointer<XKwajSFX> guardedThis(this);
     QList<KWAJSFX_ENTRY> listEntries;
-    const bool bResourceContainer = guardedThis->_buildResourceEntries(&listEntries, pPdStruct);
-    if (!guardedThis) return false;
+    const bool bResourceContainer = _buildResourceEntries(&listEntries, pPdStruct);
     if (bResourceContainer && !listEntries.isEmpty()) return true;
-    return guardedThis->XSFX::isValid(pPdStruct);
+    return XSFX::isValid(pPdStruct);
 }
 
 bool XKwajSFX::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
@@ -163,14 +161,13 @@ bool XKwajSFX::_buildResourceEntries(QList<KWAJSFX_ENTRY> *pList, PDSTRUCT *pPdS
     if (!pList || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
     pList->clear();
 
-    QPointer<XKwajSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedThis || !guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!guardedSource || guardedSource->isSequential()) return false;
 
     QList<KWAJSFX_ENTRY> listCandidates;
     bool bNE = false;
 
-    XNE ne(guardedSource.data(), isImage(), getModuleAddress());
+    XNE ne(guardedSource, isImage(), getModuleAddress());
     if (ne.isValid(pPdStruct)) {
         bNE = true;
         // Preserve the raw TYPEINFO/name tokens while walking the bounded NE
@@ -178,42 +175,42 @@ bool XKwajSFX::_buildResourceEntries(QList<KWAJSFX_ENTRY> *pList, PDSTRUCT *pPdS
         // type to nType=0, but these installers use the table-relative type
         // token (for example 0x0170) as part of their stable resource identity.
         const qint64 nTableOffset = ne.getResourceTableOffset();
-        if (!guardedThis->checkOffsetSize(nTableOffset, 2)) return false;
-        const quint16 nShift = guardedThis->read_uint16(nTableOffset);
+        if (!checkOffsetSize(nTableOffset, 2)) return false;
+        const quint16 nShift = read_uint16(nTableOffset);
         if (nShift > 47) return false;
 
         qint64 nCurrentOffset = nTableOffset + 2;
         qint32 nGuard = 0;
         bool bTerminated = false;
-        while (guardedThis->checkOffsetSize(nCurrentOffset, 8) && (nGuard++ < 0x4000)) {
-            const quint16 nRawType = guardedThis->read_uint16(nCurrentOffset);
+        while (checkOffsetSize(nCurrentOffset, 8) && (nGuard++ < 0x4000)) {
+            const quint16 nRawType = read_uint16(nCurrentOffset);
             if (nRawType == 0) {
                 bTerminated = true;
                 break;
             }
-            const quint16 nCount = guardedThis->read_uint16(nCurrentOffset + 2);
-            if ((nCount > 0x4000) || !guardedThis->checkOffsetSize(nCurrentOffset + 8, (qint64)nCount * 12)) return false;
+            const quint16 nCount = read_uint16(nCurrentOffset + 2);
+            if ((nCount > 0x4000) || !checkOffsetSize(nCurrentOffset + 8, (qint64)nCount * 12)) return false;
             const quint32 nTypeToken = (nRawType & 0x8000) ? (nRawType & 0x7fff) : nRawType;
             const QString sType = numericResourceToken(nTypeToken, false);
             nCurrentOffset += 8;
 
             for (quint16 i = 0; i < nCount; ++i) {
-                if (!guardedThis || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+                if (!guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
                 const qint64 nNameInfoOffset = nCurrentOffset + (qint64)i * 12;
-                const quint16 nRawID = guardedThis->read_uint16(nNameInfoOffset + 6);
-                const qint64 nResourceOffset = ((qint64)guardedThis->read_uint16(nNameInfoOffset)) << nShift;
-                const qint64 nResourceSize = ((qint64)guardedThis->read_uint16(nNameInfoOffset + 2)) << nShift;
-                if ((nResourceSize <= 0) || !guardedThis->checkOffsetSize(nResourceOffset, nResourceSize)) continue;
+                const quint16 nRawID = read_uint16(nNameInfoOffset + 6);
+                const qint64 nResourceOffset = ((qint64)read_uint16(nNameInfoOffset)) << nShift;
+                const qint64 nResourceSize = ((qint64)read_uint16(nNameInfoOffset + 2)) << nShift;
+                if ((nResourceSize <= 0) || !checkOffsetSize(nResourceOffset, nResourceSize)) continue;
 
                 KWAJSFX_ENTRY entry = {};
                 entry.nResourceOffset = nResourceOffset;
                 entry.nResourceSize = nResourceSize;
                 entry.nType = nTypeToken;
                 entry.nID = (nRawID & 0x8000) ? (nRawID & 0x7fff) : nRawID;
-                entry.bKwaj = hasKwajSignature(guardedThis.data(), entry.nResourceOffset, entry.nResourceSize);
+                entry.bKwaj = hasKwajSignature(this, entry.nResourceOffset, entry.nResourceSize);
                 entry.sGroupKey = QStringLiteral("ne:%1").arg(nRawType);
                 QString sID = (nRawID & 0x8000) ? numericResourceToken(nRawID, false)
-                                                : namedResourceToken(readNeResourceName(guardedThis, nTableOffset, nRawID));
+                                                : namedResourceToken(readNeResourceName(this, nTableOffset, nRawID));
                 if (sID.isEmpty()) sID = numericResourceToken(nRawID, false);
                 entry.sName = QStringLiteral("res_%1_%2").arg(sType, sID);
                 listCandidates.append(entry);
@@ -223,13 +220,13 @@ bool XKwajSFX::_buildResourceEntries(QList<KWAJSFX_ENTRY> *pList, PDSTRUCT *pPdS
         }
         if (!bTerminated) return false;
     } else {
-        if (!guardedThis || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
-        XPE pe(guardedSource.data(), isImage(), getModuleAddress());
+        if (!guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+        XPE pe(guardedSource, isImage(), getModuleAddress());
         if (!pe.isValid(pPdStruct)) return false;
         const QList<XPE::RESOURCE_RECORD> resources = pe.getResources(KWAJSFX_MAX_RESOURCES, pPdStruct);
         for (const XPE::RESOURCE_RECORD &resource : resources) {
-            if (!guardedThis || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
-            if ((resource.nSize <= 0) || !guardedThis->checkOffsetSize(resource.nOffset, resource.nSize)) continue;
+            if (!guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+            if ((resource.nSize <= 0) || !checkOffsetSize(resource.nOffset, resource.nSize)) continue;
 
             const XPE::RESOURCES_ID_NAME &type = resource.irin[0];
             const XPE::RESOURCES_ID_NAME &name = resource.irin[1];
@@ -239,7 +236,7 @@ bool XKwajSFX::_buildResourceEntries(QList<KWAJSFX_ENTRY> *pList, PDSTRUCT *pPdS
             entry.nResourceSize = resource.nSize;
             entry.nType = type.bIsName ? 0 : type.nID;
             entry.nID = name.bIsName ? 0 : name.nID;
-            entry.bKwaj = hasKwajSignature(guardedThis.data(), entry.nResourceOffset, entry.nResourceSize);
+            entry.bKwaj = hasKwajSignature(this, entry.nResourceOffset, entry.nResourceSize);
             const QString sType = type.bIsName ? namedResourceToken(type.sName) : numericResourceToken(type.nID, false);
             const QString sName = name.bIsName ? namedResourceToken(name.sName) : numericResourceToken(name.nID, false);
             const QString sLanguage = language.bIsName ? namedResourceToken(language.sName) : numericResourceToken(language.nID, false);
@@ -249,7 +246,7 @@ bool XKwajSFX::_buildResourceEntries(QList<KWAJSFX_ENTRY> *pList, PDSTRUCT *pPdS
         }
     }
 
-    if (!guardedThis || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct) || listCandidates.isEmpty()) return false;
+    if (!guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct) || listCandidates.isEmpty()) return false;
 
     QMap<QString, qint32> mapKwajCounts;
     QMap<QString, qint64> mapFirstOffsets;
@@ -279,26 +276,26 @@ bool XKwajSFX::_buildResourceEntries(QList<KWAJSFX_ENTRY> *pList, PDSTRUCT *pPdS
         if (entry.sGroupKey != sSelectedGroup) continue;
 
         if (entry.bKwaj) {
-            SubDevice subDevice(guardedSource.data(), entry.nResourceOffset, entry.nResourceSize);
+            SubDevice subDevice(guardedSource, entry.nResourceOffset, entry.nResourceSize);
             subDevice.setProperty("FileName", entry.sName);
             if (!subDevice.open(QIODevice::ReadOnly)) return false;
 
             XKWAJ archive(&subDevice);
             UNPACK_STATE state = {};
             const bool bInitialized = archive.initUnpack(&state, archive.getDefaultUnpackProperties(), pPdStruct);
-            if (!guardedThis || !guardedSource || !bInitialized) {
+            if (!guardedSource || !bInitialized) {
                 archive.finishUnpack(&state, nullptr);
                 return false;
             }
             const ARCHIVERECORD record = archive.infoCurrent(&state, pPdStruct);
-            if (!guardedThis || !guardedSource || record.mapProperties.value(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_UNKNOWN).toUInt() == HANDLE_METHOD_UNKNOWN ||
+            if (!guardedSource || record.mapProperties.value(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_UNKNOWN).toUInt() == HANDLE_METHOD_UNKNOWN ||
                 (record.nStreamOffset < 0) || (record.nStreamSize < 0) || (record.nStreamOffset > entry.nResourceSize) ||
                 (record.nStreamSize > (entry.nResourceSize - record.nStreamOffset))) {
                 archive.finishUnpack(&state, nullptr);
                 return false;
             }
 
-            const quint16 nHeaderFlags = guardedThis->read_uint16(entry.nResourceOffset + offsetof(XKWAJ::KWAJ_HEADER, header_flags));
+            const quint16 nHeaderFlags = read_uint16(entry.nResourceOffset + offsetof(XKWAJ::KWAJ_HEADER, header_flags));
             const bool bHasEmbeddedName = (nHeaderFlags & (XKWAJ::HDR_FLAG_HASFILENAME | XKWAJ::HDR_FLAG_HASFILEEXT)) != 0;
             if (bHasEmbeddedName) {
                 const QString sEmbeddedName = record.mapProperties.value(FPART_PROP_ORIGINALNAME).toString();
@@ -306,7 +303,7 @@ bool XKwajSFX::_buildResourceEntries(QList<KWAJSFX_ENTRY> *pList, PDSTRUCT *pPdS
             }
 
             const bool bFinished = archive.finishUnpack(&state, nullptr);
-            if (!guardedThis || !guardedSource || !bFinished) return false;
+            if (!guardedSource || !bFinished) return false;
         }
         listResult.append(entry);
     }
@@ -347,7 +344,7 @@ bool XKwajSFX::_bindEntry(KWAJSFX_UNPACK_CONTEXT *pContext, qint32 nIndex, PDSTR
     const KWAJSFX_ENTRY &entry = pContext->listEntries.at(nIndex);
     if (!entry.bKwaj) return true;
 
-    SubDevice *pSubDevice = new (std::nothrow) SubDevice(pContext->pOuterSourceDevice.data(), entry.nResourceOffset, entry.nResourceSize);
+    SubDevice *pSubDevice = new (std::nothrow) SubDevice(pContext->pOuterSourceDevice, entry.nResourceOffset, entry.nResourceSize);
     if (!pSubDevice) return false;
     pSubDevice->setProperty("FileName", entry.sName);
     if (!pSubDevice->open(QIODevice::ReadOnly)) {
@@ -387,19 +384,16 @@ bool XKwajSFX::_isOwnContext(const UNPACK_STATE *pState) const
 bool XKwajSFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     if (!pState || !pState->baUnpackSourceToken.isEmpty()) return false;
-    QPointer<XKwajSFX> guardedThis(this);
     QList<KWAJSFX_ENTRY> listEntries;
-    const bool bResourceContainer = guardedThis->_buildResourceEntries(&listEntries, pPdStruct);
-    if (!guardedThis) return false;
+    const bool bResourceContainer = _buildResourceEntries(&listEntries, pPdStruct);
 
     if (!bResourceContainer || listEntries.isEmpty()) {
-        if (guardedThis->_isOwnContext(pState) && !guardedThis->finishUnpack(pState, nullptr)) return false;
-        if (!guardedThis) return false;
-        return guardedThis->XSFX::initUnpack(pState, mapProperties, pPdStruct);
+        if (_isOwnContext(pState) && !finishUnpack(pState, nullptr)) return false;
+        return XSFX::initUnpack(pState, mapProperties, pPdStruct);
     }
 
-    if (pState->pContext && !guardedThis->_isOwnContext(pState)) {
-        if (!guardedThis->XSFX::finishUnpack(pState, nullptr) || !guardedThis) return false;
+    if (pState->pContext && !_isOwnContext(pState)) {
+        if (!XSFX::finishUnpack(pState, nullptr)) return false;
     }
 
     QSharedPointer<bool> pOperationState = m_pKwajUnpackOperationState;
@@ -414,7 +408,7 @@ bool XKwajSFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
         const bool bFinishOK = _releaseEntry(pOldContext);
         delete pOldContext;
         *pState = UNPACK_STATE();
-        if (!guardedThis || !bFinishOK) return false;
+        if (!bFinishOK) return false;
     }
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
@@ -424,8 +418,8 @@ bool XKwajSFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
 
     *pState = UNPACK_STATE();
     pState->mapUnpackProperties = mapProperties;
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedThis || !guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!guardedSource || guardedSource->isSequential()) return false;
 
     KWAJSFX_UNPACK_CONTEXT *pContext = new (std::nothrow) KWAJSFX_UNPACK_CONTEXT;
     if (!pContext) return false;
@@ -438,8 +432,8 @@ bool XKwajSFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
     pContext->innerState = UNPACK_STATE();
     pContext->mapUnpackProperties = mapProperties;
 
-    if (!guardedThis->_bindEntry(pContext, 0, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) guardedThis->_releaseEntry(pContext);
+    if (!_bindEntry(pContext, 0, pPdStruct) || !guardedSource) {
+        _releaseEntry(pContext);
         delete pContext;
         return false;
     }
@@ -461,7 +455,6 @@ XBinary::ARCHIVERECORD XKwajSFX::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPd
     QSharedPointer<bool> pOperationState = m_pKwajUnpackOperationState;
     if (!pOperationState || *pOperationState) return result;
     QScopedValueRollback<bool> operationGuard(*pOperationState, true);
-    QPointer<XKwajSFX> guardedThis(this);
     if (!pState || !pState->pContext || !XBinary::isPdStructNotCanceled(pPdStruct) || (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return result;
@@ -478,7 +471,7 @@ XBinary::ARCHIVERECORD XKwajSFX::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPd
     if (entry.bKwaj) {
         if (!pContext->pArchive || (pContext->innerState.nCurrentIndex != 0) || (pContext->innerState.nNumberOfRecords != 1)) return result;
         result = pContext->pArchive->infoCurrent(&pContext->innerState, pPdStruct);
-        if (!guardedThis || !m_setKwajUnpackContexts.contains(pContext) || (pState->pContext != pContext)) return ARCHIVERECORD();
+        if (!m_setKwajUnpackContexts.contains(pContext) || (pState->pContext != pContext)) return ARCHIVERECORD();
         result.nStreamOffset += entry.nResourceOffset;
         result.mapProperties.insert(FPART_PROP_ORIGINALNAME, entry.sName);
     } else {
@@ -498,10 +491,9 @@ bool XKwajSFX::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT 
     QSharedPointer<bool> pOperationState = m_pKwajUnpackOperationState;
     if (!pOperationState || *pOperationState) return false;
     QScopedValueRollback<bool> operationGuard(*pOperationState, true);
-    QPointer<XKwajSFX> guardedThis(this);
-    QPointer<QIODevice> guardedOutput(pDevice);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !pState->pContext || !guardedOutput || !guardedSource || XBinary::devicesAlias(guardedSource.data(), guardedOutput.data()) ||
+    QIODevice *guardedOutput = pDevice;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || !pState->pContext || !guardedOutput || !guardedSource || XBinary::devicesAlias(guardedSource, guardedOutput) ||
         !XBinary::isPdStructNotCanceled(pPdStruct) || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }
@@ -516,8 +508,8 @@ bool XKwajSFX::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT 
     if (entry.bKwaj) {
         if (!pContext->pArchive || (pContext->innerState.nCurrentIndex != 0) || (pContext->innerState.nNumberOfRecords != 1)) return false;
         pContext->innerState.spOutputBudget = pState->spOutputBudget;
-        const bool bResult = pContext->pArchive->unpackCurrent(&pContext->innerState, guardedOutput.data(), pPdStruct);
-        if (!guardedThis || !guardedOutput || !guardedSource || !m_setKwajUnpackContexts.contains(pContext) || (pState->pContext != pContext)) return false;
+        const bool bResult = pContext->pArchive->unpackCurrent(&pContext->innerState, guardedOutput, pPdStruct);
+        if (!guardedOutput || !guardedSource || !m_setKwajUnpackContexts.contains(pContext) || (pState->pContext != pContext)) return false;
         pState->nCurrentOffset = entry.nResourceOffset + pContext->innerState.nCurrentOffset;
         pState->mapArchiveProperties = pContext->innerState.mapArchiveProperties;
         return bResult;
@@ -535,13 +527,13 @@ bool XKwajSFX::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT 
         XBinary::OUTPUT_BUDGET::noteShadowRefusal(pState->spOutputBudget.data());
     }
 
-    const QByteArray baData = guardedThis->read_array_process(entry.nResourceOffset, entry.nResourceSize, pPdStruct);
-    if (!guardedThis || !guardedOutput || !guardedSource || (baData.size() != entry.nResourceSize) ||
+    const QByteArray baData = read_array_process(entry.nResourceOffset, entry.nResourceSize, pPdStruct);
+    if (!guardedOutput || !guardedSource || (baData.size() != entry.nResourceSize) ||
         (pContext->pOuterSourceDevice != guardedSource) || (pContext->nOwnerDeviceGeneration != getDeviceGeneration())) {
         return false;
     }
-    const bool bResult = XBinary::writeUnpackData(pState, guardedOutput.data(), baData, pPdStruct);
-    if (!guardedThis || !guardedOutput || !guardedSource || !m_setKwajUnpackContexts.contains(pContext) || (pState->pContext != pContext)) return false;
+    const bool bResult = XBinary::writeUnpackData(pState, guardedOutput, baData, pPdStruct);
+    if (!guardedOutput || !guardedSource || !m_setKwajUnpackContexts.contains(pContext) || (pState->pContext != pContext)) return false;
     if (bResult) pState->nCurrentOffset = entry.nResourceOffset + entry.nResourceSize;
     return bResult;
 }
@@ -552,7 +544,6 @@ bool XKwajSFX::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     QSharedPointer<bool> pOperationState = m_pKwajUnpackOperationState;
     if (!pOperationState || *pOperationState) return false;
     QScopedValueRollback<bool> operationGuard(*pOperationState, true);
-    QPointer<XKwajSFX> guardedThis(this);
     if (!pState || !pState->pContext || !XBinary::isPdStructNotCanceled(pPdStruct) || (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
@@ -572,7 +563,7 @@ bool XKwajSFX::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         return false;
     }
 
-    if (!guardedThis->_bindEntry(pContext, pState->nCurrentIndex, pPdStruct) || !guardedThis) return false;
+    if (!_bindEntry(pContext, pState->nCurrentIndex, pPdStruct)) return false;
     pState->nCurrentOffset = pContext->listEntries.at(pState->nCurrentIndex).nResourceOffset;
     pState->mapArchiveProperties = pContext->pArchive ? pContext->innerState.mapArchiveProperties : QMap<FPART_PROP, QVariant>();
     return true;
@@ -586,15 +577,12 @@ bool XKwajSFX::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     QSharedPointer<bool> pOperationState = m_pKwajUnpackOperationState;
     if (!pOperationState || *pOperationState) return false;
     QScopedValueRollback<bool> operationGuard(*pOperationState, true);
-    QPointer<XKwajSFX> guardedThis(this);
-
     KWAJSFX_UNPACK_CONTEXT *pContext = static_cast<KWAJSFX_UNPACK_CONTEXT *>(pState->pContext);
     if (!m_setKwajUnpackContexts.contains(pContext) || (pContext->pOwnerState != pState)) return false;
     m_setKwajUnpackContexts.remove(pContext);
     pState->pContext = nullptr;
     const bool bResult = _releaseEntry(pContext);
     delete pContext;
-    if (!guardedThis) return false;
 
     pState->nCurrentOffset = 0;
     pState->nTotalSize = 0;

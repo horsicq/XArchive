@@ -5,8 +5,6 @@
 
 #include "xinstallanywhere.h"
 
-#include <QPointer>
-
 #include <new>
 
 namespace {
@@ -155,10 +153,8 @@ XInstallAnywhere::~XInstallAnywhere()
 bool XInstallAnywhere::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
-
-    QPointer<XInstallAnywhere> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -166,7 +162,7 @@ bool XInstallAnywhere::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const qint64 nScanSize = qMin<qint64>(IA_SCAN_SIZE, context.nInputSize);
     const QByteArray baHeader = read_array_process(0, nScanSize, pPdStruct);
-    if (!guardedThis || !guardedSource || baHeader.size() != nScanSize) {
+    if (baHeader.size() != nScanSize) {
         return false;
     }
 
@@ -308,8 +304,7 @@ bool XInstallAnywhere::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         const MEMBER &member = context.listMembers.at(i);
         const QByteArray baMagic =
             read_array_process(member.nDataOffset, IA_MAGIC_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            baMagic.size() != IA_MAGIC_SIZE) {
+        if (baMagic.size() != IA_MAGIC_SIZE) {
             return false;
         }
         const quint8 nByte0 = static_cast<quint8>(baMagic.at(0));
@@ -329,12 +324,12 @@ bool XInstallAnywhere::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     context.sVersion = iaParseBannerVersion(baHeader);
 
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XInstallAnywhere::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -521,9 +516,8 @@ bool XInstallAnywhere::initUnpack(
     UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties,
     PDSTRUCT *pPdStruct)
 {
-    QPointer<XInstallAnywhere> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
     }
@@ -531,7 +525,7 @@ bool XInstallAnywhere::initUnpack(
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -546,9 +540,9 @@ bool XInstallAnywhere::initUnpack(
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource ||
+    if (!parseContext(pContext, pPdStruct) ||
         pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -570,16 +564,14 @@ bool XInstallAnywhere::initUnpack(
     pState->pContext = pContext;
 
     const bool bFinalized =
-        guardedThis->validateAndFinalizeUnpackSource(pState, pContext,
+        validateAndFinalizeUnpackSource(pState, pContext,
                                                      pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
+    if (!bFinalized) {
             delete pContext;
             *pState = UNPACK_STATE();
             return false;
-        }
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

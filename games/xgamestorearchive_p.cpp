@@ -58,7 +58,7 @@ public:
     }
 
 private:
-    QPointer<QIODevice> m_pDevice;
+    QIODevice *m_pDevice;
     qint64 m_nPosition;
     bool m_bRestored;
 };
@@ -233,7 +233,6 @@ bool XGameStoreArchiveBase::scanArchive(QList<ENTRY> *pEntries,
     if (pEntries) pEntries->clear();
     if (pArchiveEnd) *pArchiveEnd = 0;
 
-    QPointer<XGameStoreArchiveBase> guardedThis(this);
     const FT fileType = getFileType();
     if (((fileType != FT_ZIP) &&
           (fileType != FT_QUAKE_PAK) && (fileType != FT_DOOM_WAD) &&
@@ -307,7 +306,7 @@ bool XGameStoreArchiveBase::scanArchive(QList<ENTRY> *pEntries,
     }
 
     GameDevicePositionGuard positionGuard(getDevice());
-    if (!guardedThis || !positionGuard.isValid()) return false;
+    if (!positionGuard.isValid()) return false;
 
     QList<ENTRY> listEntries;
     qint64 nArchiveEnd = 0;
@@ -315,7 +314,7 @@ bool XGameStoreArchiveBase::scanArchive(QList<ENTRY> *pEntries,
         pEntries ? &listEntries : nullptr, &nArchiveEnd, pPdStruct);
 
     const bool bRestored = positionGuard.restore();
-    if (!guardedThis || !bRestored || !bResult ||
+    if (!bRestored || !bResult ||
         (getFileType() != fileType) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
@@ -889,7 +888,6 @@ bool XGameStoreArchiveBase::initUnpack(
     const QMap<UNPACK_PROP, QVariant> &mapProperties,
     PDSTRUCT *pPdStruct)
 {
-    QPointer<XGameStoreArchiveBase> guardedThis(this);
     if (m_bUnpackOperationInProgress) return false;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState) return false;
@@ -905,16 +903,15 @@ bool XGameStoreArchiveBase::initUnpack(
     pState->pContext = nullptr;
     *pState = UNPACK_STATE();
     delete pOldContext;
-    if (!guardedThis || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!isPdStructNotCanceled(pPdStruct)) return false;
 
     const bool bBound = bindUnpackSource(pState, pPdStruct);
-    if (!guardedThis || !bBound) return false;
+    if (!bBound) return false;
 
     const FT fileType = getFileType();
     QList<ENTRY> listEntries;
     qint64 nArchiveEnd = 0;
     const bool bScanned = scanArchive(&listEntries, &nArchiveEnd, pPdStruct);
-    if (!guardedThis) return false;
     if (!bScanned || (getFileType() != fileType) ||
         !isPdStructNotCanceled(pPdStruct)) {
         releaseUnpackSource(pState);
@@ -923,7 +920,7 @@ bool XGameStoreArchiveBase::initUnpack(
     }
 
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || !rangeWithin(nTotalSize, 0, nArchiveEnd)) {
+    if (!rangeWithin(nTotalSize, 0, nArchiveEnd)) {
         releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
         return false;
@@ -947,7 +944,6 @@ bool XGameStoreArchiveBase::initUnpack(
     pState->mapUnpackProperties = mapProperties;
 
     if (!validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
-        if (!guardedThis) return false;
         pState->pContext = nullptr;
         releaseUnpackSource(pState);
         delete pContext;
@@ -961,20 +957,19 @@ bool XGameStoreArchiveBase::initUnpack(
 XBinary::ARCHIVERECORD XGameStoreArchiveBase::infoCurrent(
     UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XGameStoreArchiveBase> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(
         &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed() || !pState || !pState->pContext)
         return ARCHIVERECORD();
 
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent ||
+    if (!bSourceCurrent ||
         !isPdStructNotCanceled(pPdStruct)) return ARCHIVERECORD();
 
     UNPACK_CONTEXT *pContext =
         static_cast<UNPACK_CONTEXT *>(pState->pContext);
     const qint64 nCurrentSize = getSize();
-    if (!guardedThis || (pState->nTotalSize != nCurrentSize) ||
+    if ((pState->nTotalSize != nCurrentSize) ||
         (pContext->fileType != getFileType()) ||
         (pState->nNumberOfRecords != pContext->listEntries.count()) ||
         (pState->nCurrentIndex < 0) ||
@@ -1048,19 +1043,18 @@ XBinary::ARCHIVERECORD XGameStoreArchiveBase::infoCurrent(
 bool XGameStoreArchiveBase::moveToNext(UNPACK_STATE *pState,
                                        PDSTRUCT *pPdStruct)
 {
-    QPointer<XGameStoreArchiveBase> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState || !pState->pContext)
         return false;
 
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent ||
+    if (!bSourceCurrent ||
         !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_CONTEXT *pContext =
         static_cast<UNPACK_CONTEXT *>(pState->pContext);
     const qint64 nCurrentSize = getSize();
-    if (!guardedThis || (pState->nTotalSize != nCurrentSize) ||
+    if ((pState->nTotalSize != nCurrentSize) ||
         (pContext->fileType != getFileType()) ||
         (pState->nNumberOfRecords != pContext->listEntries.count()) ||
         (pState->nCurrentIndex < 0) ||
@@ -1131,27 +1125,25 @@ XGameStoreArchiveBase::getAvailableFPARTProperties()
 
 bool XGameStoreArchiveBase::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XGameStoreArchiveBase> guardedThis(this);
     bool bResult = true;
     if (!isInternalInfoHandled()) {
-        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
-        if (!guardedThis || !bResult) return false;
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        if (!bResult) return false;
         XArchive::INTERNAL_INFO *pInfo =
             static_cast<XArchive::INTERNAL_INFO *>(
-                guardedThis->XArchive::getInternalInfo(pPdStruct));
-        if (!guardedThis || !pInfo) return false;
+                XArchive::getInternalInfo(pPdStruct));
+        if (!pInfo) return false;
         static_cast<XArchive::INTERNAL_INFO &>(
-            guardedThis->m_internalInfo) = *pInfo;
+            m_internalInfo) = *pInfo;
     }
-    return guardedThis && bResult;
+    return bResult;
 }
 
 void *XGameStoreArchiveBase::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XGameStoreArchiveBase> guardedThis(this);
-    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
-    if (!guardedThis || !bHandled) return nullptr;
-    return &guardedThis->m_internalInfo;
+    const bool bHandled = handleInternalInfo(pPdStruct);
+    if (!bHandled) return nullptr;
+    return &m_internalInfo;
 }
 
 void XGameStoreArchiveBase::setInternalInfo(void *pInternalInfo)

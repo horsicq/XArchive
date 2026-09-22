@@ -5,7 +5,6 @@
 
 #include "xopc.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -40,12 +39,11 @@ XOPC::~XOPC()
 
 QByteArray XOPC::readDeobfuscated(qint64 nZipOffset, qint64 nSize, PDSTRUCT *pPdStruct)
 {
-    QPointer<XOPC> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || (nZipOffset < 0) || (nSize < 0)) return QByteArray();
 
     QByteArray baResult = read_array_process(OPC_BANNER_SIZE + nZipOffset, nSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baResult.size() != nSize)) return QByteArray();
+    if (!guardedSource || (baResult.size() != nSize)) return QByteArray();
 
     char *pData = baResult.data();
     for (qint64 i = 0; i < nSize; i++) {
@@ -98,8 +96,7 @@ bool XOPC::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XOPC> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -107,7 +104,7 @@ bool XOPC::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nInputSize < OPC_BANNER_SIZE + OPC_EOCD_SIZE + OPC_LOCAL_SIZE) return false;
 
     const QByteArray baBanner = read_array_process(0, OPC_BANNER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baBanner.size() != OPC_BANNER_SIZE)) return false;
+    if (!guardedSource || (baBanner.size() != OPC_BANNER_SIZE)) return false;
     if (memcmp(baBanner.constData(), "OS2POINT", 8) != 0) return false;
     if (static_cast<quint8>(baBanner.at(OPC_TERMINATOR_OFFSET)) != OPC_TERMINATOR) return false;
 
@@ -124,7 +121,7 @@ bool XOPC::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     // below, is what makes the eight-byte banner safe to detect on.
     const qint64 nTailSize = qMin(context.nZipSize, OPC_EOCD_SEARCH);
     const QByteArray baTail = readDeobfuscated(context.nZipSize - nTailSize, nTailSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baTail.size() != nTailSize)) return false;
+    if (!guardedSource || (baTail.size() != nTailSize)) return false;
 
     qint64 nEocdOffset = -1;
     for (qint64 i = nTailSize - OPC_EOCD_SIZE; i >= 0; i--) {
@@ -140,7 +137,7 @@ bool XOPC::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (nEocdOffset < 0) return false;
 
     const QByteArray baEocd = readDeobfuscated(nEocdOffset, OPC_EOCD_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baEocd.size() != OPC_EOCD_SIZE)) return false;
+    if (!guardedSource || (baEocd.size() != OPC_EOCD_SIZE)) return false;
     const uchar *pEocd = reinterpret_cast<const uchar *>(baEocd.constData());
 
     const qint32 nNumberOfEntries = static_cast<qint32>(qFromLittleEndian<quint16>(pEocd + 10));
@@ -152,7 +149,7 @@ bool XOPC::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (nDirectoryOffset + nDirectorySize > nEocdOffset) return false;
 
     const QByteArray baDirectory = readDeobfuscated(nDirectoryOffset, nDirectorySize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baDirectory.size() != nDirectorySize)) return false;
+    if (!guardedSource || (baDirectory.size() != nDirectorySize)) return false;
 
     qint64 nCursor = 0;
     for (qint32 i = 0; i < nNumberOfEntries; i++) {
@@ -182,7 +179,7 @@ bool XOPC::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         nCursor += nEntrySize;
 
         const QByteArray baLocal = readDeobfuscated(nLocalOffset, OPC_LOCAL_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baLocal.size() != OPC_LOCAL_SIZE)) return false;
+        if (!guardedSource || (baLocal.size() != OPC_LOCAL_SIZE)) return false;
         const uchar *pLocal = reinterpret_cast<const uchar *>(baLocal.constData());
         if ((pLocal[0] != 'P') || (pLocal[1] != 'K') || (pLocal[2] != 3) || (pLocal[3] != 4)) return false;
 
@@ -208,12 +205,12 @@ bool XOPC::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.listMembers.isEmpty()) return false;
     context.nArchiveSize = context.nInputSize;
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XOPC::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -280,7 +277,7 @@ QString XOPC::getMIMEString()
 
 QString XOPC::getVersion()
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential() || (guardedSource->size() < OPC_BANNER_SIZE)) return QString();
     const QByteArray baBanner = read_array_process(0, OPC_BANNER_SIZE, nullptr);
     if (baBanner.size() != OPC_BANNER_SIZE) return QString();
@@ -384,11 +381,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XOPC::getDefaultUnpackProperties()
 
 bool XOPC::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XOPC> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -398,8 +394,8 @@ bool XOPC::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -413,15 +409,10 @@ bool XOPC::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

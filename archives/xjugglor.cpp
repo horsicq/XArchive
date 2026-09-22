@@ -125,8 +125,8 @@ bool inflateZlibStream(QIODevice *pSource, qint64 nDataOffset,
     z_stream stream = {};
     if (inflateInit2(&stream, 15) != Z_OK) return false;
 
-    QPointer<QIODevice> guardedSource(pSource);
-    QPointer<QIODevice> guardedOutput(pOutput);
+    QIODevice *guardedSource = pSource;
+    QIODevice *guardedOutput = pOutput;
     QByteArray baInput(64 * 1024, Qt::Uninitialized);
     QByteArray baOutput(64 * 1024, Qt::Uninitialized);
     qint64 nInputRemaining = nCompressedSize;
@@ -134,8 +134,7 @@ bool inflateZlibStream(QIODevice *pSource, qint64 nDataOffset,
     qint64 nProduced = 0;
     bool bResult = false;
 
-    while (guardedSource && guardedOutput &&
-           XBinary::isPdStructNotCanceled(pPdStruct)) {
+    while (XBinary::isPdStructNotCanceled(pPdStruct)) {
         if (stream.avail_in == 0 && nInputRemaining > 0) {
             const qint64 nRequest = qMin<qint64>(baInput.size(),
                                                  nInputRemaining);
@@ -174,14 +173,13 @@ bool inflateZlibStream(QIODevice *pSource, qint64 nDataOffset,
     }
 
     inflateEnd(&stream);
-    return bResult && guardedOutput &&
-           guardedOutput->size() == nUncompressedSize;
+    return bResult && guardedOutput->size() == nUncompressedSize;
 }
 
 class JUGGLOR_PARSE_RESULT {
 public:
-    JUGGLOR_PARSE_RESULT(const QPointer<XJugglor> &pOwner,
-                         const QPointer<QIODevice> &pDevice,
+    JUGGLOR_PARSE_RESULT(XJugglor *pOwner,
+                         QIODevice *pDevice,
                          quint64 nGeneration, qint64 nSavedPosition)
         : m_pOwner(pOwner),
           m_pDevice(pDevice),
@@ -193,7 +191,7 @@ public:
     bool operator()(bool bResult) const
     {
         if (!m_pOwner || !m_pDevice ||
-            m_pOwner->getDevice() != m_pDevice.data() ||
+            m_pOwner->getDevice() != m_pDevice ||
             m_pOwner->getDeviceGeneration() != m_nGeneration ||
             !m_pDevice->seek(m_nSavedPosition)) {
             return false;
@@ -202,8 +200,8 @@ public:
     }
 
 private:
-    QPointer<XJugglor> m_pOwner;
-    QPointer<QIODevice> m_pDevice;
+    XJugglor *m_pOwner = nullptr;
+    QIODevice *m_pDevice = nullptr;
     quint64 m_nGeneration;
     qint64 m_nSavedPosition;
 };
@@ -224,11 +222,6 @@ XJugglor::~XJugglor()
     for (UNPACK_CONTEXT *pContext : setContexts) delete pContext;
 }
 
-bool XJugglor::isDeviceReplacementAllowed() const
-{
-    return m_setContexts.isEmpty() && XArchive::isDeviceReplacementAllowed();
-}
-
 bool XJugglor::_parse(QList<FILE_ENTRY> *pEntries, qint64 *pSourceSize,
                       QString *pVersion, PDSTRUCT *pPdStruct)
 {
@@ -237,9 +230,8 @@ bool XJugglor::_parse(QList<FILE_ENTRY> *pEntries, qint64 *pSourceSize,
     if (pVersion) pVersion->clear();
     if (!isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XJugglor> guardedThis(this);
-    QPointer<QIODevice> guardedDevice(getDevice());
-    if (!guardedThis || !guardedDevice || !guardedDevice->isOpen() ||
+    QIODevice *guardedDevice = getDevice();
+    if (!guardedDevice->isOpen() ||
         !guardedDevice->isReadable() || guardedDevice->isSequential()) {
         return false;
     }
@@ -249,15 +241,15 @@ bool XJugglor::_parse(QList<FILE_ENTRY> *pEntries, qint64 *pSourceSize,
     if (nSavedPosition < 0) return false;
 
     const JUGGLOR_PARSE_RESULT restoreAndReturn(
-        guardedThis, guardedDevice, nGeneration, nSavedPosition);
+        this, guardedDevice, nGeneration, nSavedPosition);
 
-    XPE pe(guardedDevice.data());
-    if (!pe.isValid(pPdStruct) || !guardedThis || !guardedDevice || pe.is64()) {
+    XPE pe(guardedDevice);
+    if (!pe.isValid(pPdStruct) || pe.is64()) {
         return restoreAndReturn(false);
     }
     const qint64 nOverlayOffset = pe.getOverlayOffset(pPdStruct);
     const qint64 nTrailerOffset = nTotalSize - JUGGLOR_TRAILER_SIZE;
-    if (!guardedThis || !guardedDevice || nOverlayOffset <= 0 ||
+    if (nOverlayOffset <= 0 ||
         !rangeWithin(nTotalSize, nOverlayOffset,
                      JUGGLOR_HEADER_SIZE + JUGGLOR_TRAILER_SIZE) ||
         nTrailerOffset <= nOverlayOffset) {
@@ -265,7 +257,7 @@ bool XJugglor::_parse(QList<FILE_ENTRY> *pEntries, qint64 *pSourceSize,
     }
 
     QByteArray baTrailer;
-    if (!readExact(guardedDevice.data(), nTrailerOffset,
+    if (!readExact(guardedDevice, nTrailerOffset,
                    JUGGLOR_TRAILER_SIZE, &baTrailer, pPdStruct) ||
         readLe32(baTrailer.constData()) != JUGGLOR_MAGIC ||
         readLe32(baTrailer.constData() + 4) !=
@@ -307,7 +299,7 @@ bool XJugglor::_parse(QList<FILE_ENTRY> *pEntries, qint64 *pSourceSize,
             return restoreAndReturn(false);
         }
         QByteArray baHeader;
-        if (!readExact(guardedDevice.data(), nPosition, JUGGLOR_HEADER_SIZE,
+        if (!readExact(guardedDevice, nPosition, JUGGLOR_HEADER_SIZE,
                        &baHeader, pPdStruct) ||
             readLe32(baHeader.constData()) != JUGGLOR_MAGIC) {
             return restoreAndReturn(false);
@@ -338,7 +330,7 @@ bool XJugglor::_parse(QList<FILE_ENTRY> *pEntries, qint64 *pSourceSize,
         }
 
         QByteArray baZlibHeader;
-        if (!readExact(guardedDevice.data(), nDataOffset, 2, &baZlibHeader,
+        if (!readExact(guardedDevice, nDataOffset, 2, &baZlibHeader,
                        pPdStruct)) {
             return restoreAndReturn(false);
         }
@@ -376,11 +368,11 @@ bool XJugglor::_parse(QList<FILE_ENTRY> *pEntries, qint64 *pSourceSize,
         nPosition = nDataOffset + nCompressedSize;
     }
 
-    if (!guardedThis || !guardedDevice || nPosition != nTrailerOffset ||
+    if (nPosition != nTrailerOffset ||
         entries.size() != static_cast<qint32>(nMemberCount) ||
         nActualTotal != nDeclaredTotal ||
         getDeviceGeneration() != nGeneration ||
-        getDevice() != guardedDevice.data()) {
+        getDevice() != guardedDevice) {
         return restoreAndReturn(false);
     }
 
@@ -458,7 +450,7 @@ bool XJugglor::_isContextCurrent(const UNPACK_STATE *pState,
            pState->pContext == pContext && pContext->pOwnerState == pState &&
            !pState->baUnpackSourceToken.isEmpty() &&
            pState->baUnpackSourceToken == pContext->baToken &&
-           pContext->pSourceDevice.data() == getDevice() &&
+           pContext->pSourceDevice == getDevice() &&
            pContext->nDeviceGeneration == getDeviceGeneration() &&
            pState->nTotalSize == pContext->nSourceSize &&
            pState->nNumberOfRecords == pContext->listEntries.size() &&
@@ -552,12 +544,11 @@ XBinary::ARCHIVERECORD XJugglor::infoCurrent(UNPACK_STATE *pState,
 bool XJugglor::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
                              PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedOutput(pDevice);
-    if (!pState || !pState->pContext || !guardedOutput ||
-        !guardedOutput->isOpen() || !guardedOutput->isWritable() ||
+    QIODevice *guardedOutput = pDevice;
+    if (!pState || !pState->pContext || !guardedOutput->isOpen() || !guardedOutput->isWritable() ||
         guardedOutput->isSequential() ||
         (guardedOutput->openMode() & (QIODevice::Append | QIODevice::Text)) ||
-        !isResizeEnable(guardedOutput.data()) ||
+        !isResizeEnable(guardedOutput) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -565,7 +556,7 @@ bool XJugglor::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
     UNPACK_CONTEXT *pContext =
         static_cast<UNPACK_CONTEXT *>(pState->pContext);
     if (!_isContextCurrent(pState, pContext) ||
-        devicesAlias(pContext->pSourceDevice.data(), guardedOutput.data()) ||
+        devicesAlias(pContext->pSourceDevice, guardedOutput) ||
         pContext->nCurrentIndex < 0 ||
         pContext->nCurrentIndex >= pContext->listEntries.size()) {
         return false;
@@ -589,28 +580,26 @@ bool XJugglor::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
 
     QScopedPointer<QIODevice> pStage(
         createFileBuffer(entry.nUncompressedSize, pPdStruct));
-    QPointer<QIODevice> guardedStage(pStage.data());
-    if (!guardedStage || !resize(guardedStage.data(), 0) ||
+    QIODevice *guardedStage = pStage.data();
+    if (!guardedStage || !resize(guardedStage, 0) ||
         !guardedStage->seek(0)) {
         return false;
     }
 
-    QPointer<QIODevice> guardedSource(pContext->pSourceDevice.data());
+    QIODevice *guardedSource = pContext->pSourceDevice;
     if (!guardedSource) return false;
     const qint64 nSavedSourcePosition = guardedSource->pos();
     const bool bInflated = nSavedSourcePosition >= 0 &&
-        inflateZlibStream(guardedSource.data(), entry.nDataOffset,
+        inflateZlibStream(guardedSource, entry.nDataOffset,
                           entry.nCompressedSize, entry.nUncompressedSize,
-                          guardedStage.data(), pPdStruct);
-    const bool bRestored = guardedSource &&
-                           guardedSource->seek(nSavedSourcePosition);
+                          guardedStage, pPdStruct);
+    const bool bRestored = guardedSource->seek(nSavedSourcePosition);
     if (!bInflated || !bRestored || !_isContextCurrent(pState, pContext) ||
-        !guardedStage || !guardedOutput ||
-        guardedStage->size() != entry.nUncompressedSize ||
+        !guardedStage || guardedStage->size() != entry.nUncompressedSize ||
         !guardedStage->seek(0)) {
         if (guardedOutput) {
-            resize(guardedOutput.data(), 0);
-            if (guardedOutput) guardedOutput->seek(0);
+            resize(guardedOutput, 0);
+            guardedOutput->seek(0);
         }
         return false;
     }
@@ -636,12 +625,11 @@ bool XJugglor::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
         }
     }
 
-    if (!resize(guardedOutput.data(), 0) || !guardedOutput ||
-        !resize(guardedOutput.data(), entry.nUncompressedSize) ||
-        !guardedOutput || !guardedOutput->seek(0)) {
+    if (!resize(guardedOutput, 0) || !resize(guardedOutput, entry.nUncompressedSize) ||
+        !guardedOutput->seek(0)) {
         if (guardedOutput) {
-            resize(guardedOutput.data(), 0);
-            if (guardedOutput) guardedOutput->seek(0);
+            resize(guardedOutput, 0);
+            guardedOutput->seek(0);
         }
         return false;
     }
@@ -649,28 +637,27 @@ bool XJugglor::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
     QByteArray baBuffer(64 * 1024, Qt::Uninitialized);
     qint64 nPublished = 0;
     bool bPublished = true;
-    while (guardedStage && guardedOutput && !guardedStage->atEnd() &&
+    while (guardedStage && !guardedStage->atEnd() &&
            isPdStructNotCanceled(pPdStruct)) {
         const qint64 nRead = guardedStage->read(baBuffer.data(),
                                                 baBuffer.size());
         if (nRead <= 0 ||
-            safeWriteData(guardedOutput.data(), nPublished,
+            safeWriteData(guardedOutput, nPublished,
                           baBuffer.constData(), nRead, pPdStruct) != nRead) {
             bPublished = false;
             break;
         }
         nPublished += nRead;
     }
-    const bool bFinal = bPublished && guardedStage && guardedOutput &&
-        guardedStage->atEnd() &&
+    const bool bFinal = bPublished && guardedStage && guardedStage->atEnd() &&
         guardedOutput->size() == entry.nUncompressedSize &&
         nPublished == entry.nUncompressedSize &&
         _isContextCurrent(pState, pContext) &&
         isPdStructNotCanceled(pPdStruct);
     if (!bFinal) {
         if (guardedOutput) {
-            resize(guardedOutput.data(), 0);
-            if (guardedOutput) guardedOutput->seek(0);
+            resize(guardedOutput, 0);
+            guardedOutput->seek(0);
         }
         return false;
     }

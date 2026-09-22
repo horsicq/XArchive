@@ -6,7 +6,6 @@
 #include "xcreateinstallsfx.h"
 
 #include <QDateTime>
-#include <QPointer>
 #include <QSet>
 
 #include <new>
@@ -44,24 +43,22 @@ XCreateInstallSFX::~XCreateInstallSFX()
 // parseContext(), not here.
 bool XCreateInstallSFX::locateContainer(qint64 *pnContainerOffset, PDSTRUCT *pPdStruct)
 {
-    QPointer<XCreateInstallSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pnContainerOffset || !guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pnContainerOffset || guardedSource->isSequential()) return false;
 
     const qint64 nInputSize = guardedSource->size();
     if (nInputSize < CISFX_MIN_CONTAINER) return false;
 
     XPE pe(getDevice());
-    if (!pe.isValid(pPdStruct) || !guardedThis || !guardedSource) return false;
+    if (!pe.isValid(pPdStruct)) return false;
     const qint64 nContainerOffset = pe.getOverlayOffset(pPdStruct);
-    if (!guardedThis || !guardedSource) return false;
     if ((nContainerOffset <= 0) || (nContainerOffset >= nInputSize)) return false;
 
     const qint64 nContainerSize = nInputSize - nContainerOffset;
     if ((nContainerSize < CISFX_MIN_CONTAINER) || (nContainerSize > CISFX_MAX_CONTAINER)) return false;
 
     const QByteArray baHead = read_array_process(nContainerOffset, XCreateInstallDecoder::SIGNATURE_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHead.size() != XCreateInstallDecoder::SIGNATURE_SIZE)) return false;
+    if ((baHead.size() != XCreateInstallDecoder::SIGNATURE_SIZE)) return false;
     if (!XCreateInstallDecoder::checkSignature((const quint8 *)baHead.constData(), (qint64)baHead.size())) return false;
 
     *pnContainerOffset = nContainerOffset;
@@ -71,22 +68,18 @@ bool XCreateInstallSFX::locateContainer(qint64 *pnContainerOffset, PDSTRUCT *pPd
 bool XCreateInstallSFX::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
-
-    QPointer<XCreateInstallSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource) return false;
-
+    QIODevice *guardedSource = getDevice();
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
-    if (!locateContainer(&context.nContainerOffset, pPdStruct) || !guardedThis || !guardedSource) return false;
+    if (!locateContainer(&context.nContainerOffset, pPdStruct)) return false;
 
     const qint64 nPayloadSize = context.nInputSize - context.nContainerOffset;
     const QByteArray baPayload = read_array_process(context.nContainerOffset, nPayloadSize, pPdStruct);
-    if (!guardedThis || !guardedSource || ((qint64)baPayload.size() != nPayloadSize)) return false;
+    if (((qint64)baPayload.size() != nPayloadSize)) return false;
 
     qint64 nArchiveSize = 0;
     if (!XCreateInstallDecoder::walkContainer(baPayload, context.nContainerOffset, &context.listMembers, &nArchiveSize, pPdStruct)) return false;
-    if (!guardedThis || !guardedSource || context.listMembers.isEmpty()) return false;
+    if (context.listMembers.isEmpty()) return false;
 
     context.nArchiveSize = context.nContainerOffset + nArchiveSize;
     context.nRuntimeSize = context.listMembers.at(0).nUncompressedSize;
@@ -152,7 +145,7 @@ void XCreateInstallSFX::fillMemberProperties(const CONTEXT &context, qint32 nInd
 
 bool XCreateInstallSFX::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     qint64 nContainerOffset = 0;
     const bool bResult = locateContainer(&nContainerOffset, pPdStruct);
@@ -293,11 +286,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XCreateInstallSFX::getDefaultUnpackProperti
 
 bool XCreateInstallSFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XCreateInstallSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -307,8 +299,8 @@ bool XCreateInstallSFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -322,15 +314,13 @@ bool XCreateInstallSFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP,
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
             delete pContext;
             *pState = UNPACK_STATE();
             return false;
-        }
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

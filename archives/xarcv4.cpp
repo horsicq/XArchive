@@ -5,7 +5,6 @@
 
 #include "xarcv4.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -97,9 +96,8 @@ bool XARCV4::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XARCV4> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -109,8 +107,7 @@ bool XARCV4::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const QByteArray baHeader =
         read_array_process(0, ARCV4_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        baHeader.size() != ARCV4_HEADER_SIZE) {
+    if (baHeader.size() != ARCV4_HEADER_SIZE) {
         return false;
     }
     const uchar *pHeader =
@@ -143,8 +140,7 @@ bool XARCV4::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         }
         const QByteArray baChunk = read_array_process(
             nOffset, ARCV4_CHUNK_PROLOGUE_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            baChunk.size() != ARCV4_CHUNK_PROLOGUE_SIZE) {
+        if (baChunk.size() != ARCV4_CHUNK_PROLOGUE_SIZE) {
             return false;
         }
         const uchar *pChunk =
@@ -169,7 +165,7 @@ bool XARCV4::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
             context.nFirstMemberOffset =
                 context.listMembers.first().nHeaderOffset;
             *pContext = context;
-            return guardedThis && guardedSource &&
+            return guardedSource &&
                    isPdStructNotCanceled(pPdStruct);
         }
         if (memcmp(pChunk, "FILE", 4) != 0) return false;
@@ -187,7 +183,7 @@ bool XARCV4::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         }
         const QByteArray baBody =
             read_array_process(nBodyOffset, nBodySize, pPdStruct);
-        if (!guardedThis || !guardedSource || baBody.size() != nBodySize) {
+        if (baBody.size() != nBodySize) {
             return false;
         }
         const uchar *pBody =
@@ -253,8 +249,7 @@ bool XARCV4::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         }
         const QByteArray baData = read_array_process(
             nDataChunkOffset, ARCV4_DATA_HEADER_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            baData.size() != ARCV4_DATA_HEADER_SIZE) {
+        if (baData.size() != ARCV4_DATA_HEADER_SIZE) {
             return false;
         }
         const uchar *pData =
@@ -305,7 +300,7 @@ bool XARCV4::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XARCV4::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -540,9 +535,8 @@ bool XARCV4::initUnpack(UNPACK_STATE *pState,
                         const QMap<UNPACK_PROP, QVariant> &mapProperties,
                         PDSTRUCT *pPdStruct)
 {
-    QPointer<XARCV4> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
     }
@@ -550,7 +544,7 @@ bool XARCV4::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -565,9 +559,9 @@ bool XARCV4::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource ||
+    if (!parseContext(pContext, pPdStruct) ||
         pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -585,16 +579,11 @@ bool XARCV4::initUnpack(UNPACK_STATE *pState,
     pState->pContext = pContext;
 
     const bool bFinalized =
-        guardedThis->validateAndFinalizeUnpackSource(pState, pContext,
+        validateAndFinalizeUnpackSource(pState, pContext,
                                                      pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

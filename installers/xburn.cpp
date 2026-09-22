@@ -690,9 +690,8 @@ XBurn::~XBurn()
 bool XBurn::isValid(PDSTRUCT *pPdStruct)
 {
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
-    QPointer<XBurn> guardedThis(this);
-    const INTERNAL_INFO *pInfo = static_cast<const INTERNAL_INFO *>(guardedThis->getInternalInfo(pPdStruct));
-    return guardedThis && pInfo && pInfo->bIsValid;
+    const INTERNAL_INFO *pInfo = static_cast<const INTERNAL_INFO *>(getInternalInfo(pPdStruct));
+    return pInfo && pInfo->bIsValid;
 }
 
 bool XBurn::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
@@ -708,37 +707,32 @@ XBurn::INTERNAL_INFO XBurn::_getInternalInfo(PDSTRUCT *pPdStruct)
 
 bool XBurn::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XBurn> guardedThis(this);
-    const bool bAlreadyHandled = guardedThis->isInternalInfoHandled();
-    if (!guardedThis) return false;
-
+    const bool bAlreadyHandled = isInternalInfoHandled();
     if (!bAlreadyHandled) {
-        const quint64 nTransaction = guardedThis->beginInternalInfoTransaction();
+        const quint64 nTransaction = beginInternalInfoTransaction();
         if (!nTransaction) return false;
 
-        guardedThis->m_internalInfo = INTERNAL_INFO();
-        INTERNAL_INFO info = guardedThis->_getInternalInfo(pPdStruct);
-        if (!guardedThis) return false;
-        if (!guardedThis->isInternalInfoTransactionCurrent(nTransaction) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
-            guardedThis->rollbackInternalInfoTransaction(nTransaction);
+        m_internalInfo = INTERNAL_INFO();
+        INTERNAL_INFO info = _getInternalInfo(pPdStruct);
+        if (!isInternalInfoTransactionCurrent(nTransaction) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+            rollbackInternalInfoTransaction(nTransaction);
             return false;
         }
 
-        const XBinary::_MEMORY_MAP memoryMap = guardedThis->getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
-        if (!guardedThis) return false;
-        if (!guardedThis->isInternalInfoTransactionCurrent(nTransaction) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
-            guardedThis->rollbackInternalInfoTransaction(nTransaction);
+        const XBinary::_MEMORY_MAP memoryMap = getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
+        if (!isInternalInfoTransactionCurrent(nTransaction) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+            rollbackInternalInfoTransaction(nTransaction);
             return false;
         }
         info.memoryMap = memoryMap;
 
-        if (!guardedThis->isInternalInfoTransactionCurrent(nTransaction)) {
-            guardedThis->rollbackInternalInfoTransaction(nTransaction);
+        if (!isInternalInfoTransactionCurrent(nTransaction)) {
+            rollbackInternalInfoTransaction(nTransaction);
             return false;
         }
-        guardedThis->m_internalInfo = info;
-        if (!guardedThis->commitInternalInfoTransaction(nTransaction, static_cast<XBinary::INTERNAL_INFO *>(&guardedThis->m_internalInfo))) {
-            guardedThis->rollbackInternalInfoTransaction(nTransaction);
+        m_internalInfo = info;
+        if (!commitInternalInfoTransaction(nTransaction, static_cast<XBinary::INTERNAL_INFO *>(&m_internalInfo))) {
+            rollbackInternalInfoTransaction(nTransaction);
             return false;
         }
     }
@@ -748,10 +742,9 @@ bool XBurn::handleInternalInfo(PDSTRUCT *pPdStruct)
 
 void *XBurn::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XBurn> guardedThis(this);
-    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
-    if (!guardedThis || !bHandled) return nullptr;
-    return &guardedThis->m_internalInfo;
+    const bool bHandled = handleInternalInfo(pPdStruct);
+    if (!bHandled) return nullptr;
+    return &m_internalInfo;
 }
 
 void XBurn::setInternalInfo(void *pInternalInfo)
@@ -1027,8 +1020,6 @@ bool XBurn::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     QSharedPointer<UNPACK_LIFETIME_STATE> pLifetime = m_pUnpackLifetimeState;
     BurnOperationGuard operationGuard(pLifetime);
     if (!operationGuard.isAcquired()) return false;
-    QPointer<XBurn> guardedThis(this);
-
     if (pState->pContext) {
         UNPACK_CONTEXT *pOldContext = static_cast<UNPACK_CONTEXT *>(pState->pContext);
         if (!pLifetime->setContexts.contains(pOldContext) || (pOldContext->pOwnerState != pState)) return false;
@@ -1036,28 +1027,26 @@ bool XBurn::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
         pState->pContext = nullptr;
         const bool bClean = deleteUnpackContext(pOldContext);
         *pState = UNPACK_STATE();
-        if (!guardedThis || !pLifetime->bOwnerAlive || !bClean) return false;
+        if (!pLifetime->bOwnerAlive || !bClean) return false;
     }
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
     *pState = UNPACK_STATE();
     pState->mapUnpackProperties = mapProperties;
 
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource) return false;
-    XArchive *pSourceValidator = new XArchive(guardedSource.data());
+    QIODevice *guardedSource = getDevice();
+    XArchive *pSourceValidator = new XArchive(guardedSource);
     UNPACK_STATE sourceValidationState = {};
-    if (!pSourceValidator->bindUnpackSource(&sourceValidationState, pPdStruct) || !guardedThis || !guardedSource) {
+    if (!pSourceValidator->bindUnpackSource(&sourceValidationState, pPdStruct)) {
         pSourceValidator->releaseUnpackSource(&sourceValidationState);
         delete pSourceValidator;
         return false;
     }
 
-    XBurn detector(guardedSource.data(), isImage(), getModuleAddress());
+    XBurn detector(guardedSource, isImage(), getModuleAddress());
     const qint64 nTotalSize = guardedSource->size();
     const INTERNAL_INFO info = detector._detect(pPdStruct);
-    if (!guardedThis || !guardedSource || (nTotalSize < 0) || !info.bIsValid || !pSourceValidator->isUnpackSourceCurrent(&sourceValidationState, pPdStruct) ||
-        !guardedThis || !guardedSource || !pLifetime->bOwnerAlive) {
+    if ((nTotalSize < 0) || !info.bIsValid || !pSourceValidator->isUnpackSourceCurrent(&sourceValidationState, pPdStruct) || !pLifetime->bOwnerAlive) {
         pSourceValidator->releaseUnpackSource(&sourceValidationState);
         delete pSourceValidator;
         return false;
@@ -1085,9 +1074,9 @@ bool XBurn::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
 
     bool bOpen = (pContext->listContainers.size() == info.listContainers.size()) && !pContext->listContainers.isEmpty();
     for (qint32 i = 0; bOpen && (i < pContext->listContainers.size()); ++i) {
-        bOpen = burnOpenContainer(pContext->listContainers.at(i), guardedSource.data(), mapProperties, pPdStruct);
+        bOpen = burnOpenContainer(pContext->listContainers.at(i), guardedSource, mapProperties, pPdStruct);
     }
-    if (!bOpen || !guardedThis || !guardedSource || !pLifetime->bOwnerAlive || (pContext->listContainers.constFirst()->state.nNumberOfRecords < 1)) {
+    if (!bOpen || !pLifetime->bOwnerAlive || (pContext->listContainers.constFirst()->state.nNumberOfRecords < 1)) {
         deleteUnpackContext(pContext);
         return false;
     }
@@ -1095,13 +1084,13 @@ bool XBurn::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     if (!pContext->listPayloads.isEmpty()) {
         const PAYLOAD_RECORD &firstPayload = pContext->listPayloads.constFirst();
         CONTAINER_CONTEXT *pFirstContainer = burnGetContainer(pContext, firstPayload.nContainerIndex);
-        if (!burnPositionContainer(pFirstContainer, firstPayload.nInnerIndex, pPdStruct) || !guardedThis || !guardedSource || !pLifetime->bOwnerAlive) {
+        if (!burnPositionContainer(pFirstContainer, firstPayload.nInnerIndex, pPdStruct) || !pLifetime->bOwnerAlive) {
             deleteUnpackContext(pContext);
             return false;
         }
     }
 
-    if (!pContext->pSourceValidator->validateAndFinalizeUnpackSource(&pContext->sourceValidationState, pPdStruct) || !guardedThis || !guardedSource ||
+    if (!pContext->pSourceValidator->validateAndFinalizeUnpackSource(&pContext->sourceValidationState, pPdStruct) ||
         !pLifetime->bOwnerAlive) {
         deleteUnpackContext(pContext);
         return false;
@@ -1134,20 +1123,18 @@ XBinary::ARCHIVERECORD XBurn::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
     QSharedPointer<UNPACK_LIFETIME_STATE> pLifetime = m_pUnpackLifetimeState;
     BurnOperationGuard operationGuard(pLifetime);
     if (!operationGuard.isAcquired() || !XBinary::isPdStructNotCanceled(pPdStruct)) return result;
-    QPointer<XBurn> guardedThis(this);
-
     UNPACK_CONTEXT *pContext = nullptr;
     CONTAINER_CONTEXT *pContainer = nullptr;
     const PAYLOAD_RECORD *pPayload = nullptr;
     if (!burnResolveActiveRecord(this, pLifetime, pState, &pContext, &pContainer, &pPayload) ||
-        !pContext->pSourceValidator->isUnpackSourceCurrent(&pContext->sourceValidationState, pPdStruct) || !guardedThis || !pLifetime->bOwnerAlive ||
+        !pContext->pSourceValidator->isUnpackSourceCurrent(&pContext->sourceValidationState, pPdStruct) || !pLifetime->bOwnerAlive ||
         !pLifetime->setContexts.contains(pContext) || (pState->pContext != pContext)) {
         return result;
     }
 
     result = pContainer->pCab->infoCurrent(&pContainer->state, pPdStruct);
-    if (!guardedThis || !pLifetime->bOwnerAlive || !pLifetime->setContexts.contains(pContext) || (pState->pContext != pContext) ||
-        !pContext->pSourceValidator->isUnpackSourceCurrent(&pContext->sourceValidationState, pPdStruct) || !guardedThis || !pLifetime->bOwnerAlive ||
+    if (!pLifetime->bOwnerAlive || !pLifetime->setContexts.contains(pContext) || (pState->pContext != pContext) ||
+        !pContext->pSourceValidator->isUnpackSourceCurrent(&pContext->sourceValidationState, pPdStruct) || !pLifetime->bOwnerAlive ||
         !pLifetime->setContexts.contains(pContext) || (pState->pContext != pContext)) {
         return ARCHIVERECORD();
     }
@@ -1188,10 +1175,9 @@ bool XBurn::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     QSharedPointer<UNPACK_LIFETIME_STATE> pLifetime = m_pUnpackLifetimeState;
     BurnOperationGuard operationGuard(pLifetime);
     if (!operationGuard.isAcquired()) return false;
-    QPointer<XBurn> guardedThis(this);
-    QPointer<QIODevice> guardedOutput(pDevice);
-    if (!guardedOutput || !guardedOutput->isOpen() || !guardedOutput->isWritable() || guardedOutput->isSequential() || !guardedThis || !guardedOutput ||
-        (guardedOutput->openMode() & (QIODevice::Append | QIODevice::Text)) || !XBinary::isResizeEnable(guardedOutput.data()) || !guardedThis || !guardedOutput ||
+    QIODevice *guardedOutput = pDevice;
+    if (!guardedOutput || !guardedOutput->isOpen() || !guardedOutput->isWritable() || guardedOutput->isSequential() ||
+        (guardedOutput->openMode() & (QIODevice::Append | QIODevice::Text)) || !XBinary::isResizeEnable(guardedOutput) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -1200,8 +1186,8 @@ bool XBurn::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     CONTAINER_CONTEXT *pContainer = nullptr;
     const PAYLOAD_RECORD *pPayload = nullptr;
     if (!burnResolveActiveRecord(this, pLifetime, pState, &pContext, &pContainer, &pPayload) ||
-        XBinary::devicesAlias(pContext->pOuterSourceDevice.data(), guardedOutput.data()) || !guardedThis || !guardedOutput ||
-        !pContext->pSourceValidator->isUnpackSourceCurrent(&pContext->sourceValidationState, pPdStruct) || !guardedThis || !guardedOutput || !pLifetime->bOwnerAlive ||
+        XBinary::devicesAlias(pContext->pOuterSourceDevice, guardedOutput) ||
+        !pContext->pSourceValidator->isUnpackSourceCurrent(&pContext->sourceValidationState, pPdStruct) || !pLifetime->bOwnerAlive ||
         !pLifetime->setContexts.contains(pContext) || (pState->pContext != pContext)) {
         return false;
     }
@@ -1211,9 +1197,9 @@ bool XBurn::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     // XFU-015: the inner unpackCurrent performs its own entry accounting and
     // debits its production into the stage; the publish copy is not charged.
     pContainer->state.spOutputBudget = pState->spOutputBudget;
-    if (!pContainer->pCab->unpackCurrent(&pContainer->state, &stage, pPdStruct) || !guardedThis || !guardedOutput || !pLifetime->bOwnerAlive ||
+    if (!pContainer->pCab->unpackCurrent(&pContainer->state, &stage, pPdStruct) || !pLifetime->bOwnerAlive ||
         !pLifetime->setContexts.contains(pContext) || (pState->pContext != pContext) ||
-        !pContext->pSourceValidator->isUnpackSourceCurrent(&pContext->sourceValidationState, pPdStruct) || !guardedThis || !guardedOutput || !pLifetime->bOwnerAlive ||
+        !pContext->pSourceValidator->isUnpackSourceCurrent(&pContext->sourceValidationState, pPdStruct) || !pLifetime->bOwnerAlive ||
         !pLifetime->setContexts.contains(pContext) || (pState->pContext != pContext)) {
         return false;
     }
@@ -1222,16 +1208,15 @@ bool XBurn::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     QCryptographicHash::Algorithm hashAlgorithm = QCryptographicHash::Sha1;
     const bool bHashOK = pPayload->baHash.isEmpty() || (burnHashAlgorithm(pPayload->baHash, &hashAlgorithm) &&
                                                         burnHashDevice(&stage, hashAlgorithm, &baActualHash, pPdStruct) && (baActualHash == pPayload->baHash));
-    if ((stage.size() != pPayload->nFileSize) || !bHashOK || !guardedThis || !guardedOutput || !pLifetime->bOwnerAlive || !pLifetime->setContexts.contains(pContext) ||
+    if ((stage.size() != pPayload->nFileSize) || !bHashOK || !pLifetime->bOwnerAlive || !pLifetime->setContexts.contains(pContext) ||
         (pState->pContext != pContext)) {
         return false;
     }
 
-    BurnPublisher publisher(pContext->pOuterSourceDevice.data());
+    BurnPublisher publisher(pContext->pOuterSourceDevice);
     UNPACK_STATE publicationState = {};
-    if (!publisher.bindUnpackSource(&publicationState, pPdStruct) || !publisher.validateAndFinalizeUnpackSource(&publicationState, pPdStruct) || !guardedThis ||
-        !guardedOutput || !pLifetime->bOwnerAlive || !pLifetime->setContexts.contains(pContext) || (pState->pContext != pContext) ||
-        !publisher.publishUnpackOutput(&stage, guardedOutput.data(), &publicationState, pPdStruct) || !guardedThis || !guardedOutput || !pLifetime->bOwnerAlive ||
+    if (!publisher.bindUnpackSource(&publicationState, pPdStruct) || !publisher.validateAndFinalizeUnpackSource(&publicationState, pPdStruct) || !pLifetime->bOwnerAlive || !pLifetime->setContexts.contains(pContext) || (pState->pContext != pContext) ||
+        !publisher.publishUnpackOutput(&stage, guardedOutput, &publicationState, pPdStruct) || !pLifetime->bOwnerAlive ||
         !pLifetime->setContexts.contains(pContext) || (pState->pContext != pContext)) {
         return false;
     }
@@ -1246,13 +1231,11 @@ bool XBurn::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     QSharedPointer<UNPACK_LIFETIME_STATE> pLifetime = m_pUnpackLifetimeState;
     BurnOperationGuard operationGuard(pLifetime);
     if (!operationGuard.isAcquired() || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
-    QPointer<XBurn> guardedThis(this);
-
     UNPACK_CONTEXT *pContext = nullptr;
     CONTAINER_CONTEXT *pCurrentContainer = nullptr;
     const PAYLOAD_RECORD *pCurrentPayload = nullptr;
     if (!burnResolveActiveRecord(this, pLifetime, pState, &pContext, &pCurrentContainer, &pCurrentPayload) ||
-        !pContext->pSourceValidator->isUnpackSourceCurrent(&pContext->sourceValidationState, pPdStruct) || !guardedThis || !pLifetime->bOwnerAlive ||
+        !pContext->pSourceValidator->isUnpackSourceCurrent(&pContext->sourceValidationState, pPdStruct) || !pLifetime->bOwnerAlive ||
         !pLifetime->setContexts.contains(pContext) || (pState->pContext != pContext)) {
         return false;
     }
@@ -1268,9 +1251,9 @@ bool XBurn::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     }
     const PAYLOAD_RECORD &nextPayload = pContext->listPayloads.at(nNextPayload);
     CONTAINER_CONTEXT *pNextContainer = burnGetContainer(pContext, nextPayload.nContainerIndex);
-    if (!burnPositionContainer(pNextContainer, nextPayload.nInnerIndex, pPdStruct) || !guardedThis || !pLifetime->bOwnerAlive ||
+    if (!burnPositionContainer(pNextContainer, nextPayload.nInnerIndex, pPdStruct) || !pLifetime->bOwnerAlive ||
         !pLifetime->setContexts.contains(pContext) || (pState->pContext != pContext) ||
-        !pContext->pSourceValidator->isUnpackSourceCurrent(&pContext->sourceValidationState, pPdStruct) || !guardedThis || !pLifetime->bOwnerAlive ||
+        !pContext->pSourceValidator->isUnpackSourceCurrent(&pContext->sourceValidationState, pPdStruct) || !pLifetime->bOwnerAlive ||
         !pLifetime->setContexts.contains(pContext) || (pState->pContext != pContext)) {
         return false;
     }
@@ -1289,8 +1272,6 @@ bool XBurn::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     QSharedPointer<UNPACK_LIFETIME_STATE> pLifetime = m_pUnpackLifetimeState;
     BurnOperationGuard operationGuard(pLifetime);
     if (!operationGuard.isAcquired()) return false;
-    QPointer<XBurn> guardedThis(this);
-
     bool bResult = true;
     if (pState->pContext) {
         UNPACK_CONTEXT *pContext = static_cast<UNPACK_CONTEXT *>(pState->pContext);
@@ -1298,7 +1279,7 @@ bool XBurn::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         pLifetime->setContexts.remove(pContext);
         pState->pContext = nullptr;
         bResult = deleteUnpackContext(pContext);
-        if (!guardedThis || !pLifetime->bOwnerAlive) return false;
+        if (!pLifetime->bOwnerAlive) return false;
     }
     *pState = UNPACK_STATE();
     return bResult;

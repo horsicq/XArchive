@@ -28,13 +28,12 @@ XBinary *XHOG::createInstance(QIODevice *pDevice, bool bIsImage,
 bool XHOG::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
                       PDSTRUCT *pPdStruct)
 {
-    QPointer<XHOG> guardedThis(this);
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || (nTotalSize < 20) ||
+    if ((nTotalSize < 20) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
     const QByteArray baMagic = read_array_process(0, 3, pPdStruct);
-    if (!guardedThis || (baMagic.size() != 3) ||
+    if ((baMagic.size() != 3) ||
         (memcmp(baMagic.constData(), "DHF", 3) != 0)) return false;
 
     QSet<QString> stUsedFiles;
@@ -52,7 +51,7 @@ bool XHOG::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
 
         const QByteArray baHeader =
             read_array_process(nOffset, 17, pPdStruct);
-        if (!guardedThis || (baHeader.size() != 17)) return false;
+        if ((baHeader.size() != 17)) return false;
         const uchar *pHeader =
             reinterpret_cast<const uchar *>(baHeader.constData());
         const qint64 nDataSize = readLE32(pHeader + 13);

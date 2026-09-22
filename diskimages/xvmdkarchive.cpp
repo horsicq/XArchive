@@ -21,7 +21,6 @@
 #include "xvmdkarchive.h"
 
 #include <QMap>
-#include <QPointer>
 #include <QSet>
 #include <QVector>
 #include <QtEndian>
@@ -730,8 +729,7 @@ bool XVMDKArchive::parseContext(CONTEXT *pContext, bool bFull, PDSTRUCT *pPdStru
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XVMDKArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -739,11 +737,11 @@ bool XVMDKArchive::parseContext(CONTEXT *pContext, bool bFull, PDSTRUCT *pPdStru
     if (context.nInputSize < VMDK_HEADER_SIZE) return false;
 
     const QByteArray baHeader = read_array_process(0, VMDK_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != VMDK_HEADER_SIZE)) return false;
+    if (!guardedSource || (baHeader.size() != VMDK_HEADER_SIZE)) return false;
 
     SparseExtent extent(this, pPdStruct);
     if (!extent.open(baHeader, context.nInputSize)) return false;
-    if (!guardedThis || !guardedSource) return false;
+    if (!guardedSource) return false;
     context.nVersion = extent.getVersion();
     context.nCapacity = extent.getCapacity();
 
@@ -754,7 +752,7 @@ bool XVMDKArchive::parseContext(CONTEXT *pContext, bool bFull, PDSTRUCT *pPdStru
 
     QList<qint64> listStarts;
     if (!vmdkPartitions(&extent, 0, 0, false, 0, &listStarts)) return false;
-    if (!guardedThis || !guardedSource || !extent.isAlive()) return false;
+    if (!guardedSource || !extent.isAlive()) return false;
     // No partition table at all: the reference offers the whole disk to the
     // filesystem probe.
     if (listStarts.isEmpty()) listStarts.append(0);
@@ -763,7 +761,7 @@ bool XVMDKArchive::parseContext(CONTEXT *pContext, bool bFull, PDSTRUCT *pPdStru
         if (!isPdStructNotCanceled(pPdStruct)) return false;
         FatVolume volume;
         if (!fatOpen(&extent, listStarts.at(i), &volume)) continue;
-        if (!guardedThis || !guardedSource || !extent.isAlive()) return false;
+        if (!guardedSource || !extent.isAlive()) return false;
 
         QList<RANGE> listRootRanges;
         QByteArray baRoot;
@@ -776,7 +774,7 @@ bool XVMDKArchive::parseContext(CONTEXT *pContext, bool bFull, PDSTRUCT *pPdStru
             if ((nRootBytes <= 0) || (nRootBytes > VMDK_MAX_DIRECTORY_BYTES)) continue;
             baRoot = extent.read(fatSectorOffset(volume, volume.nReserved + volume.nFATs * volume.nSPF), nRootBytes);
         }
-        if (!guardedThis || !guardedSource || !extent.isAlive()) return false;
+        if (!guardedSource || !extent.isAlive()) return false;
 
         WalkContext walkContext;
         walkContext.pExtent = &extent;
@@ -785,7 +783,7 @@ bool XVMDKArchive::parseContext(CONTEXT *pContext, bool bFull, PDSTRUCT *pPdStru
         walkContext.pListMembers = &context.listMembers;
         walkContext.pPdStruct = pPdStruct;
         if (!fatWalk(&walkContext, baRoot, QString(), 0)) return false;
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
     }
 
     if (context.listMembers.isEmpty()) return false;
@@ -797,7 +795,7 @@ bool XVMDKArchive::parseContext(CONTEXT *pContext, bool bFull, PDSTRUCT *pPdStru
 
 bool XVMDKArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -953,11 +951,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XVMDKArchive::getDefaultUnpackProperties()
 
 bool XVMDKArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XVMDKArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -967,8 +964,8 @@ bool XVMDKArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVar
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, true, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, true, pPdStruct) || !guardedSource || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -981,15 +978,10 @@ bool XVMDKArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVar
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

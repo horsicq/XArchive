@@ -129,7 +129,7 @@ protected:
 
     INTERNAL_INFO _getInternalInfo(PDSTRUCT *pPdStruct);
     bool _readCommonHeader(QIODevice *pDevice, COMMON_HEADER *pHeader, PDSTRUCT *pPdStruct) const;
-    virtual bool _loadCatalog(UNPACK_CONTEXT *pContext, PDSTRUCT *pPdStruct) const;
+    virtual bool _loadCatalog(UNPACK_CONTEXT *pContext, PDSTRUCT *pPdStruct);
     bool _parseCatalog(const QByteArray &baCatalog, const COMMON_HEADER &common, QList<FILE_ENTRY> *pEntries, QList<qint32> *pVisibleIndices, PDSTRUCT *pPdStruct) const;
     bool _extractEntry(const UNPACK_CONTEXT *pContext, qint32 nEntryIndex, QIODevice *pStageDevice, UNPACK_STATE *pState, PDSTRUCT *pPdStruct) const;
 

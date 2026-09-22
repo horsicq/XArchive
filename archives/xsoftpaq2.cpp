@@ -6,7 +6,6 @@
 #include "xsoftpaq2.h"
 
 #include <QDateTime>
-#include <QPointer>
 #include <QtEndian>
 
 #include <cstring>
@@ -112,8 +111,7 @@ bool XSoftPaq2::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XSoftPaq2> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -124,7 +122,7 @@ bool XSoftPaq2::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     // executable, so the banner sits at a fixed offset.  Only then is it worth
     // hunting for the directory locator.
     const QByteArray baStub = read_array_process(0, SOFTPAQ2_PKLITE_OFFSET + SOFTPAQ2_PKLITE_BANNER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baStub.size() != SOFTPAQ2_PKLITE_OFFSET + SOFTPAQ2_PKLITE_BANNER_SIZE)) return false;
+    if (!guardedSource || (baStub.size() != SOFTPAQ2_PKLITE_OFFSET + SOFTPAQ2_PKLITE_BANNER_SIZE)) return false;
     if ((baStub.at(0) != 'M') || (baStub.at(1) != 'Z')) return false;
     if (memcmp(baStub.constData() + SOFTPAQ2_PKLITE_OFFSET, SOFTPAQ2_PKLITE_BANNER, SOFTPAQ2_PKLITE_BANNER_SIZE) != 0) return false;
 
@@ -134,12 +132,12 @@ bool XSoftPaq2::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (!isPdStructNotCanceled(pPdStruct)) return false;
         const qint64 nCandidate =
             find_array(nSearchOffset, context.nInputSize - nSearchOffset, SOFTPAQ2_LOCATOR_TAG, SOFTPAQ2_LOCATOR_TAG_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (nCandidate < 0)) break;
+        if (!guardedSource || (nCandidate < 0)) break;
         nSearchOffset = nCandidate + 1;
         if (nCandidate + SOFTPAQ2_LOCATOR_SIZE > context.nInputSize) break;
 
         const QByteArray baLocator = read_array_process(nCandidate, SOFTPAQ2_LOCATOR_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baLocator.size() != SOFTPAQ2_LOCATOR_SIZE)) return false;
+        if (!guardedSource || (baLocator.size() != SOFTPAQ2_LOCATOR_SIZE)) return false;
         const uchar *pLocator = reinterpret_cast<const uchar *>(baLocator.constData());
 
         // The locator repeats its own file offset; that is what makes a
@@ -167,7 +165,7 @@ bool XSoftPaq2::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const qint64 nTableSize = context.nInputSize - context.nDirectoryOffset;
     const QByteArray baTable = read_array_process(context.nDirectoryOffset, nTableSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baTable.size() != nTableSize)) return false;
+    if (!guardedSource || (baTable.size() != nTableSize)) return false;
     const char *pTable = baTable.constData();
 
     qint32 nIndex = 0;
@@ -234,12 +232,12 @@ bool XSoftPaq2::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     context.nArchiveSize = context.nInputSize;
     *pContext = context;
 
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XSoftPaq2::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -411,11 +409,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XSoftPaq2::getDefaultUnpackProperties()
 
 bool XSoftPaq2::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSoftPaq2> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -425,8 +422,8 @@ bool XSoftPaq2::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -440,15 +437,10 @@ bool XSoftPaq2::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

@@ -5,7 +5,6 @@
 #include "xbwcfarchive.h"
 
 #include <QDir>
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -74,16 +73,15 @@ bool XBWCFArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XBWCFArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
     if (context.nInputSize < (BWCF_FILE_HEADER_SIZE + BWCF_DESCRIPTOR_SIZE)) return false;
 
     const QByteArray baHeader = read_array_process(0, BWCF_FILE_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != BWCF_FILE_HEADER_SIZE)) return false;
+    if ((baHeader.size() != BWCF_FILE_HEADER_SIZE)) return false;
     if (baHeader.left(4) != QByteArray("BWCF", 4)) return false;
 
     context.nVersion = static_cast<quint8>(baHeader.at(4));
@@ -106,13 +104,13 @@ bool XBWCFArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (context.nVersion == 1) {
             if (!bwcfRangeWithin(context.nInputSize, nOffset, BWCF_V1_NAME_FIELD_SIZE)) return false;
             const QByteArray baName = read_array_process(nOffset, BWCF_V1_NAME_FIELD_SIZE, pPdStruct);
-            if (!guardedThis || !guardedSource || (baName.size() != BWCF_V1_NAME_FIELD_SIZE)) return false;
+            if ((baName.size() != BWCF_V1_NAME_FIELD_SIZE)) return false;
             sFileName = bwcfCString(baName);
             nOffset += BWCF_V1_NAME_FIELD_SIZE;
         } else {
             if (!bwcfRangeWithin(context.nInputSize, nOffset, BWCF_V2_TAG_SIZE)) return false;
             const QByteArray baTag = read_array_process(nOffset, BWCF_V2_TAG_SIZE, pPdStruct);
-            if (!guardedThis || !guardedSource || (baTag.size() != BWCF_V2_TAG_SIZE)) return false;
+            if ((baTag.size() != BWCF_V2_TAG_SIZE)) return false;
             if (baTag.left(4) != QByteArray("MFTS", 4)) return false;
             if (static_cast<quint8>(baTag.at(4)) != 0x02) return false;
             nOffset += BWCF_V2_TAG_SIZE;
@@ -122,7 +120,7 @@ bool XBWCFArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
             for (qint32 i = 0; i < 2; i++) {
                 if (!bwcfRangeWithin(context.nInputSize, nOffset, 1)) return false;
                 const QByteArray baLength = read_array_process(nOffset, 1, pPdStruct);
-                if (!guardedThis || !guardedSource || (baLength.size() != 1)) return false;
+                if ((baLength.size() != 1)) return false;
                 const qint64 nLength = static_cast<qint64>(static_cast<quint8>(baLength.at(0)));
                 nOffset += 1;
                 if (nLength > BWCF_MAX_NAME_SIZE) return false;
@@ -130,7 +128,7 @@ bool XBWCFArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
                 if (nLength > 0) {
                     if (!bwcfRangeWithin(context.nInputSize, nOffset, nLength)) return false;
                     const QByteArray baValue = read_array_process(nOffset, nLength, pPdStruct);
-                    if (!guardedThis || !guardedSource || (baValue.size() != nLength)) return false;
+                    if ((baValue.size() != nLength)) return false;
                     sValue = QString::fromLatin1(baValue);
                     nOffset += nLength;
                 }
@@ -144,7 +142,7 @@ bool XBWCFArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
         if (!bwcfRangeWithin(context.nInputSize, nOffset, BWCF_DESCRIPTOR_SIZE)) return false;
         const QByteArray baDescriptor = read_array_process(nOffset, BWCF_DESCRIPTOR_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baDescriptor.size() != BWCF_DESCRIPTOR_SIZE)) return false;
+        if ((baDescriptor.size() != BWCF_DESCRIPTOR_SIZE)) return false;
         const uchar *pDescriptor = reinterpret_cast<const uchar *>(baDescriptor.constData());
         nOffset += BWCF_DESCRIPTOR_SIZE;
 
@@ -162,7 +160,7 @@ bool XBWCFArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         // The block opens with a repeat of the uncompressed size; the reference
         // rejects a record whose two copies disagree, and so does this.
         const QByteArray baBlockPrefix = read_array_process(nOffset, BWCF_BLOCK_PREFIX_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baBlockPrefix.size() != BWCF_BLOCK_PREFIX_SIZE)) return false;
+        if ((baBlockPrefix.size() != BWCF_BLOCK_PREFIX_SIZE)) return false;
         const qint64 nRepeatedSize = static_cast<qint64>(static_cast<qint32>(qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(baBlockPrefix.constData()))));
         if (nRepeatedSize != nUncompressedSize) return false;
         if ((nMethod == BWCF_METHOD_STORE) && (nBlockSize != (nUncompressedSize + BWCF_BLOCK_PREFIX_SIZE))) return false;
@@ -189,12 +187,12 @@ bool XBWCFArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nArchiveSize > context.nInputSize) context.nArchiveSize = context.nInputSize;
     *pContext = context;
 
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XBWCFArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -377,11 +375,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XBWCFArchive::getDefaultUnpackProperties()
 
 bool XBWCFArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XBWCFArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -391,8 +388,8 @@ bool XBWCFArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVar
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -406,15 +403,10 @@ bool XBWCFArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVar
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

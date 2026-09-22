@@ -4,7 +4,6 @@
  */
 #include "xrompaq.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -61,23 +60,20 @@ bool XRomPaq::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext) return false;
 
-    QPointer<XRomPaq> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential() ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
-    if (!guardedThis) return false;
     // A single-part image needs the header plus the two-byte probe the worker
     // performs before the PKWARE DCL stream.
     if (context.nInputSize < ROMPAQ_HEADER_SIZE + 2) return false;
 
     const QByteArray baHeader = read_array(0, ROMPAQ_HEADER_SIZE + 2);
-    if (!guardedThis || !guardedSource ||
-        (baHeader.size() != (ROMPAQ_HEADER_SIZE + 2))) {
+    if (baHeader.size() != (ROMPAQ_HEADER_SIZE + 2)) {
         return false;
     }
     const uchar *pHeader = reinterpret_cast<const uchar *>(baHeader.constData());
@@ -163,7 +159,7 @@ bool XRomPaq::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (context.nInputSize - nDataOffset < 3) return false;
 
         const QByteArray baSelector = read_array(nDataOffset, 2);
-        if (!guardedThis || !guardedSource || (baSelector.size() != 2)) {
+        if (baSelector.size() != 2) {
             return false;
         }
         const quint8 nLiteralMode = static_cast<quint8>(baSelector.at(0));
@@ -186,12 +182,12 @@ bool XRomPaq::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     *pContext = context;
 
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return isPdStructNotCanceled(pPdStruct);
 }
 
 bool XRomPaq::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -254,16 +250,15 @@ QString XRomPaq::getFileFormatExt()
     // Compaq names the distributed file after the ROM id: the low twelve bits
     // of the id word printed as three hex digits are literally the extension
     // (id 0x0B39 -> CPQ15010.B39, id 0x3184 -> HC2490A3.184).
-    QPointer<XRomPaq> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential() ||
         (guardedSource->size() < ROMPAQ_HEADER_SIZE)) {
         return QStringLiteral("rompaq");
     }
     const qint64 nSavedPosition = guardedSource->pos();
     const QByteArray baHeader = read_array(ROMPAQ_OFFSET_ROMID, 2);
     if (guardedSource && (nSavedPosition >= 0)) guardedSource->seek(nSavedPosition);
-    if (!guardedThis || (baHeader.size() != 2)) return QStringLiteral("rompaq");
+    if (baHeader.size() != 2) return QStringLiteral("rompaq");
 
     const quint16 nRomId =
         qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(baHeader.constData()));
@@ -283,16 +278,15 @@ QString XRomPaq::getMIMEString()
 
 QString XRomPaq::getVersion()
 {
-    QPointer<XRomPaq> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential() ||
         (guardedSource->size() < ROMPAQ_HEADER_SIZE)) {
         return QString();
     }
     const qint64 nSavedPosition = guardedSource->pos();
     const QByteArray baHeader = read_array(ROMPAQ_OFFSET_VERSION, 2);
     if (guardedSource && (nSavedPosition >= 0)) guardedSource->seek(nSavedPosition);
-    if (!guardedThis || (baHeader.size() != 2)) return QString();
+    if (baHeader.size() != 2) return QString();
 
     const quint16 nVersion =
         qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(baHeader.constData()));
@@ -397,9 +391,8 @@ bool XRomPaq::initUnpack(UNPACK_STATE *pState,
                          const QMap<UNPACK_PROP, QVariant> &mapProperties,
                          PDSTRUCT *pPdStruct)
 {
-    QPointer<XRomPaq> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
     }
@@ -407,7 +400,7 @@ bool XRomPaq::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -422,8 +415,8 @@ bool XRomPaq::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct)) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -445,15 +438,10 @@ bool XRomPaq::initUnpack(UNPACK_STATE *pState,
     pState->pContext = pContext;
 
     const bool bFinalized =
-        guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+        validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

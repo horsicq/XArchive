@@ -107,7 +107,7 @@ quint32 sfCRC32(const QByteArray &data)
 
 class SETUPFACTORY_PARSE_FINISH {
 public:
-    SETUPFACTORY_PARSE_FINISH(const QPointer<QIODevice> &pSource,
+    SETUPFACTORY_PARSE_FINISH(QIODevice *pSource,
                               qint64 nSavedPosition)
         : m_pSource(pSource), m_nSavedPosition(nSavedPosition)
     {
@@ -119,13 +119,13 @@ public:
     }
 
 private:
-    QPointer<QIODevice> m_pSource;
+    QIODevice *m_pSource;
     qint64 m_nSavedPosition;
 };
 
 class SETUPFACTORY_READ_AT {
 public:
-    SETUPFACTORY_READ_AT(const QPointer<QIODevice> &pSource,
+    SETUPFACTORY_READ_AT(QIODevice *pSource,
                          qint64 nSourceSize)
         : m_pSource(pSource), m_nSourceSize(nSourceSize)
     {
@@ -143,7 +143,7 @@ public:
     }
 
 private:
-    QPointer<QIODevice> m_pSource;
+    QIODevice *m_pSource;
     qint64 m_nSourceSize;
 };
 }  // namespace
@@ -160,11 +160,6 @@ XSetupFactory::~XSetupFactory()
     for (UNPACK_CONTEXT *pContext : contexts) delete pContext;
 }
 
-bool XSetupFactory::isDeviceReplacementAllowed() const
-{
-    return m_setContexts.isEmpty();
-}
-
 bool XSetupFactory::_scanEngine(QList<ENGINE_ENTRY> *pEntries, qint64 *pnPayloadOffset, qint64 *pnSourceSize, bool *pbIs64, QString *psVersion,
                                 PDSTRUCT *pPdStruct)
 {
@@ -174,7 +169,7 @@ bool XSetupFactory::_scanEngine(QList<ENGINE_ENTRY> *pEntries, qint64 *pnPayload
     if (pbIs64) *pbIs64 = false;
     if (psVersion) psVersion->clear();
     if (!isPdStructNotCanceled(pPdStruct)) return false;
-    QPointer<QIODevice> source(getDevice());
+    QIODevice *source = getDevice();
     if (!source || !source->isOpen() || !source->isReadable() || source->isSequential()) return false;
     const qint64 sourceSize = source->size();
     const qint64 savedPosition = source->pos();
@@ -279,7 +274,7 @@ bool XSetupFactory::_buildEntries(QList<FILE_ENTRY> *pEntries, qint64 *pnSourceS
         }
     }
     if (!foundManifest) return false;
-    QPointer<QIODevice> source(getDevice());
+    QIODevice *source = getDevice();
     if (!source || (source->size() != sourceSize)) return false;
     const qint64 savedPosition = source->pos();
     if ((savedPosition < 0) || !source->seek(manifestEntry.nDataOffset)) return false;
@@ -429,7 +424,7 @@ bool XSetupFactory::_isContextCurrent(const UNPACK_STATE *pState, const UNPACK_C
 {
     return pState && pContext && m_setContexts.contains(const_cast<UNPACK_CONTEXT *>(pContext)) && (pState->pContext == pContext) &&
            (pContext->pOwnerState == pState) && !pState->baUnpackSourceToken.isEmpty() && (pState->baUnpackSourceToken == pContext->baToken) &&
-           (pContext->pSourceDevice.data() == getDevice()) && (pContext->nDeviceGeneration == getDeviceGeneration()) &&
+           (pContext->pSourceDevice == getDevice()) && (pContext->nDeviceGeneration == getDeviceGeneration()) &&
            (pState->nTotalSize == pContext->nSourceSize) && (pState->nNumberOfRecords == pContext->listEntries.size()) &&
            (pState->nCurrentIndex == pContext->nCurrentIndex) && (pState->nCurrentOffset == pContext->nCurrentOffset);
 }
@@ -492,12 +487,12 @@ bool XSetupFactory::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDST
         return false;
     }
     UNPACK_CONTEXT *context = static_cast<UNPACK_CONTEXT *>(pState->pContext);
-    if (!_isContextCurrent(pState, context) || devicesAlias(context->pSourceDevice.data(), pDevice) || (context->nCurrentIndex < 0) ||
+    if (!_isContextCurrent(pState, context) || devicesAlias(context->pSourceDevice, pDevice) || (context->nCurrentIndex < 0) ||
         (context->nCurrentIndex >= context->listEntries.size())) {
         return false;
     }
     const FILE_ENTRY entry = context->listEntries.at(context->nCurrentIndex);
-    QPointer<QIODevice> source(context->pSourceDevice);
+    QIODevice *source = context->pSourceDevice;
     const qint64 savedPosition = source ? source->pos() : -1;
     if (!source || (savedPosition < 0) || !source->seek(entry.nDataOffset)) return false;
     const QByteArray packed = source->read(entry.nPackedSize);

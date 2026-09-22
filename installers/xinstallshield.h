@@ -63,10 +63,10 @@ public:
     XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
 
 protected:
-    bool _loadCatalog(UNPACK_CONTEXT *pContext, PDSTRUCT *pPdStruct) const override;
+    bool _loadCatalog(UNPACK_CONTEXT *pContext, PDSTRUCT *pPdStruct) override;
 
 private:
-    MEDIA_LAYOUT _scanMedia(PDSTRUCT *pPdStruct) const;
+    MEDIA_LAYOUT _scanMedia(PDSTRUCT *pPdStruct);
 };
 
 #endif  // XINSTALLSHIELD_H

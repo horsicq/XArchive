@@ -22,7 +22,6 @@
 
 #include <QCryptographicHash>
 #include <QHash>
-#include <QPointer>
 #include <QSet>
 
 #include <limits>
@@ -253,8 +252,7 @@ bool XWiiU8Archive::parseImetWrapper(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext) return false;
 
-    QPointer<XWiiU8Archive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
 
     const qint64 nMagicOffset = (pContext->nWrapper == WRAPPER_IMET_SHORT)
@@ -265,7 +263,7 @@ bool XWiiU8Archive::parseImetWrapper(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     QByteArray baBlock = read_array_process(nBlockOffset, IMET_HASHED_SIZE,
                                             pPdStruct);
-    if (!guardedThis || !guardedSource ||
+    if (!guardedSource ||
         (baBlock.size() != IMET_HASHED_SIZE)) {
         return false;
     }
@@ -315,15 +313,14 @@ bool XWiiU8Archive::parseImetWrapper(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         QCryptographicHash::hash(baHashed, QCryptographicHash::Md5);
     pContext->bImetHashValid = (baComputed == baStoredDigest);
 
-    return guardedThis && guardedSource;
+    return guardedSource;
 }
 
 bool XWiiU8Archive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XWiiU8Archive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -334,7 +331,7 @@ bool XWiiU8Archive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     // the U8 magic behind it; first match wins.
     const qint64 nProbeSize = qMin(context.nInputSize, U8_PROBE_SIZE);
     const QByteArray baProbe = read_array_process(0, nProbeSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baProbe.size() != nProbeSize)) {
+    if (!guardedSource || (baProbe.size() != nProbeSize)) {
         return false;
     }
 
@@ -361,7 +358,7 @@ bool XWiiU8Archive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
             if (!u8RangeWithin(context.nInputSize, nCandidateBase, 4)) continue;
             const QByteArray baU8Magic =
                 read_array_process(nCandidateBase, 4, pPdStruct);
-            if (!guardedThis || !guardedSource) return false;
+            if (!guardedSource) return false;
             if (!u8HasMagicAt(baU8Magic, 0, U8_MAGIC)) continue;
             context.nWrapper = arrWrappers[i];
             context.nBase = nCandidateBase;
@@ -378,7 +375,7 @@ bool XWiiU8Archive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const QByteArray baHeader =
         read_array_process(context.nBase, U8_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != U8_HEADER_SIZE)) {
+    if (!guardedSource || (baHeader.size() != U8_HEADER_SIZE)) {
         return false;
     }
     const uchar *pHeader = reinterpret_cast<const uchar *>(baHeader.constData());
@@ -400,7 +397,7 @@ bool XWiiU8Archive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const QByteArray baTable =
         read_array_process(nTableOffset, nHeaderSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baTable.size() != nHeaderSize) ||
+    if (!guardedSource || (baTable.size() != nHeaderSize) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -581,7 +578,7 @@ bool XWiiU8Archive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
                (context.nWrapper == WRAPPER_IMET_LONG)) {
         // V17 / V18: the hash size field is the hard reject; everything else
         // is reported.
-        if (!parseImetWrapper(&context, pPdStruct) || !guardedThis ||
+        if (!parseImetWrapper(&context, pPdStruct) ||
             !guardedSource) {
             return false;
         }
@@ -589,12 +586,12 @@ bool XWiiU8Archive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     context.nArchiveSize = qMin(nArchiveSize, context.nInputSize);
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XWiiU8Archive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -830,8 +827,7 @@ bool XWiiU8Archive::initUnpack(UNPACK_STATE *pState,
                                const QMap<UNPACK_PROP, QVariant> &mapProperties,
                                PDSTRUCT *pPdStruct)
 {
-    QPointer<XWiiU8Archive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
@@ -840,7 +836,7 @@ bool XWiiU8Archive::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) || !guardedSource ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -855,8 +851,8 @@ bool XWiiU8Archive::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -876,16 +872,11 @@ bool XWiiU8Archive::initUnpack(UNPACK_STATE *pState,
     pState->pContext = pContext;
 
     const bool bFinalized =
-        guardedThis->validateAndFinalizeUnpackSource(pState, pContext,
+        validateAndFinalizeUnpackSource(pState, pContext,
                                                      pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

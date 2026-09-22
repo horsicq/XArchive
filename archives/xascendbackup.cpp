@@ -7,7 +7,6 @@
 
 #include "Algos/xdcldecoder.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -132,14 +131,12 @@ bool XAscendBackup::scanMemberSize(MEMBER *pMember, PDSTRUCT *pPdStruct)
 {
     if (!pMember || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XAscendBackup> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
 
     const QByteArray baPacked = read_array_process(
         pMember->nDataOffset, pMember->nCompressedSize, pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        baPacked.size() != pMember->nCompressedSize) {
+    if (baPacked.size() != pMember->nCompressedSize) {
         return false;
     }
 
@@ -170,9 +167,8 @@ bool XAscendBackup::parseContext(CONTEXT *pContext, bool bScanSizes,
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XAscendBackup> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -188,8 +184,7 @@ bool XAscendBackup::parseContext(CONTEXT *pContext, bool bScanSizes,
         }
         const QByteArray baNameLength = read_array_process(
             nOffset, ASCEND_NAME_LENGTH_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            baNameLength.size() != ASCEND_NAME_LENGTH_SIZE) {
+        if (baNameLength.size() != ASCEND_NAME_LENGTH_SIZE) {
             return false;
         }
         const qint64 nNameSize = static_cast<qint64>(
@@ -203,8 +198,7 @@ bool XAscendBackup::parseContext(CONTEXT *pContext, bool bScanSizes,
         }
         const QByteArray baHeader =
             read_array_process(nOffset, nHeaderSize, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            baHeader.size() != nHeaderSize) {
+        if (baHeader.size() != nHeaderSize) {
             return false;
         }
 
@@ -236,7 +230,7 @@ bool XAscendBackup::parseContext(CONTEXT *pContext, bool bScanSizes,
 
         const QByteArray baPrelude =
             read_array_process(member.nDataOffset, 2, pPdStruct);
-        if (!guardedThis || !guardedSource || baPrelude.size() != 2 ||
+        if (baPrelude.size() != 2 ||
             !ascendIsDclPrelude(baPrelude)) {
             return false;
         }
@@ -262,8 +256,7 @@ bool XAscendBackup::parseContext(CONTEXT *pContext, bool bScanSizes,
     // Only now, on a file that already tiles exactly with 8.3 names and DCL
     // preludes throughout, is it worth paying for a real decode.  Doing this
     // before the chain closed would run a decoder over every probed file.
-    if (!scanMemberSize(&context.listMembers.first(), pPdStruct) ||
-        !guardedThis || !guardedSource) {
+    if (!scanMemberSize(&context.listMembers.first(), pPdStruct)) {
         return false;
     }
 
@@ -275,19 +268,19 @@ bool XAscendBackup::parseContext(CONTEXT *pContext, bool bScanSizes,
             // size unknown; methodToHandleMethod() then reports it as UNKNOWN so
             // extraction refuses it instead of writing a truncated file.
             scanMemberSize(&context.listMembers[i], pPdStruct);
-            if (!guardedThis || !guardedSource) return false;
+            if (!guardedSource) return false;
         }
     }
 
     context.nArchiveSize = nOffset;
     context.nFirstMemberOffset = context.listMembers.first().nHeaderOffset;
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XAscendBackup::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, false, pPdStruct);
@@ -492,9 +485,8 @@ bool XAscendBackup::initUnpack(UNPACK_STATE *pState,
                                const QMap<UNPACK_PROP, QVariant> &mapProperties,
                                PDSTRUCT *pPdStruct)
 {
-    QPointer<XAscendBackup> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
     }
@@ -502,7 +494,7 @@ bool XAscendBackup::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -520,9 +512,8 @@ bool XAscendBackup::initUnpack(UNPACK_STATE *pState,
     }
     // bScanSizes = true: the extraction path needs the plaintext length of every
     // member, and the container does not store it.
-    if (!parseContext(pContext, true, pPdStruct) || !guardedThis ||
-        !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, true, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -538,16 +529,11 @@ bool XAscendBackup::initUnpack(UNPACK_STATE *pState,
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(
+    const bool bFinalized = validateAndFinalizeUnpackSource(
         pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

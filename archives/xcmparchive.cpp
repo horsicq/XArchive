@@ -20,7 +20,6 @@
  */
 #include "xcmparchive.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -49,16 +48,15 @@ bool XCMPArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XCMPArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
     if (context.nInputSize <= CMP_HEADER_SIZE) return false;
 
     const QByteArray baHeader = read_array_process(0, CMP_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != CMP_HEADER_SIZE)) return false;
+    if ((baHeader.size() != CMP_HEADER_SIZE)) return false;
     const uchar *pHeader = (const uchar *)baHeader.constData();
 
     if (qFromLittleEndian<quint16>(pHeader) != 0x007fU) return false;
@@ -94,7 +92,7 @@ bool XCMPArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     // rejects a container the header check already accepted.
     if ((nMethod == CMP_METHOD_LZSS) && (context.nCompressedSize >= CMP_DCL_HEADER_SIZE)) {
         const QByteArray baStream = read_array_process(CMP_HEADER_SIZE, CMP_DCL_HEADER_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
         if (baStream.size() == CMP_DCL_HEADER_SIZE) {
             const quint8 nLiteralMode = (quint8)baStream.at(0);
             const quint8 nDictionaryBits = (quint8)baStream.at(1);
@@ -111,7 +109,7 @@ bool XCMPArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XCMPArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -272,11 +270,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XCMPArchive::getDefaultUnpackProperties()
 
 bool XCMPArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XCMPArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -286,8 +283,8 @@ bool XCMPArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVari
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct)) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -300,15 +297,10 @@ bool XCMPArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVari
     pState->nNumberOfRecords = 1;
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

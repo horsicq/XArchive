@@ -29,7 +29,7 @@ public:
     };
 
     struct UNPACK_CONTEXT {
-        QPointer<QIODevice> pOuterSourceDevice;
+        QIODevice *pOuterSourceDevice = nullptr;
         quint64 nOwnerDeviceGeneration;
         UNPACK_STATE *pOwnerState = nullptr;
         SubDevice *pSubDevice;
@@ -60,19 +60,10 @@ public:
     virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
 
-protected:
-    bool isDeviceReplacementAllowed() const override
-    {
-        return (!m_pUnpackOperationState || !*m_pUnpackOperationState) && m_setUnpackContexts.isEmpty();
-    }
-
 private:
     INTERNAL_INFO _getInternalInfo(PDSTRUCT *pPdStruct);
     INTERNAL_INFO m_internalInfo;
     INTERNAL_INFO _detect(PDSTRUCT *pPdStruct);
-    QSharedPointer<bool> m_pUnpackOperationState;
-    QSharedPointer<UNPACK_DEFERRED_CLEANUP> m_pUnpackDeferredCleanup;
-    QSet<UNPACK_CONTEXT *> m_setUnpackContexts;
 };
 
 #endif  // XSEVENZIPSFX_H

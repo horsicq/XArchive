@@ -147,27 +147,26 @@ XSzddSFX::~XSzddSFX()
 bool XSzddSFX::isValid(PDSTRUCT *pPdStruct)
 {
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
-    QPointer<XSzddSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedThis || !guardedSource) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!guardedSource) return false;
 
-    XMSDOS msdos(guardedSource.data(), isImage(), getModuleAddress());
+    XMSDOS msdos(guardedSource, isImage(), getModuleAddress());
     const bool bMSDOS = msdos.isValid(pPdStruct);
-    XNE ne(guardedSource.data(), isImage(), getModuleAddress());
+    XNE ne(guardedSource, isImage(), getModuleAddress());
     const bool bNE = ne.isValid(pPdStruct);
-    XPE pe(guardedSource.data(), isImage(), getModuleAddress());
+    XPE pe(guardedSource, isImage(), getModuleAddress());
     const bool bPE = pe.isValid(pPdStruct);
-    XELF elf(guardedSource.data(), isImage(), getModuleAddress());
+    XELF elf(guardedSource, isImage(), getModuleAddress());
     const bool bELF = elf.isValid(pPdStruct);
-    XAtariST atariST(guardedSource.data(), isImage(), getModuleAddress());
+    XAtariST atariST(guardedSource, isImage(), getModuleAddress());
     const bool bAtariST = atariST.isValid(pPdStruct);
-    const bool bCOM = !bMSDOS && (XBinary::getDeviceFileSuffix(guardedSource.data()).compare(QStringLiteral("COM"), Qt::CaseInsensitive) == 0) &&
-                      XCOM::isValid(guardedSource.data(), isImage(), getModuleAddress(), pPdStruct);
-    if (!guardedThis || !guardedSource || (!bMSDOS && !bNE && !bPE && !bELF && !bAtariST && !bCOM)) return false;
+    const bool bCOM = !bMSDOS && (XBinary::getDeviceFileSuffix(guardedSource).compare(QStringLiteral("COM"), Qt::CaseInsensitive) == 0) &&
+                      XCOM::isValid(guardedSource, isImage(), getModuleAddress(), pPdStruct);
+    if (!guardedSource || (!bMSDOS && !bNE && !bPE && !bELF && !bAtariST && !bCOM)) return false;
 
     QList<SZDDSFX_ENTRY> listEntries;
-    const bool bScan = guardedThis->_scanStreams(&listEntries, pPdStruct);
-    return bScan && guardedThis && !listEntries.isEmpty();
+    const bool bScan = _scanStreams(&listEntries, pPdStruct);
+    return bScan && !listEntries.isEmpty();
 }
 
 bool XSzddSFX::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
@@ -187,15 +186,14 @@ bool XSzddSFX::_scanStreams(QList<SZDDSFX_ENTRY> *pList, PDSTRUCT *pPdStruct)
     if (!pList || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
     pList->clear();
 
-    QPointer<XSzddSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedThis || !guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!guardedSource || guardedSource->isSequential()) return false;
 
     const qint64 nTotalSize = guardedSource->size();
-    if (!guardedThis || !guardedSource || (nTotalSize < SZDD_LEGACY_HEADER_SIZE)) return false;
+    if (!guardedSource || (nTotalSize < SZDD_LEGACY_HEADER_SIZE)) return false;
     const qint64 nScanSize = qMin(nTotalSize, SZDDSFX_SCAN_LIMIT);
-    const QByteArray baData = guardedThis->read_array_process(0, nScanSize, pPdStruct);
-    if (!guardedThis || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct) || (baData.size() != nScanSize)) return false;
+    const QByteArray baData = read_array_process(0, nScanSize, pPdStruct);
+    if (!guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct) || (baData.size() != nScanSize)) return false;
 
     QList<SZDDSFX_ENTRY> listCandidates;
     const uchar *pData = reinterpret_cast<const uchar *>(baData.constData());
@@ -240,7 +238,7 @@ bool XSzddSFX::_scanStreams(QList<SZDDSFX_ENTRY> *pList, PDSTRUCT *pPdStruct)
         ++nOffset;
     }
 
-    if (!guardedThis || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct) || listCandidates.isEmpty()) return false;
+    if (!guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct) || listCandidates.isEmpty()) return false;
 
     // Apply the same conservative framing guard as XSZDD, using the next
     // accepted same-family header (or physical EOF) as the compressed bound.
@@ -253,8 +251,8 @@ bool XSzddSFX::_scanStreams(QList<SZDDSFX_ENTRY> *pList, PDSTRUCT *pPdStruct)
         qint64 nStreamSize = nEndOffset - entry.nHeaderOffset;
         const qint64 nTrimWindow = qMin<qint64>(qMax<qint64>(0, nStreamSize - 8), 4096);
         if (nTrimWindow > 0) {
-            const QByteArray baTail = guardedThis->read_array_process(nEndOffset - nTrimWindow, nTrimWindow, pPdStruct);
-            if (!guardedThis || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct) || (baTail.size() != nTrimWindow)) return false;
+            const QByteArray baTail = read_array_process(nEndOffset - nTrimWindow, nTrimWindow, pPdStruct);
+            if (!guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct) || (baTail.size() != nTrimWindow)) return false;
             qint64 nTrailingZeroes = 0;
             while ((nTrailingZeroes < baTail.size()) && (baTail.at(baTail.size() - 1 - nTrailingZeroes) == 0)) ++nTrailingZeroes;
             nStreamSize -= nTrailingZeroes;
@@ -276,8 +274,8 @@ bool XSzddSFX::_scanStreams(QList<SZDDSFX_ENTRY> *pList, PDSTRUCT *pPdStruct)
         qint64 nStreamSize = nEndOffset - entry.nHeaderOffset;
         const qint64 nTrimWindow = qMin<qint64>(qMax<qint64>(0, nStreamSize - 8), 4096);
         if (nTrimWindow > 0) {
-            const QByteArray baTail = guardedThis->read_array_process(nEndOffset - nTrimWindow, nTrimWindow, pPdStruct);
-            if (!guardedThis || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct) || (baTail.size() != nTrimWindow)) return false;
+            const QByteArray baTail = read_array_process(nEndOffset - nTrimWindow, nTrimWindow, pPdStruct);
+            if (!guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct) || (baTail.size() != nTrimWindow)) return false;
             qint64 nTrailingZeroes = 0;
             while ((nTrailingZeroes < baTail.size()) && (baTail.at(baTail.size() - 1 - nTrailingZeroes) == 0)) ++nTrailingZeroes;
             nStreamSize -= nTrailingZeroes;
@@ -285,11 +283,11 @@ bool XSzddSFX::_scanStreams(QList<SZDDSFX_ENTRY> *pList, PDSTRUCT *pPdStruct)
         entry.nStreamSize = nStreamSize;
     }
 
-    const QList<QString> listRecoveredNames = guardedThis->_recoverNames(listAccepted.count(), listAccepted.first().nHeaderOffset, pPdStruct);
-    if (!guardedThis || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    const QList<QString> listRecoveredNames = _recoverNames(listAccepted.count(), listAccepted.first().nHeaderOffset, pPdStruct);
+    if (!guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
-    QString sOuterBaseName = XBinary::getDeviceFileBaseName(guardedSource.data());
-    if (!guardedThis || !guardedSource) return false;
+    QString sOuterBaseName = XBinary::getDeviceFileBaseName(guardedSource);
+    if (!guardedSource) return false;
     if (sOuterBaseName.isEmpty()) sOuterBaseName = QStringLiteral("szdd");
 
     for (qint32 i = 0; i < listAccepted.count(); ++i) {
@@ -311,12 +309,11 @@ QList<QString> XSzddSFX::_recoverNames(qint32 nExpectedCount, qint64 nFirstHeade
     QList<QString> result;
     if ((nExpectedCount < 2) || (nFirstHeaderOffset <= 0) || !XBinary::isPdStructNotCanceled(pPdStruct)) return result;
 
-    QPointer<XSzddSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedThis || !guardedSource || (nFirstHeaderOffset > guardedSource->size()) || (nFirstHeaderOffset > SZDDSFX_SCAN_LIMIT)) return result;
+    QIODevice *guardedSource = getDevice();
+    if (!guardedSource || (nFirstHeaderOffset > guardedSource->size()) || (nFirstHeaderOffset > SZDDSFX_SCAN_LIMIT)) return result;
 
-    const QByteArray baData = guardedThis->read_array_process(0, nFirstHeaderOffset, pPdStruct);
-    if (!guardedThis || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct) || (baData.size() != nFirstHeaderOffset)) return result;
+    const QByteArray baData = read_array_process(0, nFirstHeaderOffset, pPdStruct);
+    if (!guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct) || (baData.size() != nFirstHeaderOffset)) return result;
 
     static const QRegularExpression rePacked(QStringLiteral("^[A-Za-z0-9_.-]{1,12}\\.[A-Za-z0-9]{2}_$"));
     static const QRegularExpression reExpanded(QStringLiteral("^[A-Za-z0-9_.-]{1,12}\\.[A-Za-z0-9]{3}$"));
@@ -389,7 +386,7 @@ bool XSzddSFX::_bindEntry(SZDDSFX_UNPACK_CONTEXT *pContext, qint32 nIndex, PDSTR
     if (!_releaseEntry(pContext)) return false;
 
     const SZDDSFX_ENTRY &entry = pContext->listEntries.at(nIndex);
-    SubDevice *pSubDevice = new (std::nothrow) SubDevice(pContext->pOuterSourceDevice.data(), entry.nHeaderOffset, entry.nStreamSize);
+    SubDevice *pSubDevice = new (std::nothrow) SubDevice(pContext->pOuterSourceDevice, entry.nHeaderOffset, entry.nStreamSize);
     if (!pSubDevice) return false;
     pSubDevice->setProperty("FileName", entry.sName);
     if (!pSubDevice->open(QIODevice::ReadOnly)) {
@@ -430,7 +427,6 @@ bool XSzddSFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
     QSharedPointer<bool> pOperationState = m_pSzddUnpackOperationState;
     if (!pOperationState || *pOperationState) return false;
     QScopedValueRollback<bool> operationGuard(*pOperationState, true);
-    QPointer<XSzddSFX> guardedThis(this);
 
     if (pState->pContext) {
         SZDDSFX_UNPACK_CONTEXT *pOldContext = static_cast<SZDDSFX_UNPACK_CONTEXT *>(pState->pContext);
@@ -440,21 +436,21 @@ bool XSzddSFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
         const bool bFinishOK = _releaseEntry(pOldContext);
         delete pOldContext;
         *pState = UNPACK_STATE();
-        if (!guardedThis || !bFinishOK) return false;
+        if (!bFinishOK) return false;
     }
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
     *pState = UNPACK_STATE();
     pState->mapUnpackProperties = mapProperties;
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedThis || !guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!guardedSource || guardedSource->isSequential()) return false;
 
     // Keep the established executable-carrier attribution and false-positive
     // semantics. Enumeration itself is the dedicated one-pass scan below.
-    if (!guardedThis->isValid(pPdStruct) || !guardedThis || !guardedSource) return false;
+    if (!isValid(pPdStruct) || !guardedSource) return false;
 
     QList<SZDDSFX_ENTRY> listEntries;
-    if (!guardedThis->_scanStreams(&listEntries, pPdStruct) || !guardedThis || !guardedSource || listEntries.isEmpty()) return false;
+    if (!_scanStreams(&listEntries, pPdStruct) || !guardedSource || listEntries.isEmpty()) return false;
 
     SZDDSFX_UNPACK_CONTEXT *pContext = new (std::nothrow) SZDDSFX_UNPACK_CONTEXT;
     if (!pContext) return false;
@@ -467,8 +463,8 @@ bool XSzddSFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
     pContext->innerState = UNPACK_STATE();
     pContext->mapUnpackProperties = mapProperties;
 
-    if (!guardedThis->_bindEntry(pContext, 0, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) guardedThis->_releaseEntry(pContext);
+    if (!_bindEntry(pContext, 0, pPdStruct) || !guardedSource) {
+        _releaseEntry(pContext);
         delete pContext;
         return false;
     }
@@ -489,7 +485,6 @@ XBinary::ARCHIVERECORD XSzddSFX::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPd
     QSharedPointer<bool> pOperationState = m_pSzddUnpackOperationState;
     if (!pOperationState || *pOperationState) return result;
     QScopedValueRollback<bool> operationGuard(*pOperationState, true);
-    QPointer<XSzddSFX> guardedThis(this);
     if (!pState || !pState->baUnpackSourceToken.isEmpty() || !pState->pContext || !XBinary::isPdStructNotCanceled(pPdStruct) ||
         (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords))
         return result;
@@ -502,7 +497,7 @@ XBinary::ARCHIVERECORD XSzddSFX::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPd
         return result;
 
     result = pContext->pArchive->infoCurrent(&pContext->innerState, pPdStruct);
-    if (!guardedThis || !m_setSzddUnpackContexts.contains(pContext) || (pState->pContext != pContext)) return ARCHIVERECORD();
+    if (!m_setSzddUnpackContexts.contains(pContext) || (pState->pContext != pContext)) return ARCHIVERECORD();
     result.mapProperties.insert(FPART_PROP_ORIGINALNAME, pContext->listEntries.at(pState->nCurrentIndex).sName);
     return result;
 }
@@ -512,8 +507,7 @@ bool XSzddSFX::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT 
     QSharedPointer<bool> pOperationState = m_pSzddUnpackOperationState;
     if (!pOperationState || *pOperationState) return false;
     QScopedValueRollback<bool> operationGuard(*pOperationState, true);
-    QPointer<XSzddSFX> guardedThis(this);
-    QPointer<QIODevice> guardedOutput(pDevice);
+    QIODevice *guardedOutput = pDevice;
     if (!pState || !pState->baUnpackSourceToken.isEmpty() || !pState->pContext || !guardedOutput || !XBinary::isPdStructNotCanceled(pPdStruct) ||
         (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords))
         return false;
@@ -526,8 +520,8 @@ bool XSzddSFX::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT 
         return false;
 
     pContext->innerState.spOutputBudget = pState->spOutputBudget;
-    const bool bResult = pContext->pArchive->unpackCurrent(&pContext->innerState, guardedOutput.data(), pPdStruct);
-    if (!guardedThis || !guardedOutput || !m_setSzddUnpackContexts.contains(pContext) || (pState->pContext != pContext)) return false;
+    const bool bResult = pContext->pArchive->unpackCurrent(&pContext->innerState, guardedOutput, pPdStruct);
+    if (!guardedOutput || !m_setSzddUnpackContexts.contains(pContext) || (pState->pContext != pContext)) return false;
     pState->nCurrentOffset = pContext->listEntries.at(pState->nCurrentIndex).nHeaderOffset + pContext->innerState.nCurrentOffset;
     pState->mapArchiveProperties = pContext->innerState.mapArchiveProperties;
     return bResult;
@@ -538,7 +532,6 @@ bool XSzddSFX::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     QSharedPointer<bool> pOperationState = m_pSzddUnpackOperationState;
     if (!pOperationState || *pOperationState) return false;
     QScopedValueRollback<bool> operationGuard(*pOperationState, true);
-    QPointer<XSzddSFX> guardedThis(this);
     if (!pState || !pState->baUnpackSourceToken.isEmpty() || !pState->pContext || !XBinary::isPdStructNotCanceled(pPdStruct) ||
         (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords))
         return false;
@@ -555,7 +548,7 @@ bool XSzddSFX::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         return false;
     }
 
-    if (!guardedThis->_bindEntry(pContext, pState->nCurrentIndex, pPdStruct) || !guardedThis) return false;
+    if (!_bindEntry(pContext, pState->nCurrentIndex, pPdStruct)) return false;
     pState->nCurrentOffset = pContext->listEntries.at(pState->nCurrentIndex).nHeaderOffset;
     pState->mapArchiveProperties = pContext->innerState.mapArchiveProperties;
     return true;
@@ -568,7 +561,6 @@ bool XSzddSFX::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     QSharedPointer<bool> pOperationState = m_pSzddUnpackOperationState;
     if (!pOperationState || *pOperationState) return false;
     QScopedValueRollback<bool> operationGuard(*pOperationState, true);
-    QPointer<XSzddSFX> guardedThis(this);
     bool bResult = true;
 
     if (pState->pContext) {
@@ -578,7 +570,6 @@ bool XSzddSFX::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         pState->pContext = nullptr;
         bResult = _releaseEntry(pContext);
         delete pContext;
-        if (!guardedThis) return false;
     }
 
     pState->nCurrentOffset = 0;

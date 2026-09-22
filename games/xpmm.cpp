@@ -58,16 +58,15 @@ XBinary *XPMM::createInstance(QIODevice *pDevice, bool bIsImage,
 bool XPMM::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
                       PDSTRUCT *pPdStruct)
 {
-    QPointer<XPMM> guardedThis(this);
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || (nTotalSize < PMM_HEADER_PROBE_SIZE) ||
+    if ((nTotalSize < PMM_HEADER_PROBE_SIZE) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     const QByteArray baHeader = read_array_process(
         0, PMM_HEADER_PROBE_SIZE, pPdStruct);
-    if (!guardedThis || (baHeader.size() != PMM_HEADER_PROBE_SIZE)) {
+    if ((baHeader.size() != PMM_HEADER_PROBE_SIZE)) {
         return false;
     }
     if ((memcmp(baHeader.constData(), "MTCVTS PSM 2.00", 16) != 0) ||
@@ -118,7 +117,7 @@ bool XPMM::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
 
     const QByteArray baPmaSignature = read_array_process(
         nPmaOffset, 4, pPdStruct);
-    if (!guardedThis || (baPmaSignature.size() != 4) ||
+    if ((baPmaSignature.size() != 4) ||
         (memcmp(baPmaSignature.constData(), "PLX\0", 4) != 0)) {
         return false;
     }
@@ -132,7 +131,7 @@ bool XPMM::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
         const qint64 nSectionSize = nNextOffset - nOffset;
         const QByteArray baSm8Header = read_array_process(
             nOffset, SM8_HEADER_SIZE, pPdStruct);
-        if (!guardedThis || (baSm8Header.size() != SM8_HEADER_SIZE) ||
+        if ((baSm8Header.size() != SM8_HEADER_SIZE) ||
             (memcmp(baSm8Header.constData(), "SM8\0\0\1", 6) != 0)) {
             return false;
         }

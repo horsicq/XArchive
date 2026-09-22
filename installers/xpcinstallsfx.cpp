@@ -5,7 +5,6 @@
 
 #include "xpcinstallsfx.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -67,13 +66,10 @@ XPCInstallSFX::~XPCInstallSFX()
 bool XPCInstallSFX::isHeadTagAt(qint64 nOffset, PDSTRUCT *pPdStruct)
 {
     if (nOffset < 0) return false;
-    QPointer<XPCInstallSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource) return false;
+    QIODevice *guardedSource = getDevice();
     const QByteArray baTag =
         read_array_process(nOffset, PCINSTALLSFX_HEAD_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        (baTag.size() != PCINSTALLSFX_HEAD_SIZE)) {
+    if ((baTag.size() != PCINSTALLSFX_HEAD_SIZE)) {
         return false;
     }
     return baTag == QByteArray(PCINSTALLSFX_TAG,
@@ -89,15 +85,10 @@ bool XPCInstallSFX::parseGroup(qint64 nGroupOffset, qint64 nGroupSize,
     if (nGroupSize < PCINSTALLSFX_PROLOGUE_SIZE + PCINSTALLSFX_INFO_SIZE) {
         return false;
     }
-
-    QPointer<XPCInstallSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource) return false;
-
+    QIODevice *guardedSource = getDevice();
     const QByteArray baPrologue = read_array_process(
         nGroupOffset, PCINSTALLSFX_PROLOGUE_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        (baPrologue.size() != PCINSTALLSFX_PROLOGUE_SIZE)) {
+    if ((baPrologue.size() != PCINSTALLSFX_PROLOGUE_SIZE)) {
         return false;
     }
     // The first fourteen bytes are the cross-volume link name, which is always
@@ -128,8 +119,7 @@ bool XPCInstallSFX::parseGroup(qint64 nGroupOffset, qint64 nGroupSize,
         if (nPosition > nGroupSize - PCINSTALLSFX_INFO_SIZE) return false;
         const QByteArray baInfo = read_array_process(
             nGroupOffset + nPosition, PCINSTALLSFX_INFO_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            (baInfo.size() != PCINSTALLSFX_INFO_SIZE)) {
+        if ((baInfo.size() != PCINSTALLSFX_INFO_SIZE)) {
             return false;
         }
         const uchar *pInfo =
@@ -171,7 +161,7 @@ bool XPCInstallSFX::parseGroup(qint64 nGroupOffset, qint64 nGroupSize,
         // staging blob whose first bytes happen to look like a prologue.
         const QByteArray baPrelude =
             read_array_process(entry.nDataOffset, 2, pPdStruct);
-        if (!guardedThis || !guardedSource || (baPrelude.size() != 2)) {
+        if ((baPrelude.size() != 2)) {
             return false;
         }
         const quint8 nLiteralMode = static_cast<quint8>(baPrelude.at(0));
@@ -198,11 +188,7 @@ bool XPCInstallSFX::walkRecords(CONTEXT *pContext, qint64 nStartOffset,
                                 PDSTRUCT *pPdStruct)
 {
     if (!pContext) return false;
-
-    QPointer<XPCInstallSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource) return false;
-
+    QIODevice *guardedSource = getDevice();
     const qint64 nTrailerOffset = pContext->nTrailerOffset;
     if ((nStartOffset < PCINSTALLSFX_HEAD_SIZE) ||
         (nStartOffset > nTrailerOffset - PCINSTALLSFX_RECORD_SIZE)) {
@@ -222,8 +208,7 @@ bool XPCInstallSFX::walkRecords(CONTEXT *pContext, qint64 nStartOffset,
         }
         const QByteArray baRecord = read_array_process(
             nOffset, PCINSTALLSFX_RECORD_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            (baRecord.size() != PCINSTALLSFX_RECORD_SIZE)) {
+        if ((baRecord.size() != PCINSTALLSFX_RECORD_SIZE)) {
             return false;
         }
         const uchar *pRecord =
@@ -242,7 +227,6 @@ bool XPCInstallSFX::walkRecords(CONTEXT *pContext, qint64 nStartOffset,
 
         if (!parseGroup(nPayloadOffset, nStoredSize, nOffset, sSourceName,
                         &listEntries, pPdStruct)) {
-            if (!guardedThis || !guardedSource) return false;
             // Not a member group: the setup engine consumes this record's
             // payload verbatim (SETUP.CFG, a .PIF shortcut, a spawn helper).
             if (nStoredSize > 0) {
@@ -288,10 +272,8 @@ bool XPCInstallSFX::walkRecords(CONTEXT *pContext, qint64 nStartOffset,
 bool XPCInstallSFX::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
-
-    QPointer<XPCInstallSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -305,8 +287,7 @@ bool XPCInstallSFX::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const QByteArray baTrailer = read_array_process(
         context.nTrailerOffset, PCINSTALLSFX_TRAILER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        (baTrailer.size() != PCINSTALLSFX_TRAILER_SIZE) ||
+    if ((baTrailer.size() != PCINSTALLSFX_TRAILER_SIZE) ||
         (baTrailer.left(static_cast<qint32>(PCINSTALLSFX_HEAD_SIZE)) !=
          QByteArray(PCINSTALLSFX_TAG,
                     static_cast<qint32>(sizeof(PCINSTALLSFX_TAG))))) {
@@ -320,11 +301,9 @@ bool XPCInstallSFX::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     // was appended after the final link.
     if (walkRecords(&context, nStoredFirst, pPdStruct)) {
         *pContext = context;
-        return guardedThis && guardedSource &&
+        return guardedSource &&
                isPdStructNotCanceled(pPdStruct);
     }
-    if (!guardedThis || !guardedSource) return false;
-
     // Otherwise the stored offsets are stale (the stub was rebuilt at a
     // different size and only the tag moved with the payload).  The head tag
     // is the real anchor, so look for it.  Bounded: only a file that already
@@ -337,16 +316,15 @@ bool XPCInstallSFX::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         const qint64 nFound = find_array(
             nSearch, context.nTrailerOffset - nSearch, PCINSTALLSFX_TAG,
             PCINSTALLSFX_HEAD_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (nFound < 0)) break;
+        if ((nFound < 0)) break;
         ++nCandidates;
         const qint64 nStart = nFound + PCINSTALLSFX_HEAD_SIZE;
         if ((nStart != nStoredFirst) &&
             walkRecords(&context, nStart, pPdStruct)) {
             *pContext = context;
-            return guardedThis && guardedSource &&
+            return guardedSource &&
                    isPdStructNotCanceled(pPdStruct);
         }
-        if (!guardedThis || !guardedSource) return false;
         nSearch = nFound + 1;
     }
 
@@ -355,7 +333,7 @@ bool XPCInstallSFX::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XPCInstallSFX::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -454,14 +432,10 @@ qint64 XPCInstallSFX::resolveUncompressedSize(const ENTRY &entry,
     const QHash<qint64, qint64>::const_iterator itCached =
         m_mapUncompressedSizes.constFind(entry.nDataOffset);
     if (itCached != m_mapUncompressedSizes.constEnd()) return itCached.value();
-
-    QPointer<XPCInstallSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource) return -1;
+    QIODevice *guardedSource = getDevice();
     const QByteArray baPacked =
         read_array_process(entry.nDataOffset, entry.nDataSize, pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        (baPacked.size() != entry.nDataSize)) {
+    if ((baPacked.size() != entry.nDataSize)) {
         return -1;
     }
     qint64 nConsumed = 0;
@@ -469,8 +443,7 @@ qint64 XPCInstallSFX::resolveUncompressedSize(const ENTRY &entry,
     if (!XDclDecoder::scan(
             reinterpret_cast<const uchar *>(baPacked.constData()),
             baPacked.size(), PCINSTALLSFX_MAX_RAW_SIZE, &nConsumed,
-            &nRawSize) ||
-        !guardedThis || !guardedSource) {
+            &nRawSize)) {
         return -1;
     }
     // The info block's raw-size field is blank on roughly half of the members,
@@ -640,9 +613,8 @@ bool XPCInstallSFX::initUnpack(UNPACK_STATE *pState,
                                const QMap<UNPACK_PROP, QVariant> &mapProperties,
                                PDSTRUCT *pPdStruct)
 {
-    QPointer<XPCInstallSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
     }
@@ -650,7 +622,7 @@ bool XPCInstallSFX::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -665,9 +637,9 @@ bool XPCInstallSFX::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource ||
+    if (!parseContext(pContext, pPdStruct) ||
         pContext->listEntries.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -684,16 +656,14 @@ bool XPCInstallSFX::initUnpack(UNPACK_STATE *pState,
     pState->pContext = pContext;
 
     const bool bFinalized =
-        guardedThis->validateAndFinalizeUnpackSource(pState, pContext,
+        validateAndFinalizeUnpackSource(pState, pContext,
                                                      pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
+    if (!bFinalized) {
             delete pContext;
             *pState = UNPACK_STATE();
             return false;
-        }
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

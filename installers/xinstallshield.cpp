@@ -22,7 +22,6 @@
 
 #include <QFile>
 #include <QFileInfo>
-#include <QPointer>
 #include <QtEndian>
 
 #include <limits>
@@ -115,17 +114,15 @@ XInstallShield::XInstallShield(QIODevice *pDevice, bool bIsImage, XADDR nModuleA
     Q_UNUSED(nModuleAddress)
 }
 
-XInstallShield::MEDIA_LAYOUT XInstallShield::_scanMedia(PDSTRUCT *pPdStruct) const
+XInstallShield::MEDIA_LAYOUT XInstallShield::_scanMedia(PDSTRUCT *pPdStruct)
 {
     MEDIA_LAYOUT result;
-
-    QPointer<XInstallShield> guardedThis(const_cast<XInstallShield *>(this));
-    QPointer<QIODevice> guardedDevice(guardedThis ? guardedThis->getDevice() : nullptr);
-    if (!guardedThis || !guardedDevice || !XBinary::isPdStructNotCanceled(pPdStruct)) return result;
+    QIODevice *guardedDevice = getDevice();
+    if (!guardedDevice || !XBinary::isPdStructNotCanceled(pPdStruct)) return result;
     if (!guardedDevice->isOpen() || !guardedDevice->isReadable() || guardedDevice->isSequential()) return result;
 
     const qint64 nDeviceSize = guardedDevice->size();
-    if (!guardedThis || !guardedDevice || (nDeviceSize < 0x200)) return result;
+    if (!guardedDevice || (nDeviceSize < 0x200)) return result;
     const qint64 nSavedPosition = guardedDevice->pos();
     if (nSavedPosition < 0) return result;
 
@@ -136,11 +133,11 @@ XInstallShield::MEDIA_LAYOUT XInstallShield::_scanMedia(PDSTRUCT *pPdStruct) con
     {
         if (!guardedDevice->seek(0)) return result;
         const QByteArray baDos = guardedDevice->read(0x40);
-        if (guardedThis && guardedDevice && (baDos.size() == 0x40) && (blobLE16(baDos, 0) == 0x5a4d)) {
+        if (guardedDevice && (baDos.size() == 0x40) && (blobLE16(baDos, 0) == 0x5a4d)) {
             const quint32 nPeOffset = blobLE32(baDos, 0x3c);
             if ((nPeOffset >= 0x40) && ((static_cast<qint64>(nPeOffset) + 6) <= nDeviceSize) && guardedDevice->seek(nPeOffset)) {
                 const QByteArray baPe = guardedDevice->read(6);
-                if (guardedThis && guardedDevice && (baPe.size() == 6) && (blobLE32(baPe, 0) == 0x00004550U)) {
+                if (guardedDevice && (baPe.size() == 6) && (blobLE32(baPe, 0) == 0x00004550U)) {
                     const quint16 nMachine = blobLE16(baPe, 4);
                     if (nMachine == ISHIELD_PE_MACHINE_I386) {
                         bHostValid = true;
@@ -161,7 +158,7 @@ XInstallShield::MEDIA_LAYOUT XInstallShield::_scanMedia(PDSTRUCT *pPdStruct) con
             const qint64 nChunkSize = qMin<qint64>(ISHIELD_SCAN_CHUNK, nDeviceSize - nChunkStart);
             if (!guardedDevice->seek(nChunkStart)) break;
             const QByteArray baChunk = guardedDevice->read(nChunkSize);
-            if (!guardedThis || !guardedDevice || (baChunk.size() != nChunkSize)) break;
+            if (!guardedDevice || (baChunk.size() != nChunkSize)) break;
             qint32 nSearchPos = 0;
             while (listBlobs.count() < ISHIELD_MAX_BLOBS) {
                 const qint32 nHit = baChunk.indexOf(baNeedle, nSearchPos);
@@ -169,7 +166,7 @@ XInstallShield::MEDIA_LAYOUT XInstallShield::_scanMedia(PDSTRUCT *pPdStruct) con
                 const quint64 nBlobOffset = static_cast<quint64>(nChunkStart) + static_cast<quint64>(nHit);
                 if (!guardedDevice->seek(static_cast<qint64>(nBlobOffset))) break;
                 const QByteArray baHeader = guardedDevice->read(ISHIELD_COMMON_HEADER_SIZE + ISHIELD_VOLUME_HEADER_V6_SIZE);
-                if (!guardedThis || !guardedDevice) break;
+                if (!guardedDevice) break;
                 BLOB_CANDIDATE candidate;
                 if (validateBlobHeader(baHeader, nBlobOffset, nDeviceSize, &candidate)) {
                     // A media set shares one generation; drop mismatched hits.
@@ -189,9 +186,9 @@ XInstallShield::MEDIA_LAYOUT XInstallShield::_scanMedia(PDSTRUCT *pPdStruct) con
     // reads above: re-check the guards before touching it, and treat a failed
     // cursor restoration as a failed scan (the caller's position contract
     // would otherwise be silently broken).
-    if (!guardedThis || !guardedDevice) return result;
+    if (!guardedDevice) return result;
     const bool bRestored = guardedDevice->seek(nSavedPosition);
-    if (!guardedThis || !guardedDevice || !bRestored || listBlobs.isEmpty()) return result;
+    if (!guardedDevice || !bRestored || listBlobs.isEmpty()) return result;
 
     // Blobs are already in ascending offset order; each blob extends to the
     // next blob's start (the last one to end of file).  The catalog is the
@@ -283,7 +280,7 @@ XBinary *XInstallShield::createInstance(QIODevice *pDevice, bool bIsImage, XADDR
     return new XInstallShield(pDevice, bIsImage, nModuleAddress);
 }
 
-bool XInstallShield::_loadCatalog(UNPACK_CONTEXT *pContext, PDSTRUCT *pPdStruct) const
+bool XInstallShield::_loadCatalog(UNPACK_CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext) return false;
     pContext->baCatalog.clear();
@@ -292,14 +289,12 @@ bool XInstallShield::_loadCatalog(UNPACK_CONTEXT *pContext, PDSTRUCT *pPdStruct)
     pContext->sContainerPath.clear();
     pContext->mapEmbeddedVolumes.clear();
     pContext->common = COMMON_HEADER();
-
-    QPointer<XInstallShield> guardedThis(const_cast<XInstallShield *>(this));
-    QPointer<QIODevice> guardedDevice(guardedThis ? guardedThis->getDevice() : nullptr);
-    if (!guardedThis || !guardedDevice) return false;
+    QIODevice *guardedDevice = getDevice();
+    if (!guardedDevice) return false;
 
     // The segment machinery reads volumes through file paths, so embedded
     // media requires a file-backed source device.
-    QFile *pSourceFile = dynamic_cast<QFile *>(guardedDevice.data());
+    QFile *pSourceFile = dynamic_cast<QFile *>(guardedDevice);
     const QString sContainerPath = pSourceFile ? QFileInfo(pSourceFile->fileName()).absoluteFilePath() : QString();
     if (sContainerPath.isEmpty()) {
         XBinary::setPdStructErrorString(pPdStruct, tr("InstallShield embedded media requires a file-backed source"));
@@ -307,18 +302,18 @@ bool XInstallShield::_loadCatalog(UNPACK_CONTEXT *pContext, PDSTRUCT *pPdStruct)
     }
 
     const MEDIA_LAYOUT layout = _scanMedia(pPdStruct);
-    if (!guardedThis || !guardedDevice || !layout.bIsValid) return false;
+    if (!guardedDevice || !layout.bIsValid) return false;
     if ((layout.nCatalogSize > static_cast<quint64>(ISHIELD_MAX_CATALOG_SIZE)) ||
         (layout.nCatalogSize > static_cast<quint64>((std::numeric_limits<qint32>::max)()))) {
         return false;
     }
 
     const qint64 nSavedPosition = guardedDevice->pos();
-    if (!guardedThis || !guardedDevice || (nSavedPosition < 0)) return false;
+    if (!guardedDevice || (nSavedPosition < 0)) return false;
     const bool bSeeked = guardedDevice->seek(static_cast<qint64>(layout.nCatalogOffset));
-    if (!guardedThis || !guardedDevice || !bSeeked) return false;
+    if (!guardedDevice || !bSeeked) return false;
     const QByteArray baCatalog = guardedDevice->read(static_cast<qint64>(layout.nCatalogSize));
-    if (!guardedThis || !guardedDevice) return false;
+    if (!guardedDevice) return false;
     const bool bRestored = guardedDevice->seek(nSavedPosition);
     if (!bRestored || (static_cast<quint64>(baCatalog.size()) != layout.nCatalogSize)) return false;
     if ((baCatalog.size() < ISHIELD_COMMON_HEADER_SIZE) || (blobLE32(baCatalog, 0) != ISHIELD_CAB_SIGNATURE)) return false;

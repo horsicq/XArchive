@@ -22,7 +22,6 @@
 
 #include "Algos/xvmsdatabasedecoder.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <cstring>
@@ -133,7 +132,7 @@ private:
         return true;
     }
 
-    QPointer<QIODevice> m_pDevice;
+    QIODevice *m_pDevice;
     qint64 m_nSize;
     qint64 m_nPosition;
     QByteArray m_baBuffer;
@@ -180,8 +179,7 @@ bool XVMSDataBaseArchive::parseContext(CONTEXT *pContext, bool bWalkMembers, PDS
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XVMSDataBaseArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -189,14 +187,14 @@ bool XVMSDataBaseArchive::parseContext(CONTEXT *pContext, bool bWalkMembers, PDS
     if (context.nInputSize < VMSDB_MIN_SIZE) return false;
 
     const QByteArray baMagic = read_array_process(0, VMSDB_MAGIC_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baMagic.size() != VMSDB_MAGIC_SIZE)) return false;
+    if (!guardedSource || (baMagic.size() != VMSDB_MAGIC_SIZE)) return false;
     const uchar *pMagic = (const uchar *)baMagic.constData();
     if (qFromLittleEndian<quint32>(pMagic) != 0x8074ffff) return false;
     if (qFromLittleEndian<quint32>(pMagic + 4) != 0x018080a0) return false;
     if (qFromLittleEndian<quint32>(pMagic + 8) != 0x00018101) return false;
 
     if (bWalkMembers) {
-        VmsCursor cursor(guardedSource.data(), context.nInputSize);
+        VmsCursor cursor(guardedSource, context.nInputSize);
         // The reference reader opens by discarding two bytes; the first element
         // it looks at is the 0x74 that follows them.
         if (!cursor.seek(2)) return false;
@@ -284,7 +282,7 @@ bool XVMSDataBaseArchive::parseContext(CONTEXT *pContext, bool bWalkMembers, PDS
                 }
             }
         }
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
     }
 
     *pContext = context;
@@ -294,7 +292,7 @@ bool XVMSDataBaseArchive::parseContext(CONTEXT *pContext, bool bWalkMembers, PDS
 
 bool XVMSDataBaseArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -446,11 +444,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XVMSDataBaseArchive::getDefaultUnpackProper
 
 bool XVMSDataBaseArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XVMSDataBaseArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -460,8 +457,8 @@ bool XVMSDataBaseArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PRO
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, true, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, true, pPdStruct) || !guardedSource) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -474,15 +471,10 @@ bool XVMSDataBaseArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PRO
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

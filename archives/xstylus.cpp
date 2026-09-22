@@ -8,7 +8,6 @@
 #include "Algos/xstylusdecoder.h"
 
 #include <QFileInfo>
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -59,8 +58,7 @@ bool XStylus::parseContext(CONTEXT *pContext, bool bMeasure,
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XStylus> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -69,7 +67,7 @@ bool XStylus::parseContext(CONTEXT *pContext, bool bMeasure,
 
     const QByteArray baHeader =
         read_array_process(0, STYLUS_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource ||
+    if (!guardedSource ||
         (baHeader.size() != STYLUS_HEADER_SIZE)) {
         return false;
     }
@@ -82,8 +80,8 @@ bool XStylus::parseContext(CONTEXT *pContext, bool bMeasure,
     context.nCompressedSize = context.nInputSize - STYLUS_HEADER_SIZE;
     context.nUncompressedSize = -1;
 
-    context.sFileName = XBinary::getDeviceFileBaseName(guardedSource.data());
-    if (!guardedThis || !guardedSource) return false;
+    context.sFileName = XBinary::getDeviceFileBaseName(guardedSource);
+    if (!guardedSource) return false;
     if (context.sFileName.isEmpty()) {
         context.sFileName = QStringLiteral("stylus_data");
     }
@@ -92,7 +90,7 @@ bool XStylus::parseContext(CONTEXT *pContext, bool bMeasure,
     if (bMeasure && (context.nCompressedSize <= STYLUS_MAX_MEASURE_SIZE)) {
         const QByteArray baPacked = read_array_process(
             STYLUS_HEADER_SIZE, context.nCompressedSize, pPdStruct);
-        if (!guardedThis || !guardedSource ||
+        if (!guardedSource ||
             (baPacked.size() != context.nCompressedSize)) {
             return false;
         }
@@ -109,7 +107,7 @@ bool XStylus::parseContext(CONTEXT *pContext, bool bMeasure,
 
 bool XStylus::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, false, pPdStruct);
@@ -270,8 +268,7 @@ bool XStylus::initUnpack(UNPACK_STATE *pState,
                          const QMap<UNPACK_PROP, QVariant> &mapProperties,
                          PDSTRUCT *pPdStruct)
 {
-    QPointer<XStylus> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
@@ -280,7 +277,7 @@ bool XStylus::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) || !guardedSource ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -296,9 +293,9 @@ bool XStylus::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, true, pPdStruct) || !guardedThis ||
+    if (!parseContext(pContext, true, pPdStruct) ||
         !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -313,16 +310,11 @@ bool XStylus::initUnpack(UNPACK_STATE *pState,
     pState->nNumberOfRecords = 1;
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(
+    const bool bFinalized = validateAndFinalizeUnpackSource(
         pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

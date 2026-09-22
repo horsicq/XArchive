@@ -22,9 +22,6 @@
 
 #include "Algos/xlzmadecoder.h"
 #include "subdevice.h"
-
-#include <QPointer>
-
 #include <limits>
 #include <new>
 
@@ -159,14 +156,14 @@ bool measureLzmaAloneStream(QIODevice *pDevice, qint64 nFileSize, const QByteArr
 {
     if (pnCompressedSize) *pnCompressedSize = 0;
     if (pnUncompressedSize) *pnUncompressedSize = 0;
-    QPointer<QIODevice> guardedDevice(pDevice);
+    QIODevice *guardedDevice = pDevice;
     if (!guardedDevice || !pnCompressedSize || !pnUncompressedSize || (nFileSize <= LZMA_ALONE_HEADER_SIZE) || (baProperties.size() != 5) || (nDeclaredSize < -1) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     const qint64 nPayloadSize = nFileSize - LZMA_ALONE_HEADER_SIZE;
-    SubDevice input(guardedDevice.data(), LZMA_ALONE_HEADER_SIZE, nPayloadSize);
+    SubDevice input(guardedDevice, LZMA_ALONE_HEADER_SIZE, nPayloadSize);
     if (!guardedDevice) return false;
     LzmaDiscardDevice output;
     const bool bInputOpened = input.open(QIODevice::ReadOnly);
@@ -223,12 +220,11 @@ XLZMA::~XLZMA()
 
 bool XLZMA::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<XLZMA> guardedThis(this);
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
-    const qint64 nSize = guardedThis->getSize();
-    if (!guardedThis || (nSize <= LZMA_ALONE_HEADER_SIZE)) return false;
-    const QByteArray baHeader = guardedThis->read_array_process(0, LZMA_ALONE_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    const qint64 nSize = getSize();
+    if ((nSize <= LZMA_ALONE_HEADER_SIZE)) return false;
+    const QByteArray baHeader = read_array_process(0, LZMA_ALONE_HEADER_SIZE, pPdStruct);
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
     QByteArray baProperties;
     qint64 nDeclaredSize = -1;
@@ -495,59 +491,58 @@ QMap<XBinary::UNPACK_PROP, QVariant> XLZMA::getDefaultUnpackProperties()
 
 bool XLZMA::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XLZMA> guardedThis(this);
-    if (!pState || m_bUnpackOperationInProgress || ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedThis->ownsUnpackSource(pState))) {
+    if (!pState || m_bUnpackOperationInProgress || ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState))) {
         return false;
     }
 
-    const bool bFinished = guardedThis->finishUnpack(pState, nullptr);
-    if (!guardedThis || !bFinished) return false;
+    const bool bFinished = finishUnpack(pState, nullptr);
+    if (!bFinished) return false;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
-    const bool bBound = guardedThis->bindUnpackSource(pState, pPdStruct);
-    if (!guardedThis || !bBound) {
+    const bool bBound = bindUnpackSource(pState, pPdStruct);
+    if (!bBound) {
         *pState = UNPACK_STATE();
         return false;
     }
-    QPointer<QIODevice> guardedSource(guardedThis->getDevice());
-    if (!guardedThis || !guardedSource) return failUnpackInitialization(guardedThis.data(), pState);
+    QIODevice *guardedSource = getDevice();
+    if (!guardedSource) return failUnpackInitialization(this, pState);
     const qint64 nFileSize = guardedSource->size();
-    if (!guardedThis || !guardedSource || (nFileSize <= LZMA_ALONE_HEADER_SIZE)) {
-        return failUnpackInitialization(guardedThis.data(), pState);
+    if (!guardedSource || (nFileSize <= LZMA_ALONE_HEADER_SIZE)) {
+        return failUnpackInitialization(this, pState);
     }
 
-    const QByteArray baHeader = guardedThis->read_array_process(0, LZMA_ALONE_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) {
-        return failUnpackInitialization(guardedThis.data(), pState);
+    const QByteArray baHeader = read_array_process(0, LZMA_ALONE_HEADER_SIZE, pPdStruct);
+    if (!guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return failUnpackInitialization(this, pState);
     }
     QByteArray baProperties;
     qint64 nDeclaredSize = -1;
     if (!parseLzmaAloneHeader(baHeader, &baProperties, &nDeclaredSize)) {
-        return failUnpackInitialization(guardedThis.data(), pState);
+        return failUnpackInitialization(this, pState);
     }
 
     qint64 nCompressedSize = 0;
     qint64 nUncompressedSize = 0;
     const bool bMeasured =
-        measureLzmaAloneStream(guardedSource.data(), nFileSize, baProperties, nDeclaredSize, &nCompressedSize, &nUncompressedSize, pPdStruct, &mapProperties);
-    if (!guardedThis || !guardedSource || !bMeasured || (nCompressedSize <= 0) || (nCompressedSize > (nFileSize - LZMA_ALONE_HEADER_SIZE)) || (nUncompressedSize < 0) ||
+        measureLzmaAloneStream(guardedSource, nFileSize, baProperties, nDeclaredSize, &nCompressedSize, &nUncompressedSize, pPdStruct, &mapProperties);
+    if (!guardedSource || !bMeasured || (nCompressedSize <= 0) || (nCompressedSize > (nFileSize - LZMA_ALONE_HEADER_SIZE)) || (nUncompressedSize < 0) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
-        return failUnpackInitialization(guardedThis.data(), pState);
+        return failUnpackInitialization(this, pState);
     }
-    const bool bSourceCurrent = guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !guardedSource || !bSourceCurrent) {
-        return failUnpackInitialization(guardedThis.data(), pState);
+    const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
+    if (!guardedSource || !bSourceCurrent) {
+        return failUnpackInitialization(this, pState);
     }
 
-    QString sFileName = XBinary::getDeviceFileBaseName(guardedSource.data());
-    if (!guardedThis || !guardedSource) return failUnpackInitialization(guardedThis.data(), pState);
+    QString sFileName = XBinary::getDeviceFileBaseName(guardedSource);
+    if (!guardedSource) return failUnpackInitialization(this, pState);
     if (sFileName.isEmpty()) sFileName = QStringLiteral("stream");
 
     LZMA_UNPACK_CONTEXT *pContext = new (std::nothrow) LZMA_UNPACK_CONTEXT();
-    if (!pContext) return failUnpackInitialization(guardedThis.data(), pState);
+    if (!pContext) return failUnpackInitialization(this, pState);
     pContext->nCompressedSize = nCompressedSize;
     pContext->nUncompressedSize = nUncompressedSize;
     pContext->baProperties = baProperties;
@@ -559,11 +554,10 @@ bool XLZMA::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     pState->nCurrentIndex = 0;
     pState->nNumberOfRecords = 1;
     pState->pContext = pContext;
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis) return false;
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
     if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -573,13 +567,12 @@ bool XLZMA::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
 
 XBinary::ARCHIVERECORD XLZMA::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XLZMA> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed() || !pState || !pState->pContext || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return ARCHIVERECORD();
     }
-    const bool bSourceCurrent = guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent || (pState->nCurrentIndex != 0) || (pState->nNumberOfRecords != 1) || (pState->nTotalSize <= LZMA_ALONE_HEADER_SIZE)) {
+    const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
+    if (!bSourceCurrent || (pState->nCurrentIndex != 0) || (pState->nNumberOfRecords != 1) || (pState->nTotalSize <= LZMA_ALONE_HEADER_SIZE)) {
         return ARCHIVERECORD();
     }
 
@@ -602,26 +595,23 @@ XBinary::ARCHIVERECORD XLZMA::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
 
 bool XLZMA::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    QPointer<XLZMA> guardedThis(this);
-    if (!pState || !pState->pContext || !pDevice || !guardedThis->ownsUnpackSource(pState) || (pState->nCurrentIndex != 0) || (pState->nNumberOfRecords != 1)) {
+    if (!pState || !pState->pContext || !pDevice || !ownsUnpackSource(pState) || (pState->nCurrentIndex != 0) || (pState->nNumberOfRecords != 1)) {
         return false;
     }
     const qint64 nEndOffset = LZMA_ALONE_HEADER_SIZE + static_cast<LZMA_UNPACK_CONTEXT *>(pState->pContext)->nCompressedSize;
     const bool bResult = XArchive::unpackCurrent(pState, pDevice, pPdStruct);
-    if (!guardedThis) return false;
     if (bResult) pState->nCurrentOffset = nEndOffset;
     return bResult;
 }
 
 bool XLZMA::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XLZMA> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState || !pState->pContext || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
-    const bool bSourceCurrent = guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent || (pState->nCurrentIndex != 0) || (pState->nNumberOfRecords != 1) || (pState->nTotalSize <= LZMA_ALONE_HEADER_SIZE)) {
+    const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
+    if (!bSourceCurrent || (pState->nCurrentIndex != 0) || (pState->nNumberOfRecords != 1) || (pState->nTotalSize <= LZMA_ALONE_HEADER_SIZE)) {
         return false;
     }
 
@@ -639,16 +629,14 @@ bool XLZMA::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     Q_UNUSED(pPdStruct)
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState) return false;
-    QPointer<XLZMA> guardedThis(this);
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedThis->ownsUnpackSource(pState)) {
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) {
         return false;
     }
 
     LZMA_UNPACK_CONTEXT *pContext = static_cast<LZMA_UNPACK_CONTEXT *>(pState->pContext);
-    guardedThis->releaseUnpackSource(pState);
+    releaseUnpackSource(pState);
     pState->pContext = nullptr;
     delete pContext;
-    if (!guardedThis) return false;
     *pState = UNPACK_STATE();
     return true;
 }
@@ -661,27 +649,25 @@ QList<XBinary::FPART_PROP> XLZMA::getAvailableFPARTProperties()
 
 bool XLZMA::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XLZMA> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
-        if (!guardedThis || !bResult) return false;
-        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(guardedThis->XArchive::getInternalInfo(pPdStruct));
-        if (!guardedThis || !pInfo) return false;
-        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        if (!bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        if (!pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) = *pInfo;
     }
 
-    return guardedThis && bResult;
+    return bResult;
 }
 
 void *XLZMA::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XLZMA> guardedThis(this);
-    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
-    if (!guardedThis || !bHandled) return nullptr;
+    const bool bHandled = handleInternalInfo(pPdStruct);
+    if (!bHandled) return nullptr;
 
-    return &guardedThis->m_internalInfo;
+    return &m_internalInfo;
 }
 
 void XLZMA::setInternalInfo(void *pInternalInfo)

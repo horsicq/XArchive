@@ -22,7 +22,6 @@
 
 #include "Algos/xwpkdecoder.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -87,8 +86,7 @@ bool XWPKArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XWPKArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -96,7 +94,7 @@ bool XWPKArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nInputSize < WPK_HEADER_SIZE) return false;
 
     const QByteArray baHeader = read_array_process(0, WPK_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != WPK_HEADER_SIZE)) return false;
+    if (!guardedSource || (baHeader.size() != WPK_HEADER_SIZE)) return false;
 
     const uchar *pHeader = (const uchar *)baHeader.constData();
     const quint32 nMagic = qFromLittleEndian<quint32>(pHeader);
@@ -115,7 +113,7 @@ bool XWPKArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (!wpkRangeWithin(context.nInputSize, nDirectoryOffset, nDirectorySize)) return false;
 
     const QByteArray baDirectory = read_array_process(nDirectoryOffset, nDirectorySize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baDirectory.size() != nDirectorySize)) return false;
+    if (!guardedSource || (baDirectory.size() != nDirectorySize)) return false;
 
     context.nMagic = nMagic;
     // Only the STARTING candidate; the real answer comes from resolveSorter(),
@@ -170,8 +168,7 @@ bool XWPKArchive::resolveSorter(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext) return false;
 
-    QPointer<XWPKArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
 
     // The WPK_PROBE_MEMBERS smallest method A members, ascending, by bounded
@@ -204,7 +201,7 @@ bool XWPKArchive::resolveSorter(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     for (qint32 i = 0; i < nProbeCount; ++i) {
         const MEMBER &member = pContext->listMembers.at(arrProbe[i]);
         const QByteArray baPacked = read_array_process(member.nDataOffset, member.nCompressedSize, pPdStruct);
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
         if (baPacked.size() != member.nCompressedSize) return true;
         listPacked.append(baPacked);
     }
@@ -256,7 +253,7 @@ bool XWPKArchive::resolveSorter(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XWPKArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -422,11 +419,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XWPKArchive::getDefaultUnpackProperties()
 
 bool XWPKArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XWPKArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -436,16 +432,16 @@ bool XWPKArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVari
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
     }
     // Settle the code-length sort once for the whole session; every record then
     // publishes the same, already-validated selector.
-    if (!resolveSorter(pContext, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!resolveSorter(pContext, pPdStruct) || !guardedSource) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -458,15 +454,10 @@ bool XWPKArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVari
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

@@ -6,7 +6,6 @@
 #include "xchz.h"
 
 #include <QDateTime>
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -159,9 +158,8 @@ void XCHZ::fillRecordProperties(const MEMBER &member, QMap<FPART_PROP, QVariant>
 // must precede it or the candidate is refused outright.
 bool XCHZ::walkChain(qint64 nStart, qint64 nInputSize, QList<MEMBER> *pListMembers, bool *pbTruncated, PDSTRUCT *pPdStruct)
 {
-    QPointer<XCHZ> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pListMembers || !pbTruncated || !guardedSource) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pListMembers || !pbTruncated) return false;
     pListMembers->clear();
     *pbTruncated = false;
     if ((nStart < 0) || (nStart >= nInputSize)) return false;
@@ -175,14 +173,14 @@ bool XCHZ::walkChain(qint64 nStart, qint64 nInputSize, QList<MEMBER> *pListMembe
         if (!chzRangeWithin(nInputSize, nOffset, 4)) return false;
 
         const QByteArray baTag = read_array_process(nOffset, 4, pPdStruct);
-        if (!guardedThis || !guardedSource || (baTag.size() != 4)) return false;
+        if ((baTag.size() != 4)) return false;
         const quint32 nTag = qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(baTag.constData()));
 
         if (nTag == CHZ_TAG_FILE) {
             if (!chzRangeWithin(nInputSize, nOffset, CHZ_FILE_HEADER_SIZE)) return false;
 
             const QByteArray baHeader = read_array_process(nOffset, CHZ_FILE_HEADER_SIZE, pPdStruct);
-            if (!guardedThis || !guardedSource || (baHeader.size() != CHZ_FILE_HEADER_SIZE)) return false;
+            if ((baHeader.size() != CHZ_FILE_HEADER_SIZE)) return false;
             const uchar *pHeader = reinterpret_cast<const uchar *>(baHeader.constData());
 
             const qint64 nRecordSize = static_cast<qint64>(qFromLittleEndian<qint32>(pHeader + CHZ_RECORDSIZE_OFFSET));
@@ -197,7 +195,7 @@ bool XCHZ::walkChain(qint64 nStart, qint64 nInputSize, QList<MEMBER> *pListMembe
             if (!chzRangeWithin(nInputSize, nOffset + CHZ_FILE_HEADER_SIZE, nNameLength)) return false;
 
             const QByteArray baName = read_array_process(nOffset + CHZ_FILE_HEADER_SIZE, nNameLength, pPdStruct);
-            if (!guardedThis || !guardedSource || (baName.size() != nNameLength)) return false;
+            if ((baName.size() != nNameLength)) return false;
             if (!isPlainName(baName)) return false;
 
             const qint64 nPackedSize = nRecordSize - CHZ_FILE_HEADER_SIZE - nNameLength;
@@ -234,7 +232,7 @@ bool XCHZ::walkChain(qint64 nStart, qint64 nInputSize, QList<MEMBER> *pListMembe
             if (!chzRangeWithin(nInputSize, nOffset, CHZ_DIRECTORY_HEADER_SIZE)) return false;
 
             const QByteArray baHeader = read_array_process(nOffset, CHZ_DIRECTORY_HEADER_SIZE, pPdStruct);
-            if (!guardedThis || !guardedSource || (baHeader.size() != CHZ_DIRECTORY_HEADER_SIZE)) return false;
+            if ((baHeader.size() != CHZ_DIRECTORY_HEADER_SIZE)) return false;
             const uchar *pHeader = reinterpret_cast<const uchar *>(baHeader.constData());
 
             if (pHeader[CHZ_DIRECTORY_GUARD_OFFSET] != 0) return false;
@@ -243,7 +241,7 @@ bool XCHZ::walkChain(qint64 nStart, qint64 nInputSize, QList<MEMBER> *pListMembe
             if (!chzRangeWithin(nInputSize, nOffset + CHZ_DIRECTORY_HEADER_SIZE, nNameLength)) return false;
 
             const QByteArray baName = read_array_process(nOffset + CHZ_DIRECTORY_HEADER_SIZE, nNameLength, pPdStruct);
-            if (!guardedThis || !guardedSource || (baName.size() != nNameLength)) return false;
+            if ((baName.size() != nNameLength)) return false;
             if (!isPlainName(baName)) return false;
             if (listDirectories.size() >= CHZ_MAX_DIRECTORY_DEPTH) return false;
 
@@ -275,15 +273,14 @@ bool XCHZ::walkChain(qint64 nStart, qint64 nInputSize, QList<MEMBER> *pListMembe
 // below off the large executables.
 bool XCHZ::isDosCarrier(PDSTRUCT *pPdStruct)
 {
-    QPointer<XCHZ> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
 
     const qint64 nInputSize = guardedSource->size();
     if (nInputSize < 2) return false;
 
     const QByteArray baMagic = read_array_process(0, 2, pPdStruct);
-    if (!guardedThis || !guardedSource || (baMagic.size() != 2)) return false;
+    if ((baMagic.size() != 2)) return false;
     const bool bMZ = (static_cast<quint8>(baMagic.at(0)) == 'M') && (static_cast<quint8>(baMagic.at(1)) == 'Z');
     const bool bZM = (static_cast<quint8>(baMagic.at(0)) == 'Z') && (static_cast<quint8>(baMagic.at(1)) == 'M');
     if (!bMZ && !bZM) return false;
@@ -291,7 +288,7 @@ bool XCHZ::isDosCarrier(PDSTRUCT *pPdStruct)
     if (nInputSize < 0x40) return true;
 
     const QByteArray baHeader = read_array_process(0, 0x40, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != 0x40)) return false;
+    if ((baHeader.size() != 0x40)) return false;
     const uchar *pHeader = reinterpret_cast<const uchar *>(baHeader.constData());
 
     const quint16 nRelocationOffset = qFromLittleEndian<quint16>(pHeader + 0x18);
@@ -301,7 +298,7 @@ bool XCHZ::isDosCarrier(PDSTRUCT *pPdStruct)
     if ((nNewHeader <= 0) || (nNewHeader > (nInputSize - 2))) return true;
 
     const QByteArray baNew = read_array_process(nNewHeader, 2, pPdStruct);
-    if (!guardedThis || !guardedSource || (baNew.size() != 2)) return false;
+    if ((baNew.size() != 2)) return false;
     if (baNew == QByteArray("PE", 2)) return false;
     if (baNew == QByteArray("NE", 2)) return false;
     if (baNew == QByteArray("LE", 2)) return false;
@@ -312,9 +309,8 @@ bool XCHZ::isDosCarrier(PDSTRUCT *pPdStruct)
 
 bool XCHZ::locateContainer(qint64 *pnContainerOffset, PDSTRUCT *pPdStruct)
 {
-    QPointer<XCHZ> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pnContainerOffset || !guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pnContainerOffset || guardedSource->isSequential()) return false;
 
     const qint64 nInputSize = guardedSource->size();
     if (nInputSize < (CHZ_FILE_HEADER_SIZE + 1)) return false;
@@ -327,9 +323,9 @@ bool XCHZ::locateContainer(qint64 *pnContainerOffset, PDSTRUCT *pPdStruct)
         *pnContainerOffset = 0;
         return true;
     }
-    if (!guardedThis || !guardedSource) return false;
+    if (!guardedSource) return false;
 
-    if (!isDosCarrier(pPdStruct) || !guardedThis || !guardedSource) return false;
+    if (!isDosCarrier(pPdStruct)) return false;
 
     char szTag[3] = {};
     szTag[0] = 'S';
@@ -342,14 +338,14 @@ bool XCHZ::locateContainer(qint64 *pnContainerOffset, PDSTRUCT *pPdStruct)
         if (nSearchOffset >= nInputSize) break;
 
         const qint64 nCandidate = find_array(nSearchOffset, nInputSize - nSearchOffset, szTag, 3, pPdStruct);
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
         if (nCandidate <= 0) break;
 
         if (walkChain(nCandidate, nInputSize, &listMembers, &bTruncated, pPdStruct)) {
             *pnContainerOffset = nCandidate;
             return true;
         }
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
 
         nSearchOffset = nCandidate + 1;
     }
@@ -361,15 +357,14 @@ bool XCHZ::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XCHZ> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
 
-    if (!locateContainer(&context.nContainerOffset, pPdStruct) || !guardedThis || !guardedSource) return false;
-    if (!walkChain(context.nContainerOffset, context.nInputSize, &context.listMembers, &context.bTruncated, pPdStruct) || !guardedThis || !guardedSource) {
+    if (!locateContainer(&context.nContainerOffset, pPdStruct)) return false;
+    if (!walkChain(context.nContainerOffset, context.nInputSize, &context.listMembers, &context.bTruncated, pPdStruct)) {
         return false;
     }
 
@@ -390,7 +385,7 @@ bool XCHZ::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XCHZ::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     qint64 nContainerOffset = 0;
     const bool bResult = locateContainer(&nContainerOffset, pPdStruct);
@@ -445,7 +440,7 @@ QString XCHZ::getArch()
 // self-extractor is an executable and has to say so.
 QString XCHZ::getFileFormatExt()
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (guardedSource && !guardedSource->isSequential() && (guardedSource->size() >= 4)) {
         const QByteArray baTag = read_array_process(0, 4, nullptr);
         if (baTag.size() == 4) {
@@ -473,9 +468,8 @@ QString XCHZ::getMIMEString()
 // signs itself, so report that and nothing when there is no stub.
 QString XCHZ::getVersion()
 {
-    QPointer<XCHZ> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return QString();
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return QString();
 
     const qint64 nInputSize = guardedSource->size();
     qint64 nScanSize = nInputSize;
@@ -483,7 +477,7 @@ QString XCHZ::getVersion()
     if (nScanSize <= 0) return QString();
 
     const QByteArray baHead = read_array_process(0, nScanSize, nullptr);
-    if (!guardedThis || !guardedSource) return QString();
+    if (!guardedSource) return QString();
 
     const qint32 nFound = baHead.indexOf(QByteArray("ChSFX (small) v", 15));
     if (nFound < 0) return QString();
@@ -598,11 +592,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XCHZ::getDefaultUnpackProperties()
 
 bool XCHZ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XCHZ> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -612,8 +605,8 @@ bool XCHZ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -631,15 +624,10 @@ bool XCHZ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

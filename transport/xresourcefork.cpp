@@ -79,14 +79,13 @@ XBinary *XResourceFork::createInstance(QIODevice *pDevice, bool bIsImage,
 bool XResourceFork::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
                                PDSTRUCT *pPdStruct)
 {
-    QPointer<XResourceFork> guardedThis(this);
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || (nTotalSize < 44) ||
+    if ((nTotalSize < 44) ||
         !XBinary::isPdStructNotCanceled(pPdStruct))
         return false;
 
     const QByteArray baHeader = read_array_process(0, 16, pPdStruct);
-    if (!guardedThis || (baHeader.size() != 16))
+    if ((baHeader.size() != 16))
         return false;
     const uchar *pHeader =
         reinterpret_cast<const uchar *>(baHeader.constData());
@@ -104,7 +103,7 @@ bool XResourceFork::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
 
     const QByteArray baMap =
         read_array_process(nMapOffset, nMapSize, pPdStruct);
-    if (!guardedThis || (baMap.size() != nMapSize))
+    if ((baMap.size() != nMapSize))
         return false;
     const uchar *pMap = reinterpret_cast<const uchar *>(baMap.constData());
 
@@ -211,7 +210,7 @@ bool XResourceFork::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
                 return false;
             const QByteArray baResourceLength = read_array_process(
                 nDataOffset + nRelativeDataOffset, 4, pPdStruct);
-            if (!guardedThis || (baResourceLength.size() != 4))
+            if ((baResourceLength.size() != 4))
                 return false;
             const qint64 nResourceSize = qFromBigEndian<quint32>(
                 reinterpret_cast<const uchar *>(baResourceLength.constData()));

@@ -20,7 +20,6 @@
  */
 #include "xnerodiscimage.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <cstring>
@@ -107,8 +106,7 @@ XNeroDiscImage::~XNeroDiscImage()
 bool XNeroDiscImage::describeTrack(TRACK *pTrack, qint64 nOffset, qint64 nSize, qint32 nSectorSize, qint32 nModeCode, qint64 nChunkListOffset,
                                    PDSTRUCT *pPdStruct)
 {
-    QPointer<XNeroDiscImage> guardedThis(this);
-    if (!pTrack || !guardedThis) return false;
+    if (!pTrack) return false;
     if ((nOffset < 0) || (nSize <= 0) || (nOffset + nSize > nChunkListOffset)) return false;
     if ((nSectorSize != 2048) && (nSectorSize != 2336) && (nSectorSize != 2352) && (nSectorSize != 2448)) return false;
     if ((nSize % nSectorSize) != 0) return false;
@@ -129,7 +127,7 @@ bool XNeroDiscImage::describeTrack(TRACK *pTrack, qint64 nOffset, qint64 nSize, 
         track.bAudio = true;
     } else {
         const QByteArray baFirst = read_array_process(nOffset, 16, pPdStruct);
-        if (!guardedThis || (baFirst.size() != 16)) return false;
+        if ((baFirst.size() != 16)) return false;
         if (memcmp(baFirst.constData(), NRG_SYNC, 12) != 0) {
             // A raw track without the ECMA-130 sync is audio only when the
             // table does not claim it as data; a data mode code over
@@ -163,19 +161,18 @@ bool XNeroDiscImage::describeTrack(TRACK *pTrack, qint64 nOffset, qint64 nSize, 
 
 bool XNeroDiscImage::parseImage(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
-    QPointer<XNeroDiscImage> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pContext || !guardedThis || !guardedSource || !guardedSource->isOpen() || !guardedSource->isReadable() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pContext || !guardedSource || !guardedSource->isOpen() || !guardedSource->isReadable() ||
         guardedSource->isSequential() || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     CONTEXT context = {};
     context.nFileSize = getSize();
-    if (!guardedThis || !guardedSource || (context.nFileSize < NRG_FOOTER_V2_SIZE + NRG_CHUNK_HEADER_SIZE + NRG_USER_SECTOR)) return false;
+    if (!guardedSource || (context.nFileSize < NRG_FOOTER_V2_SIZE + NRG_CHUNK_HEADER_SIZE + NRG_USER_SECTOR)) return false;
 
     const QByteArray baFooter = read_array_process(context.nFileSize - NRG_FOOTER_V2_SIZE, NRG_FOOTER_V2_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baFooter.size() != NRG_FOOTER_V2_SIZE)) return false;
+    if (!guardedSource || (baFooter.size() != NRG_FOOTER_V2_SIZE)) return false;
 
     qint64 nFooterOffset = 0;
     if (baFooter.mid(4, 4) == QByteArray("NERO", 4)) {
@@ -200,7 +197,7 @@ bool XNeroDiscImage::parseImage(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     for (qint32 nChunk = 0; (nChunk < NRG_MAX_CHUNKS) && !bEnd; ++nChunk) {
         if (!XBinary::isPdStructNotCanceled(pPdStruct) || (nPosition + NRG_CHUNK_HEADER_SIZE > nFooterOffset)) return false;
         const QByteArray baChunkHeader = read_array_process(nPosition, NRG_CHUNK_HEADER_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baChunkHeader.size() != NRG_CHUNK_HEADER_SIZE)) return false;
+        if (!guardedSource || (baChunkHeader.size() != NRG_CHUNK_HEADER_SIZE)) return false;
         const QByteArray baTag = baChunkHeader.left(4);
         if (!isChunkTag(baTag)) return false;
         const qint64 nChunkSize = readBE32(baChunkHeader, 4);
@@ -216,7 +213,7 @@ bool XNeroDiscImage::parseImage(CONTEXT *pContext, PDSTRUCT *pPdStruct)
             const qint64 nEntries = (nChunkSize - NRG_DAO_HEADER_SIZE) / nEntrySize;
             if (nEntries > NRG_MAX_TRACKS) return false;
             const QByteArray baDao = read_array_process(nPayload, nChunkSize, pPdStruct);
-            if (!guardedThis || !guardedSource || (baDao.size() != nChunkSize)) return false;
+            if (!guardedSource || (baDao.size() != nChunkSize)) return false;
             for (qint64 i = 0; i < nEntries; ++i) {
                 const qint64 nEntry = NRG_DAO_HEADER_SIZE + i * nEntrySize;
                 const qint32 nSectorSize = readBE16(baDao, nEntry + 12);
@@ -243,7 +240,7 @@ bool XNeroDiscImage::parseImage(CONTEXT *pContext, PDSTRUCT *pPdStruct)
                 if ((nIndex0 > nIndex1) || (nIndex1 >= nEnd)) return false;
                 if (nTrackNumber >= NRG_MAX_TRACKS) return false;
                 TRACK track = {};
-                if (!describeTrack(&track, nIndex1, nEnd - nIndex1, nSectorSize, nModeCode, context.nChunkListOffset, pPdStruct) || !guardedThis) return false;
+                if (!describeTrack(&track, nIndex1, nEnd - nIndex1, nSectorSize, nModeCode, context.nChunkListOffset, pPdStruct)) return false;
                 ++nTrackNumber;
                 track.sName = QStringLiteral("Track%1.%2").arg(nTrackNumber, 2, 10, QLatin1Char('0')).arg(track.bAudio ? QStringLiteral("audio") : QStringLiteral("iso"));
                 context.listTracks.append(track);
@@ -255,7 +252,7 @@ bool XNeroDiscImage::parseImage(CONTEXT *pContext, PDSTRUCT *pPdStruct)
             const qint64 nEntries = nChunkSize / nEntrySize;
             if (nEntries > NRG_MAX_TRACKS) return false;
             const QByteArray baEtn = read_array_process(nPayload, nChunkSize, pPdStruct);
-            if (!guardedThis || !guardedSource || (baEtn.size() != nChunkSize)) return false;
+            if (!guardedSource || (baEtn.size() != nChunkSize)) return false;
             for (qint64 i = 0; i < nEntries; ++i) {
                 const qint64 nEntry = i * nEntrySize;
                 qint64 nOffset = 0;
@@ -277,7 +274,7 @@ bool XNeroDiscImage::parseImage(CONTEXT *pContext, PDSTRUCT *pPdStruct)
                 if (nSectorSize == 0) return false;
                 if (nTrackNumber >= NRG_MAX_TRACKS) return false;
                 TRACK track = {};
-                if (!describeTrack(&track, nOffset, nSize, nSectorSize, nMode, context.nChunkListOffset, pPdStruct) || !guardedThis) return false;
+                if (!describeTrack(&track, nOffset, nSize, nSectorSize, nMode, context.nChunkListOffset, pPdStruct)) return false;
                 ++nTrackNumber;
                 track.sName = QStringLiteral("Track%1.%2").arg(nTrackNumber, 2, 10, QLatin1Char('0')).arg(track.bAudio ? QStringLiteral("audio") : QStringLiteral("iso"));
                 context.listTracks.append(track);
@@ -293,7 +290,7 @@ bool XNeroDiscImage::parseImage(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XNeroDiscImage::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -375,18 +372,17 @@ QMap<XBinary::UNPACK_PROP, QVariant> XNeroDiscImage::getDefaultUnpackProperties(
 
 bool XNeroDiscImage::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XNeroDiscImage> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedThis || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
 
     CONTEXT *pContext = new (std::nothrow) CONTEXT;
     if (!pContext) goto failed;
-    if (!parseImage(pContext, pPdStruct) || !guardedThis || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) goto failed;
+    if (!parseImage(pContext, pPdStruct) || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) goto failed;
 
     pState->mapUnpackProperties = mapProperties;
     pState->nCurrentIndex = 0;
@@ -398,7 +394,7 @@ bool XNeroDiscImage::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QV
     return true;
 
 failed:
-    if (guardedThis) releaseUnpackSource(pState);
+    releaseUnpackSource(pState);
     delete pContext;
     *pState = UNPACK_STATE();
     return false;
@@ -406,9 +402,8 @@ failed:
 
 XBinary::ARCHIVERECORD XNeroDiscImage::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XNeroDiscImage> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
-    if (!operationGuard.isAllowed() || !pState || !pState->pContext || !guardedThis || !isUnpackSourceCurrent(pState, pPdStruct) ||
+    if (!operationGuard.isAllowed() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return ARCHIVERECORD();
     }
@@ -436,12 +431,11 @@ XBinary::ARCHIVERECORD XNeroDiscImage::infoCurrent(UNPACK_STATE *pState, PDSTRUC
 
 bool XNeroDiscImage::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    QPointer<XNeroDiscImage> guardedThis(this);
-    QPointer<QIODevice> guardedOutput(pDevice);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedOutput = pDevice;
+    QIODevice *guardedSource = getDevice();
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !guardedThis || !guardedOutput || !guardedSource ||
-        !isUnpackOutputSupported(guardedOutput.data()) || devicesAlias(guardedSource.data(), guardedOutput.data()) ||
+    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !guardedOutput || !guardedSource ||
+        !isUnpackOutputSupported(guardedOutput) || devicesAlias(guardedSource, guardedOutput) ||
         !isUnpackSourceCurrent(pState, pPdStruct) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -483,17 +477,17 @@ bool XNeroDiscImage::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDS
     }
 
     std::unique_ptr<QIODevice> pStage(createFileBuffer(track.nOutputSize, pPdStruct));
-    if (!pStage || !pStage->seek(0) || !guardedThis || !guardedOutput || !guardedSource) return false;
+    if (!pStage || !pStage->seek(0) || !guardedOutput || !guardedSource) return false;
 
     const qint64 nSectors = track.nDataSize / track.nSectorSize;
     qint64 nSector = 0;
     QByteArray baUser;
     while (nSector < nSectors) {
-        if (!guardedThis || !guardedOutput || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+        if (!guardedOutput || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
         const qint64 nBatch = qMin<qint64>(NRG_SECTORS_PER_READ, nSectors - nSector);
         const qint64 nReadSize = nBatch * track.nSectorSize;
         const QByteArray baRaw = read_array_process(track.nDataOffset + nSector * track.nSectorSize, nReadSize, pPdStruct);
-        if (!guardedThis || !guardedOutput || !guardedSource || (baRaw.size() != nReadSize) || !isUnpackSourceCurrent(pState, pPdStruct)) return false;
+        if (!guardedOutput || !guardedSource || (baRaw.size() != nReadSize) || !isUnpackSourceCurrent(pState, pPdStruct)) return false;
         if (track.nSectorSize == NRG_USER_SECTOR) {
             if (pStage->write(baRaw.constData(), nReadSize) != nReadSize) return false;
         } else {
@@ -506,21 +500,20 @@ bool XNeroDiscImage::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDS
         nSector += nBatch;
     }
 
-    if ((pStage->size() != track.nOutputSize) || !pStage->seek(0) || !guardedThis || !guardedOutput || !guardedSource ||
+    if ((pStage->size() != track.nOutputSize) || !pStage->seek(0) || !guardedOutput || !guardedSource ||
         !isUnpackSourceCurrent(pState, pPdStruct) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
-    const bool bResult = publishUnpackOutput(pStage.get(), guardedOutput.data(), pState, pPdStruct);
-    if (bResult && guardedThis) pState->nCurrentOffset = track.nDataOffset + track.nDataSize;
-    return bResult && guardedThis;
+    const bool bResult = publishUnpackOutput(pStage.get(), guardedOutput, pState, pPdStruct);
+    if (bResult) pState->nCurrentOffset = track.nDataOffset + track.nDataSize;
+    return bResult;
 }
 
 bool XNeroDiscImage::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XNeroDiscImage> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !guardedThis || !isUnpackSourceCurrent(pState, pPdStruct) ||
+    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }

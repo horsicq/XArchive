@@ -23,7 +23,7 @@ public:
         }
         return d && done == count && XBinary::isPdStructNotCanceled(p);
     }
-    QPointer<QIODevice> d;
+    QIODevice *d;
     XBinary::PDSTRUCT *p;
     qint64 saved, size;
 };
@@ -151,28 +151,25 @@ XBinary *XAlzArchive::createInstance(QIODevice *device, bool image, XADDR addres
 
 bool XAlzArchive::initUnpack(UNPACK_STATE *state, const QMap<UNPACK_PROP, QVariant> &properties, PDSTRUCT *pd)
 {
-    QPointer<XAlzArchive> self(this);
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);
     if (!guard.isAcquired() || !state || ((state->pContext || !state->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(state))) return false;
     CONTEXT *old = static_cast<CONTEXT *>(state->pContext);
     releaseUnpackSource(state); *state = UNPACK_STATE(); delete old;
-    if (!self || !bindUnpackSource(state, pd) || !self) return false;
+    if (!bindUnpackSource(state, pd)) return false;
     std::unique_ptr<CONTEXT> context(new (std::nothrow) CONTEXT);
-    if (!context || !parse(getDevice(), &context->items, properties, pd) || !self) {
-        if (self) releaseUnpackSource(state);
+    if (!context || !parse(getDevice(), &context->items, properties, pd)) {
+        releaseUnpackSource(state);
         *state = UNPACK_STATE(); return false;
     }
     state->pContext = context.get(); state->nTotalSize = getSize(); state->nNumberOfRecords = qint32(context->items.size()); state->mapUnpackProperties = properties;
     const bool finalized = validateAndFinalizeUnpackSource(state, context.get(), pd);
-    if (!self) { context.release(); *state = UNPACK_STATE(); return false; }
     if (!finalized) { releaseUnpackSource(state); *state = UNPACK_STATE(); return false; }
     context.release(); return true;
 }
 XBinary::ARCHIVERECORD XAlzArchive::infoCurrent(UNPACK_STATE *state, PDSTRUCT *pd)
 {
-    QPointer<XAlzArchive> self(this);
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
-    if (!guard.isAllowed() || !state || !state->pContext || !isUnpackSourceCurrent(state, pd) || !self ||
+    if (!guard.isAllowed() || !state || !state->pContext || !isUnpackSourceCurrent(state, pd) ||
         state->nCurrentIndex < 0 || state->nCurrentIndex >= state->nNumberOfRecords) return {};
     const CONTEXT *context = static_cast<const CONTEXT *>(state->pContext);
     if (context->items.size() != state->nNumberOfRecords) return {};
@@ -180,9 +177,8 @@ XBinary::ARCHIVERECORD XAlzArchive::infoCurrent(UNPACK_STATE *state, PDSTRUCT *p
 }
 bool XAlzArchive::unpackCurrent(UNPACK_STATE *state, QIODevice *device, PDSTRUCT *pd)
 {
-    QPointer<XAlzArchive> self(this);
     const ARCHIVERECORD record = infoCurrent(state, pd);
-    if (!self || record.mapProperties.isEmpty()) return false;
+    if (record.mapProperties.isEmpty()) return false;
     OUTPUT_POLICY policy = {};
     if (!resolveUnpackOutputPolicy(state->mapUnpackProperties, &policy) ||
         (dynamic_cast<QBuffer *>(device) && policy.nMaxMemoryOutputSize >= 0 &&
@@ -200,9 +196,8 @@ bool XAlzArchive::unpackCurrent(UNPACK_STATE *state, QIODevice *device, PDSTRUCT
 }
 bool XAlzArchive::moveToNext(UNPACK_STATE *state, PDSTRUCT *pd)
 {
-    QPointer<XAlzArchive> self(this);
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);
-    if (!guard.isAcquired() || !state || !state->pContext || !isUnpackSourceCurrent(state, pd) || !self || state->nCurrentIndex < 0 ||
+    if (!guard.isAcquired() || !state || !state->pContext || !isUnpackSourceCurrent(state, pd) || state->nCurrentIndex < 0 ||
         state->nCurrentIndex >= state->nNumberOfRecords || static_cast<CONTEXT *>(state->pContext)->items.size() != state->nNumberOfRecords) return false;
     ++state->nCurrentIndex; return state->nCurrentIndex < state->nNumberOfRecords;
 }

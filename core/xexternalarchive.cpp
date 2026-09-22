@@ -1804,13 +1804,12 @@ QMap<XBinary::UNPACK_PROP, QVariant> XExternalArchive::getDefaultUnpackPropertie
 
 bool XExternalArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XExternalArchive> guardedThis(this);
     m_lastExternalFailure = EXTERNAL_FAILURE_INFRASTRUCTURE;
     if (!pState || (m_backend == BACKEND_UNKNOWN) || m_bUnpackOperationInProgress ||
         ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)))
         return false;
 
-    if (!finishUnpack(pState, nullptr) || !guardedThis) return false;
+    if (!finishUnpack(pState, nullptr)) return false;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
 
@@ -1820,7 +1819,7 @@ bool XExternalArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, 
         m_lastExternalFailure = EXTERNAL_FAILURE_TIMEOUT;
         return setExternalError(pPdStruct, tr("External archive helper operation timed out"));
     }
-    if (!XBinary::isPdStructNotCanceled(pPdStruct) || !guardedThis->isValid(pPdStruct) || !guardedThis) return false;
+    if (!XBinary::isPdStructNotCanceled(pPdStruct) || !isValid(pPdStruct)) return false;
 
     XBinary::OUTPUT_POLICY outputPolicy = {};
     if (!XBinary::resolveUnpackOutputPolicy(mapProperties, &outputPolicy)) {
@@ -1830,10 +1829,9 @@ bool XExternalArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, 
 
     if (m_backend == BACKEND_FREEARC) {
         const bool bBound = bindUnpackSource(pState, pPdStruct);
-        if (!guardedThis || !bBound) return false;
+        if (!bBound) return false;
         std::unique_ptr<XFreeArcNative> native(new (std::nothrow) XFreeArcNative);
         const XFreeArcNative::RESULT nativeResult = native ? native->open(getDevice(), outputPolicy, pPdStruct) : XFreeArcNative::RESOURCE_LIMIT;
-        if (!guardedThis) return false;
         if (nativeResult == XFreeArcNative::READY) {
             std::unique_ptr<EXTERNAL_UNPACK_CONTEXT> context(new (std::nothrow) EXTERNAL_UNPACK_CONTEXT);
             if (!context) { releaseUnpackSource(pState); return false; }
@@ -1857,13 +1855,10 @@ bool XExternalArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, 
             pState->mapUnpackProperties.remove(UNPACK_PROP_PASSWORD);
             pState->mapUnpackProperties.remove(UNPACK_PROP_PASSWORD_BYTES);
             pState->nTotalSize = getSize();
-            if (!guardedThis) return false;
             pState->nNumberOfRecords = context->listRecords.size();
             pState->pContext = context.get();
             const bool finalized = validateAndFinalizeUnpackSource(pState, context.get(), pPdStruct);
-            if (!guardedThis) { context.release(); *pState = UNPACK_STATE(); return false; }
             const bool materialized = finalized && (hasFiles || _materializeDeferredArchive(context.get(), pState, pPdStruct));
-            if (!guardedThis) { context.release(); *pState = UNPACK_STATE(); return false; }
             if (!materialized) {
                 releaseUnpackSource(pState);
                 *pState = UNPACK_STATE();
@@ -1890,7 +1885,7 @@ bool XExternalArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, 
     }
 
     const bool bBound = bindUnpackSource(pState, pPdStruct);
-    if (!guardedThis || !bBound) return false;
+    if (!bBound) return false;
 
     std::unique_ptr<EXTERNAL_UNPACK_CONTEXT> pContext(new (std::nothrow) EXTERNAL_UNPACK_CONTEXT);
     if (!pContext) {
@@ -1976,15 +1971,15 @@ bool XExternalArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, 
 
     qint64 nInputSize = getFileFormatSize(pPdStruct);
     const qint64 nDeviceSize = getSize();
-    if (!guardedThis || (nInputSize <= 0) || (nInputSize > nDeviceSize)) nInputSize = nDeviceSize;
-    if ((nInputSize < 0) || !guardedThis) {
+    if ((nInputSize <= 0) || (nInputSize > nDeviceSize)) nInputSize = nDeviceSize;
+    if ((nInputSize < 0)) {
         releaseUnpackSource(pState);
         return false;
     }
     const QString sSuffix = getFileFormatExt().isEmpty() ? QStringLiteral("bin") : getFileFormatExt();
     pContext->sInputPath = QDir(pContext->pTemporaryDir->path()).filePath(QStringLiteral("input.%1").arg(sSuffix));
 
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) {
         releaseUnpackSource(pState);
         return setExternalError(pPdStruct, tr("External archive input must be seekable"));
@@ -1999,7 +1994,7 @@ bool XExternalArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, 
     }
     qint64 nCopied = 0;
     bool bCopyTimedOut = false;
-    while (bPrepared && guardedThis && guardedSource && (nCopied < nInputSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+    while (bPrepared && guardedSource && (nCopied < nInputSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         if (!m_helperDeadline.isForever() && m_helperDeadline.hasExpired()) {
             bCopyTimedOut = true;
             bPrepared = false;
@@ -2022,13 +2017,13 @@ bool XExternalArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, 
         }
         nCopied += nRead;
     }
-    bPrepared = bPrepared && guardedThis && guardedSource && (nCopied == nInputSize) && inputFile.flush();
+    bPrepared = bPrepared && guardedSource && (nCopied == nInputSize) && inputFile.flush();
     inputFile.close();
     if (guardedSource && (nOriginalPosition >= 0)) bPrepared = guardedSource->seek(nOriginalPosition) && bPrepared;
     bPrepared =
         bPrepared && QFileInfo(pContext->sInputPath).isFile() && (QFileInfo(pContext->sInputPath).size() == nInputSize) && XBinary::isPdStructNotCanceled(pPdStruct);
-    if (!bPrepared || !guardedThis || !guardedSource || !isUnpackSourceCurrent(pState, pPdStruct)) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!bPrepared || !guardedSource || !isUnpackSourceCurrent(pState, pPdStruct)) {
+        releaseUnpackSource(pState);
         if (bCopyTimedOut) {
             m_lastExternalFailure = EXTERNAL_FAILURE_TIMEOUT;
             return setExternalError(pPdStruct, tr("External archive helper operation timed out"));
@@ -2069,7 +2064,7 @@ bool XExternalArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, 
         if (bInitialized) pContext->listRecords = listManifest;
     } else if ((m_backend == BACKEND_BCM) || (m_backend == BACKEND_LPAQ8)) {
         ExternalRecord record;
-        record.sName = singleRecordName(guardedSource.data());
+        record.sName = singleRecordName(guardedSource);
         record.sProvider = backendName(m_backend);
         record.nCompressedSize = nInputSize;
         bool bRecordValid = true;
@@ -2178,8 +2173,8 @@ bool XExternalArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, 
         }
     }
 
-    if (!bInitialized || !guardedThis || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct) || !isUnpackSourceCurrent(pState, pPdStruct)) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!bInitialized || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct) || !isUnpackSourceCurrent(pState, pPdStruct)) {
+        releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
         return false;
     }
@@ -2198,7 +2193,6 @@ bool XExternalArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, 
     pState->nNumberOfRecords = pContext->listRecords.size();
     pState->pContext = pContext.release();
     if (!validateAndFinalizeUnpackSource(pState, static_cast<EXTERNAL_UNPACK_CONTEXT *>(pState->pContext), pPdStruct)) {
-        if (!guardedThis) return false;
         EXTERNAL_UNPACK_CONTEXT *pFailedContext = static_cast<EXTERNAL_UNPACK_CONTEXT *>(pState->pContext);
         pState->pContext = nullptr;
         releaseUnpackSource(pState);
@@ -2211,12 +2205,11 @@ bool XExternalArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, 
 
 XBinary::ARCHIVERECORD XExternalArchive::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XExternalArchive> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return ARCHIVERECORD();
 
     ARCHIVERECORD result = {};
-    if (!pState || !pState->pContext || !XBinary::isPdStructNotCanceled(pPdStruct) || !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis ||
+    if (!pState || !pState->pContext || !XBinary::isPdStructNotCanceled(pPdStruct) || !isUnpackSourceCurrent(pState, pPdStruct) ||
         (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords))
         return result;
 
@@ -2246,8 +2239,7 @@ bool XExternalArchive::_materializeDeferredArchive(EXTERNAL_UNPACK_CONTEXT *pCon
         return true;
     }
 
-    QPointer<XExternalArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || !isUnpackSourceCurrent(pState, pPdStruct) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         if (!XBinary::isPdStructNotCanceled(pPdStruct)) m_lastExternalFailure = EXTERNAL_FAILURE_CANCELED;
         return false;
@@ -2260,9 +2252,9 @@ bool XExternalArchive::_materializeDeferredArchive(EXTERNAL_UNPACK_CONTEXT *pCon
 
     const QString sArchiveStageRoot = pArchiveStage->path();
     if (pContext->pNativeFreeArc) {
-        if (!pContext->pNativeFreeArc->materialize(sArchiveStageRoot, pPdStruct) || !guardedThis || !guardedSource ||
+        if (!pContext->pNativeFreeArc->materialize(sArchiveStageRoot, pPdStruct) || !guardedSource ||
             !isUnpackSourceCurrent(pState, pPdStruct)) {
-            if (guardedThis) m_lastExternalFailure = XBinary::isPdStructNotCanceled(pPdStruct) ? EXTERNAL_FAILURE_ARCHIVE_REJECTED : EXTERNAL_FAILURE_CANCELED;
+            m_lastExternalFailure = XBinary::isPdStructNotCanceled(pPdStruct) ? EXTERNAL_FAILURE_ARCHIVE_REJECTED : EXTERNAL_FAILURE_CANCELED;
             return setExternalError(pPdStruct, tr("FreeArc data failed decompression or CRC verification"));
         }
         const QList<XFreeArcNative::ENTRY> &entries = pContext->pNativeFreeArc->entries();
@@ -2328,7 +2320,7 @@ bool XExternalArchive::_materializeDeferredArchive(EXTERNAL_UNPACK_CONTEXT *pCon
         return setExternalError(pPdStruct,
                                 bReconcileTimedOut ? tr("External archive helper operation timed out") : tr("Extracted archive directory does not match its listing"));
     }
-    if (!guardedThis || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct) || !isUnpackSourceCurrent(pState, pPdStruct)) {
+    if (!guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct) || !isUnpackSourceCurrent(pState, pPdStruct)) {
         if (!XBinary::isPdStructNotCanceled(pPdStruct)) m_lastExternalFailure = EXTERNAL_FAILURE_CANCELED;
         return false;
     }
@@ -2357,7 +2349,6 @@ bool XExternalArchive::verifyDeferredArchive(UNPACK_STATE *pState, PDSTRUCT *pPd
 
 bool XExternalArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    QPointer<XExternalArchive> guardedThis(this);
     m_lastExternalFailure = EXTERNAL_FAILURE_INFRASTRUCTURE;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState || !pState->pContext || !pDevice || !XBinary::isPdStructNotCanceled(pPdStruct) || (pState->nCurrentIndex < 0) ||
@@ -2365,10 +2356,10 @@ bool XExternalArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, P
         return false;
     pState->nCurrentOffset = 0;
 
-    QPointer<QIODevice> guardedOutput(pDevice);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedThis || !guardedOutput || !guardedSource || !isUnpackOutputSupported(guardedOutput.data()) ||
-        XBinary::devicesAlias(guardedSource.data(), guardedOutput.data()) || !isUnpackSourceCurrent(pState, pPdStruct))
+    QIODevice *guardedOutput = pDevice;
+    QIODevice *guardedSource = getDevice();
+    if (!guardedOutput || !guardedSource || !isUnpackOutputSupported(guardedOutput) ||
+        XBinary::devicesAlias(guardedSource, guardedOutput) || !isUnpackSourceCurrent(pState, pPdStruct))
         return false;
 
     EXTERNAL_UNPACK_CONTEXT *pContext = static_cast<EXTERNAL_UNPACK_CONTEXT *>(pState->pContext);
@@ -2376,7 +2367,7 @@ bool XExternalArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, P
     ExternalRecord record = pContext->listRecords.at(pState->nCurrentIndex);
 
     if (((m_backend == BACKEND_ZPAQ) || (m_backend == BACKEND_FREEARC)) && !pContext->pArchiveStageDir) {
-        if (!_materializeDeferredArchive(pContext, pState, pPdStruct) || !guardedThis || !guardedOutput || !guardedSource ||
+        if (!_materializeDeferredArchive(pContext, pState, pPdStruct) || !guardedOutput || !guardedSource ||
             (pState->nCurrentIndex >= pContext->listRecords.size()))
             return false;
         record = pContext->listRecords.at(pState->nCurrentIndex);
@@ -2385,17 +2376,17 @@ bool XExternalArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, P
     if (record.bIsFolder) {
         QBuffer emptyStage;
         const bool bOpen = emptyStage.open(QIODevice::ReadWrite);
-        const bool bResult = bOpen && guardedThis && guardedOutput && publishUnpackOutput(&emptyStage, guardedOutput.data(), pState, pPdStruct);
-        if (bResult && guardedThis) pState->nCurrentOffset = 0;
-        if (bResult && guardedThis) m_lastExternalFailure = EXTERNAL_FAILURE_NONE;
-        return bResult && guardedThis;
+        const bool bResult = bOpen && guardedOutput && publishUnpackOutput(&emptyStage, guardedOutput, pState, pPdStruct);
+        if (bResult) pState->nCurrentOffset = 0;
+        if (bResult) m_lastExternalFailure = EXTERNAL_FAILURE_NONE;
+        return bResult;
     }
 
     QString sStagePath = record.sStagedPath;
     std::unique_ptr<QTemporaryDir> pRunDirectory;
     if (sStagePath.isEmpty()) {
         if ((m_backend == BACKEND_ZPAQ) || (m_backend == BACKEND_FREEARC)) {
-            if (!_materializeDeferredArchive(pContext, pState, pPdStruct) || !guardedThis || !guardedOutput || !guardedSource) return false;
+            if (!_materializeDeferredArchive(pContext, pState, pPdStruct) || !guardedOutput || !guardedSource) return false;
             if (pState->nCurrentIndex >= pContext->listRecords.size()) return false;
             record = pContext->listRecords.at(pState->nCurrentIndex);
             sStagePath = record.sStagedPath;
@@ -2452,7 +2443,7 @@ bool XExternalArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, P
     if (!isContainedPath(sCanonicalRoot, sCanonicalStage)) return setExternalError(pPdStruct, tr("Extracted member escaped its private stage"));
 
     QFile stageFile(sCanonicalStage);
-    if (!stageFile.open(QIODevice::ReadOnly) || stageFile.isSequential() || (stageFile.size() != stageInfo.size()) || !stageFile.seek(0) || !guardedThis ||
+    if (!stageFile.open(QIODevice::ReadOnly) || stageFile.isSequential() || (stageFile.size() != stageInfo.size()) || !stageFile.seek(0) ||
         !guardedOutput || !guardedSource || !isUnpackSourceCurrent(pState, pPdStruct))
         return false;
 
@@ -2476,20 +2467,18 @@ bool XExternalArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, P
             XBinary::OUTPUT_BUDGET::noteShadowRefusal(pState->spOutputBudget.data());
         }
     }
-    const bool bResult = publishUnpackOutput(&stageFile, guardedOutput.data(), pState, pPdStruct);
-    if (bResult && guardedThis) {
+    const bool bResult = publishUnpackOutput(&stageFile, guardedOutput, pState, pPdStruct);
+    if (bResult) {
         pState->nCurrentOffset = nSize;
         m_lastExternalFailure = EXTERNAL_FAILURE_NONE;
     }
-    return bResult && guardedThis;
+    return bResult;
 }
 
 bool XExternalArchive::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XExternalArchive> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !XBinary::isPdStructNotCanceled(pPdStruct) || !isUnpackSourceCurrent(pState, pPdStruct) ||
-        !guardedThis || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords))
+    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !XBinary::isPdStructNotCanceled(pPdStruct) || !isUnpackSourceCurrent(pState, pPdStruct) || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords))
         return false;
     ++pState->nCurrentIndex;
     pState->nCurrentOffset = 0;

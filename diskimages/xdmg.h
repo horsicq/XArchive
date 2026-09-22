@@ -23,7 +23,6 @@
 #define XDMG_H
 
 #include "xarchive.h"
-#include <QPointer>
 
 struct XDMG_SEARCH_CRC_CTX;
 

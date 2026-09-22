@@ -7,7 +7,6 @@
 
 #include <QtEndian>
 #include <QHash>
-#include <QPointer>
 #include <QSet>
 
 #include <cstring>
@@ -85,13 +84,12 @@ bool XDiskJugglerArchive::scanFormat(QList<ENTRY> *pEntries,
                                      qint64 *pArchiveEnd,
                                      PDSTRUCT *pPdStruct)
 {
-    QPointer<XDiskJugglerArchive> guardedThis(this);
     const qint64 total = getSize();
-    if (!guardedThis || total < 16 || total > MAX_CDI_IMAGE_SIZE ||
+    if (total < 16 || total > MAX_CDI_IMAGE_SIZE ||
         !isPdStructNotCanceled(pPdStruct)) return false;
 
     const QByteArray footer = read_array_process(total - 8, 8, pPdStruct);
-    if (!guardedThis || footer.size() != 8) return false;
+    if (footer.size() != 8) return false;
     const uchar *pf = reinterpret_cast<const uchar *>(footer.constData());
     const quint32 version = qFromLittleEndian<quint32>(pf);
     const quint32 headerOffset = qFromLittleEndian<quint32>(pf + 4);
@@ -108,7 +106,7 @@ bool XDiskJugglerArchive::scanFormat(QList<ENTRY> *pEntries,
 
     const QByteArray header = read_array_process(headerPos, headerSize,
                                                  pPdStruct);
-    if (!guardedThis || header.size() != headerSize) return false;
+    if (header.size() != headerSize) return false;
     const uchar *p = reinterpret_cast<const uchar *>(header.constData());
     const qint32 sessions = qFromLittleEndian<quint16>(p);
     if (sessions < 1 || sessions > 99) return false;

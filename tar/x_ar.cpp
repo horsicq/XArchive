@@ -144,22 +144,22 @@ bool X_Ar::isPackStateConsistent(const PACK_STATE *pState, const AR_PACK_CONTEXT
 
 bool X_Ar::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<X_Ar> guardedArchive(this);
+    X_Ar *guardedArchive = this;
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
-    const qint64 nTotalSize = guardedArchive->getSize();
-    if (!guardedArchive || (nTotalSize < 8)) return false;
+    const qint64 nTotalSize = getSize();
+    if ((nTotalSize < 8)) return false;
 
-    _MEMORY_MAP memoryMap = guardedArchive->XBinary::getSimpleMemoryMap();
+    _MEMORY_MAP memoryMap = XBinary::getSimpleMemoryMap();
     if (!guardedArchive) return false;
-    const bool bHasSignature = guardedArchive->compareSignature(&memoryMap, "'!<arch>'0a", 0, pPdStruct);
-    if (!guardedArchive || !bHasSignature) return false;
+    const bool bHasSignature = compareSignature(&memoryMap, "'!<arch>'0a", 0, pPdStruct);
+    if (!bHasSignature) return false;
 
     qint64 nOffset = 8;
     while ((nOffset < nTotalSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         if ((nTotalSize - nOffset) < (qint64)sizeof(FRECORD)) return false;
 
-        const FRECORD frecord = guardedArchive->readFRECORD(nOffset);
+        const FRECORD frecord = readFRECORD(nOffset);
         if (!guardedArchive) return false;
         if ((frecord.endChar[0] != 0x60) || (frecord.endChar[1] != 0x0a)) return false;
 
@@ -979,38 +979,38 @@ QMap<XBinary::UNPACK_PROP, QVariant> X_Ar::getDefaultUnpackProperties()
 
 bool X_Ar::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
+    X_Ar *guardedArchive = this;
     if (m_bUnpackOperationInProgress) {
         return false;
     }
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
-    QPointer<X_Ar> guardedArchive(this);
 
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
     if (!pPdStruct) pPdStruct = &pdStructEmpty;
     if (!pState) return false;
 
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedArchive->ownsUnpackSource(pState)) return false;
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
     ArUnpackContext *oldContext = static_cast<ArUnpackContext *>(pState->pContext);
-    guardedArchive->releaseUnpackSource(pState);
+    releaseUnpackSource(pState);
     delete oldContext;
     *pState = UNPACK_STATE();
-    const bool bBound = guardedArchive->bindUnpackSource(pState, pPdStruct);
-    if (!guardedArchive || !bBound) return false;
-    const bool bValid = guardedArchive->isValid(pPdStruct);
+    const bool bBound = bindUnpackSource(pState, pPdStruct);
+    if (!bBound) return false;
+    const bool bValid = isValid(pPdStruct);
     if (!guardedArchive) {
         *pState = UNPACK_STATE();
         return false;
     }
     if (!bValid) {
-        guardedArchive->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
         return false;
     }
 
     pState->mapUnpackProperties = mapProperties;
     pState->nCurrentOffset = 8;
-    pState->nTotalSize = guardedArchive->getSize();
+    pState->nTotalSize = getSize();
     if (!guardedArchive) {
         *pState = UNPACK_STATE();
         return false;
@@ -1019,17 +1019,17 @@ bool X_Ar::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     pState->pContext = nullptr;
 
     std::unique_ptr<ArUnpackContext> context(new (std::nothrow) ArUnpackContext);
-    if (!context) { guardedArchive->releaseUnpackSource(pState); *pState = UNPACK_STATE(); return false; }
+    if (!context) { releaseUnpackSource(pState); *pState = UNPACK_STATE(); return false; }
     bool namesSeen = false;
     qint64 nOffset = 8;
     while ((nOffset < pState->nTotalSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         if ((pState->nTotalSize - nOffset) < (qint64)sizeof(FRECORD)) {
-            guardedArchive->releaseUnpackSource(pState);
+            releaseUnpackSource(pState);
             *pState = UNPACK_STATE();
             return false;
         }
 
-        const FRECORD header = guardedArchive->readFRECORD(nOffset);
+        const FRECORD header = readFRECORD(nOffset);
         if (!guardedArchive) {
             *pState = UNPACK_STATE();
             return false;
@@ -1040,7 +1040,7 @@ bool X_Ar::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         if ((header.endChar[0] != 0x60) || (header.endChar[1] != 0x0a) || !arParseDecimalField(header.fileSize, sizeof(header.fileSize), &nFileSize) ||
             !arGetRecordSize(nFileSize, &nRecordSize) || !arGetBsdNameLength(header.fileId, sizeof(header.fileId), nFileSize, &nBsdNameLength) ||
             (nRecordSize > (pState->nTotalSize - nOffset)) || (pState->nNumberOfRecords == (std::numeric_limits<qint32>::max)())) {
-            guardedArchive->releaseUnpackSource(pState);
+            releaseUnpackSource(pState);
             *pState = UNPACK_STATE();
             return false;
         }
@@ -1048,17 +1048,17 @@ bool X_Ar::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         if (name == "//") {
             // GNU/COFF filename tables are metadata, not archive members.
             if (namesSeen || nFileSize > 16 * 1024 * 1024) {
-                guardedArchive->releaseUnpackSource(pState); *pState = UNPACK_STATE(); return false;
+                releaseUnpackSource(pState); *pState = UNPACK_STATE(); return false;
             }
             namesSeen = true;
-            context->names = guardedArchive->read_array(nOffset + sizeof(FRECORD), nFileSize);
-            if (!guardedArchive || context->names.size() != nFileSize) {
-                if (guardedArchive) guardedArchive->releaseUnpackSource(pState);
+            context->names = read_array(nOffset + sizeof(FRECORD), nFileSize);
+            if (context->names.size() != nFileSize) {
+                if (guardedArchive) releaseUnpackSource(pState);
                 *pState = UNPACK_STATE(); return false;
             }
         } else if ((name != "/") && (name != "/SYM64/")) {
             if (context->offsets.size() >= 1000000) {
-                guardedArchive->releaseUnpackSource(pState); *pState = UNPACK_STATE(); return false;
+                releaseUnpackSource(pState); *pState = UNPACK_STATE(); return false;
             }
             context->offsets.append(nOffset);
             pState->nNumberOfRecords++;
@@ -1067,14 +1067,14 @@ bool X_Ar::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     }
 
     if ((nOffset != pState->nTotalSize) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
-        guardedArchive->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
         return false;
     }
 
     pState->nCurrentOffset = context->offsets.isEmpty() ? pState->nTotalSize : context->offsets.first();
     pState->pContext = context.get();
-    const bool bFinalized = guardedArchive->validateAndFinalizeUnpackSource(pState, context.get(), pPdStruct);
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, context.get(), pPdStruct);
     if (!guardedArchive) {
         // Finalization transfers cleanup to the bound-source owner when the
         // archive disappears during validation.
@@ -1083,7 +1083,7 @@ bool X_Ar::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         return false;
     }
     if (!bFinalized) {
-        guardedArchive->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
         return false;
     }
@@ -1094,19 +1094,19 @@ bool X_Ar::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
 
 XBinary::ARCHIVERECORD X_Ar::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    X_Ar *guardedArchive = this;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
-    QPointer<X_Ar> guardedArchive(this);
 
     XBinary::ARCHIVERECORD result = {};
 
-    if (pState && guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) && guardedArchive && (pState->nCurrentIndex >= 0) &&
+    if (pState && isUnpackSourceCurrent(pState, pPdStruct) && (pState->nCurrentIndex >= 0) &&
         (pState->nCurrentIndex < pState->nNumberOfRecords) && (pState->nCurrentOffset >= 8)) {
-        const qint64 nCurrentSize = guardedArchive->getSize();
-        if (!guardedArchive || (pState->nTotalSize != nCurrentSize) || (pState->nCurrentOffset > (pState->nTotalSize - (qint64)sizeof(FRECORD)))) {
+        const qint64 nCurrentSize = getSize();
+        if ((pState->nTotalSize != nCurrentSize) || (pState->nCurrentOffset > (pState->nTotalSize - (qint64)sizeof(FRECORD)))) {
             return result;
         }
-        const FRECORD header = guardedArchive->readFRECORD(pState->nCurrentOffset);
+        const FRECORD header = readFRECORD(pState->nCurrentOffset);
         if (!guardedArchive) return XBinary::ARCHIVERECORD();
         qint64 nFileSize = 0;
         qint64 nRecordSize = 0;
@@ -1127,7 +1127,7 @@ XBinary::ARCHIVERECORD X_Ar::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
         // Handle BSD-style long names
         if (nFileNameLength > 0) {
-            const QByteArray baEmbeddedName = guardedArchive->read_array(pState->nCurrentOffset + sizeof(FRECORD), nFileNameLength);
+            const QByteArray baEmbeddedName = read_array(pState->nCurrentOffset + sizeof(FRECORD), nFileNameLength);
             if (!guardedArchive) return XBinary::ARCHIVERECORD();
             if (baEmbeddedName.size() != nFileNameLength) return XBinary::ARCHIVERECORD();
             sFileName = QString::fromUtf8(baEmbeddedName);
@@ -1193,19 +1193,19 @@ XBinary::ARCHIVERECORD X_Ar::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
 bool X_Ar::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    X_Ar *guardedArchive = this;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
-    QPointer<X_Ar> guardedArchive(this);
 
-    if (!pState || !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive || (pState->nCurrentIndex < 0) ||
+    if (!pState || !isUnpackSourceCurrent(pState, pPdStruct) || (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords) || (pState->nCurrentOffset < 8)) {
         return false;
     }
 
-    const qint64 nCurrentSize = guardedArchive->getSize();
-    if (!guardedArchive || (pState->nTotalSize != nCurrentSize) || (pState->nCurrentOffset > (pState->nTotalSize - (qint64)sizeof(FRECORD)))) return false;
+    const qint64 nCurrentSize = getSize();
+    if ((pState->nTotalSize != nCurrentSize) || (pState->nCurrentOffset > (pState->nTotalSize - (qint64)sizeof(FRECORD)))) return false;
 
-    const FRECORD header = guardedArchive->readFRECORD(pState->nCurrentOffset);
+    const FRECORD header = readFRECORD(pState->nCurrentOffset);
     if (!guardedArchive) return false;
     qint64 nFileSize = 0;
     qint64 nRecordSize = 0;
@@ -1259,27 +1259,25 @@ XBinary *X_Ar::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
 
 bool X_Ar::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<X_Ar> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
-        if (!guardedThis || !bResult) return false;
-        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(guardedThis->XArchive::getInternalInfo(pPdStruct));
-        if (!guardedThis || !pInfo) return false;
-        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        if (!bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        if (!pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) = *pInfo;
     }
 
-    return guardedThis && bResult;
+    return bResult;
 }
 
 void *X_Ar::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<X_Ar> guardedThis(this);
-    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
-    if (!guardedThis || !bHandled) return nullptr;
+    const bool bHandled = handleInternalInfo(pPdStruct);
+    if (!bHandled) return nullptr;
 
-    return &guardedThis->m_internalInfo;
+    return &m_internalInfo;
 }
 
 void X_Ar::setInternalInfo(void *pInternalInfo)

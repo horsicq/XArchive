@@ -20,7 +20,6 @@
  */
 #include "xhaarchive.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -54,16 +53,15 @@ bool XHAArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XHAArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
     if (context.nInputSize < HA_HEADER_SIZE) return false;
 
     const QByteArray baHeader = read_array_process(0, HA_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != HA_HEADER_SIZE)) return false;
+    if ((baHeader.size() != HA_HEADER_SIZE)) return false;
     if (baHeader.left(2) != QByteArray("HA")) return false;
     const qint32 nCount = (qint32)qFromLittleEndian<quint16>((const uchar *)baHeader.constData() + 2);
     if ((nCount <= 0) || (nCount > HA_MAX_MEMBERS)) return false;
@@ -73,7 +71,7 @@ bool XHAArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (!isPdStructNotCanceled(pPdStruct)) return false;
         if (!haRangeWithin(context.nInputSize, nOffset, HA_MEMBER_HEADER)) break;
         const QByteArray baEntry = read_array_process(nOffset, HA_MEMBER_HEADER, pPdStruct);
-        if (!guardedThis || !guardedSource || (baEntry.size() != HA_MEMBER_HEADER)) return false;
+        if ((baEntry.size() != HA_MEMBER_HEADER)) return false;
         const uchar *pEntry = (const uchar *)baEntry.constData();
 
         const quint8 nType = pEntry[0];
@@ -93,7 +91,7 @@ bool XHAArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
             while (baField.size() <= HA_MAX_NAME_SIZE) {
                 if (nCursor >= context.nInputSize) return false;
                 const QByteArray baByte = read_array_process(nCursor, 1, pPdStruct);
-                if (!guardedThis || !guardedSource || (baByte.size() != 1)) return false;
+                if ((baByte.size() != 1)) return false;
                 ++nCursor;
                 if (baByte.at(0) == (char)0) break;
                 baField.append(baByte.at(0));
@@ -102,7 +100,7 @@ bool XHAArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         }
         if (nCursor >= context.nInputSize) return false;
         const QByteArray baMachine = read_array_process(nCursor, 1, pPdStruct);
-        if (!guardedThis || !guardedSource || (baMachine.size() != 1)) return false;
+        if ((baMachine.size() != 1)) return false;
         const qint32 nMachine = (quint8)baMachine.at(0);
         ++nCursor;
 
@@ -150,12 +148,12 @@ bool XHAArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XHAArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
-    if (guardedSource) guardedSource->seek(nSavedPosition);
+    guardedSource->seek(nSavedPosition);
 
     return bResult;
 }
@@ -329,11 +327,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XHAArchive::getDefaultUnpackProperties()
 
 bool XHAArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XHAArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -343,8 +340,8 @@ bool XHAArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVaria
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -357,15 +354,10 @@ bool XHAArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVaria
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

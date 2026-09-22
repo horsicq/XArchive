@@ -6,7 +6,6 @@
 #include "xbthpak.h"
 
 #include <QFileInfo>
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -42,9 +41,9 @@ QString bthpakMemberName(QIODevice *pDevice, quint8 nExtensionCharacter)
 {
     const QChar cExtension =
         QChar::fromLatin1(static_cast<char>(nExtensionCharacter));
-    QPointer<QIODevice> guardedDevice(pDevice);
+    QIODevice *guardedDevice = pDevice;
     const QString sDeviceName =
-        guardedDevice ? XBinary::getDeviceFileName(guardedDevice.data())
+        guardedDevice ? XBinary::getDeviceFileName(guardedDevice)
                       : QString();
 
     QString sResult;
@@ -87,8 +86,7 @@ bool XBTHPAK::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XBTHPAK> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -97,7 +95,7 @@ bool XBTHPAK::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const QByteArray baHeader =
         read_array_process(0, BTHPAK_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource ||
+    if (!guardedSource ||
         baHeader.size() != BTHPAK_HEADER_SIZE) {
         return false;
     }
@@ -127,7 +125,7 @@ bool XBTHPAK::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         bPartialScan ? BTHPAK_PARTIAL_WINDOW : context.nPayloadSize;
     const QByteArray baPayload =
         read_array_process(context.nPayloadOffset, nScanSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baPayload.size() != nScanSize)) {
+    if (!guardedSource || (baPayload.size() != nScanSize)) {
         return false;
     }
 
@@ -147,8 +145,8 @@ bool XBTHPAK::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     context.nBlockCount = nBlockCount;
     context.nArchiveSize = context.nInputSize;
     context.sFileName =
-        bthpakMemberName(guardedSource.data(), context.nExtensionCharacter);
-    if (!guardedThis || !guardedSource ||
+        bthpakMemberName(guardedSource, context.nExtensionCharacter);
+    if (!guardedSource ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -159,7 +157,7 @@ bool XBTHPAK::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XBTHPAK::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -349,8 +347,7 @@ bool XBTHPAK::initUnpack(UNPACK_STATE *pState,
                          const QMap<UNPACK_PROP, QVariant> &mapProperties,
                          PDSTRUCT *pPdStruct)
 {
-    QPointer<XBTHPAK> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
@@ -359,7 +356,7 @@ bool XBTHPAK::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) || !guardedSource ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -375,9 +372,9 @@ bool XBTHPAK::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis ||
+    if (!parseContext(pContext, pPdStruct) ||
         !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -396,16 +393,11 @@ bool XBTHPAK::initUnpack(UNPACK_STATE *pState,
 
     // Binding alone only stages the source; without this the listing works
     // while extraction silently produces nothing.
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(
+    const bool bFinalized = validateAndFinalizeUnpackSource(
         pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

@@ -22,7 +22,6 @@
 
 #include "Algos/xtpsdecoder.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -53,8 +52,7 @@ bool XTPSArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XTPSArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -62,7 +60,7 @@ bool XTPSArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nInputSize < (TPS_MAGIC_SIZE + TPS_ENTRY_SIZE)) return false;
 
     const QByteArray baMagic = read_array_process(0, TPS_MAGIC_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baMagic.size() != TPS_MAGIC_SIZE)) return false;
+    if (!guardedSource || (baMagic.size() != TPS_MAGIC_SIZE)) return false;
     if (baMagic != QByteArray("TPS\x1a", 4)) return false;
 
     qint64 nOffset = TPS_MAGIC_SIZE;
@@ -72,14 +70,14 @@ bool XTPSArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
         if ((context.nInputSize - nOffset) == 1) {
             const QByteArray baEnd = read_array_process(nOffset, 1, pPdStruct);
-            if (!guardedThis || !guardedSource || (baEnd.size() != 1)) return false;
+            if (!guardedSource || (baEnd.size() != 1)) return false;
             if ((quint8)baEnd.at(0) == TPS_END_TAG) ++nOffset;
             break;
         }
         if ((context.nInputSize - nOffset) < TPS_ENTRY_SIZE) break;
 
         const QByteArray baEntry = read_array_process(nOffset, TPS_ENTRY_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baEntry.size() != TPS_ENTRY_SIZE)) return false;
+        if (!guardedSource || (baEntry.size() != TPS_ENTRY_SIZE)) return false;
         const uchar *pEntry = (const uchar *)baEntry.constData();
 
         if (pEntry[0] != TPS_ENTRY_TAG) break;
@@ -119,7 +117,7 @@ bool XTPSArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XTPSArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -280,11 +278,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XTPSArchive::getDefaultUnpackProperties()
 
 bool XTPSArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XTPSArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -294,8 +291,8 @@ bool XTPSArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVari
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -308,15 +305,10 @@ bool XTPSArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVari
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

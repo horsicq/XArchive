@@ -23,7 +23,6 @@
 #include "Algos/xsilmarilsdecoder.h"
 
 #include <QFileInfo>
-#include <QPointer>
 
 #include <cstring>
 #include <new>
@@ -71,10 +70,10 @@ XSilmarils::XSilmarils(QIODevice *pDevice) : XArchive(pDevice)
 
 QString XSilmarils::deriveMemberName()
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return SILMARILS_FALLBACK_NAME;
 
-    const QString sDeviceName = XBinary::getDeviceFileName(guardedSource.data());
+    const QString sDeviceName = XBinary::getDeviceFileName(guardedSource);
     if (sDeviceName.isEmpty()) return SILMARILS_FALLBACK_NAME;
 
     const QString sFileName = QFileInfo(sDeviceName).fileName();
@@ -113,17 +112,16 @@ bool XSilmarils::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XSilmarils> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = getSize();
-    if (!guardedThis || !guardedSource) return false;
+    if (!guardedSource) return false;
     if ((context.nInputSize <= SILMARILS_LONG_HEADER_SIZE) || (context.nInputSize > SILMARILS_MAX_FILE_SIZE)) return false;
 
     const QByteArray baHeader = read_array_process(0, SILMARILS_LONG_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != SILMARILS_LONG_HEADER_SIZE)) return false;
+    if (!guardedSource || (baHeader.size() != SILMARILS_LONG_HEADER_SIZE)) return false;
 
     // The version word is the byte-order oracle; nothing else in the header is
     // constant across both builds.
@@ -189,13 +187,13 @@ bool XSilmarils::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         // last input byte.  That is what keeps this class from stealing files
         // and, equally, from being stolen from.
         const QByteArray baStream = read_array_process(context.nStreamOffset, context.nStreamSize, pPdStruct);
-        if (!guardedThis || !guardedSource || (static_cast<qint64>(baStream.size()) != context.nStreamSize)) return false;
+        if (!guardedSource || (static_cast<qint64>(baStream.size()) != context.nStreamSize)) return false;
 
         if (!XSilmarilsDecoder::probe(baStream, context.nUncompressedSize)) return false;
     }
 
     context.sFileName = deriveMemberName();
-    if (!guardedThis || !guardedSource) return false;
+    if (!guardedSource) return false;
 
     *pContext = context;
 
@@ -206,7 +204,7 @@ bool XSilmarils::isValid(PDSTRUCT *pPdStruct)
 {
     // Detection runs on a device the caller still owns: snapshot the cursor and
     // put it back whatever the outcome.
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
 
     CONTEXT context = {};
@@ -255,7 +253,7 @@ XBinary::MODE XSilmarils::getMode()
 
 XBinary::ENDIAN XSilmarils::getEndian()
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
 
     CONTEXT context = {};
@@ -297,7 +295,7 @@ QString XSilmarils::getMIMEString()
 
 QString XSilmarils::getVersion()
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
 
     CONTEXT context = {};
@@ -402,8 +400,7 @@ QMap<XBinary::UNPACK_PROP, QVariant> XSilmarils::getDefaultUnpackProperties()
 
 bool XSilmarils::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSilmarils> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
 
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) {
         return false;
@@ -411,7 +408,7 @@ bool XSilmarils::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVaria
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -426,8 +423,8 @@ bool XSilmarils::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVaria
         return false;
     }
 
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) guardedThis->releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -443,15 +440,10 @@ bool XSilmarils::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVaria
 
     // Binding only stages the source.  Without this finalize the listing works
     // and every extraction silently writes nothing.
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

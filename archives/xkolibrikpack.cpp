@@ -43,31 +43,25 @@ bool XKolibriKPack::_readAndCheckHeader(quint32 *pnUnpackedSize, quint32 *pnFlag
 {
     Q_UNUSED(pPdStruct)
 
-    QPointer<XKolibriKPack> guardedArchive(this);
-
-    QPointer<QIODevice> guardedDevice(guardedArchive->getDevice());
-    if (!guardedArchive || !guardedDevice) return false;
-
+    QIODevice *guardedDevice = getDevice();
     // Detection probes a device the caller still owns: remember where it was
     // and put it back before returning.
     const qint64 nSavedPosition = guardedDevice->pos();
 
-    const qint64 nSize = guardedArchive->getSize();
-    if (!guardedArchive || !guardedDevice) return false;
-
+    const qint64 nSize = getSize();
     bool bResult = false;
 
     if (nSize >= (KPACK_HEADER_SIZE + 4)) {
-        const QByteArray baHeader = guardedArchive->read_array(0, (qint32)KPACK_HEADER_SIZE);
+        const QByteArray baHeader = read_array(0, (qint32)KPACK_HEADER_SIZE);
 
-        if (guardedArchive && guardedDevice && (baHeader.size() == (qint32)KPACK_HEADER_SIZE)) {
+        if ((baHeader.size() == (qint32)KPACK_HEADER_SIZE)) {
             bResult = XKolibriKPackDecoder::checkHeader(baHeader.constData(), baHeader.size(), nSize, pnUnpackedSize, pnFlags);
         }
     }
 
-    if (guardedDevice) guardedDevice->seek(nSavedPosition);
+    guardedDevice->seek(nSavedPosition);
 
-    return guardedArchive && guardedDevice && bResult;
+    return bResult;
 }
 
 bool XKolibriKPack::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
@@ -363,7 +357,6 @@ QMap<XBinary::UNPACK_PROP, QVariant> XKolibriKPack::getDefaultUnpackProperties()
 
 bool XKolibriKPack::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XKolibriKPack> guardedArchive(this);
     bool bResult = false;
 
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
@@ -371,8 +364,8 @@ bool XKolibriKPack::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVa
         pPdStruct = &pdStructEmpty;
     }
 
-    if (pState && !m_bUnpackOperationInProgress && ((!pState->pContext && pState->baUnpackSourceToken.isEmpty()) || guardedArchive->ownsUnpackSource(pState))) {
-        if (!guardedArchive->finishUnpack(pState, nullptr) || !guardedArchive) return false;
+    if (pState && !m_bUnpackOperationInProgress && ((!pState->pContext && pState->baUnpackSourceToken.isEmpty()) || ownsUnpackSource(pState))) {
+        if (!finishUnpack(pState, nullptr)) return false;
         UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
         if (!operationGuard.isAcquired()) return false;
 
@@ -380,41 +373,27 @@ bool XKolibriKPack::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVa
             return false;
         }
 
-        const bool bBound = guardedArchive->bindUnpackSource(pState, pPdStruct);
-        if (!guardedArchive || !bBound) return false;
+        const bool bBound = bindUnpackSource(pState, pPdStruct);
+        if (!bBound) return false;
 
         quint32 nUnpackedSize = 0;
         quint32 nFlags = 0;
 
-        const bool bValid = guardedArchive->_readAndCheckHeader(&nUnpackedSize, &nFlags, pPdStruct);
-        if (!guardedArchive) return false;
+        const bool bValid = _readAndCheckHeader(&nUnpackedSize, &nFlags, pPdStruct);
         if (!bValid) {
-            guardedArchive->releaseUnpackSource(pState);
+            releaseUnpackSource(pState);
             return false;
         }
 
-        const qint64 nSize = guardedArchive->getSize();
-        if (!guardedArchive) return false;
-
+        const qint64 nSize = getSize();
         KPACK_UNPACK_CONTEXT *pContext = new (std::nothrow) KPACK_UNPACK_CONTEXT;
         if (!pContext) {
-            guardedArchive->releaseUnpackSource(pState);
+            releaseUnpackSource(pState);
             return false;
         }
 
-        QPointer<QIODevice> guardedSource(guardedArchive->getDevice());
-        if (!guardedArchive || !guardedSource) {
-            if (guardedArchive) guardedArchive->releaseUnpackSource(pState);
-            delete pContext;
-            return false;
-        }
-
-        QString sName = XBinary::getDeviceFileName(guardedSource.data());
-        if (!guardedArchive || !guardedSource) {
-            if (guardedArchive) guardedArchive->releaseUnpackSource(pState);
-            delete pContext;
-            return false;
-        }
+        QIODevice *guardedSource = getDevice();
+        QString sName = XBinary::getDeviceFileName(guardedSource);
         if (!sName.isEmpty()) {
             // kpack keeps the original file name; the container stores none.
             sName = QFileInfo(sName).fileName();
@@ -438,11 +417,10 @@ bool XKolibriKPack::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVa
         pState->pContext = pContext;
         pState->mapUnpackProperties = mapProperties;
 
-        bResult = guardedArchive->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-        if (!guardedArchive) return false;
+        bResult = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
         if (!bResult) {
             pState->pContext = nullptr;
-            guardedArchive->releaseUnpackSource(pState);
+            releaseUnpackSource(pState);
             delete pContext;
             *pState = UNPACK_STATE();
         }
@@ -455,11 +433,9 @@ XBinary::ARCHIVERECORD XKolibriKPack::infoCurrent(UNPACK_STATE *pState, PDSTRUCT
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
-    QPointer<XKolibriKPack> guardedArchive(this);
-
     XBinary::ARCHIVERECORD result = {};
 
-    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive) {
+    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct)) {
         return result;
     }
 
@@ -484,14 +460,10 @@ bool XKolibriKPack::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDST
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
-    QPointer<XKolibriKPack> guardedArchive(this);
-
     if (!pState || !pState->pContext || !pDevice) return false;
-    QPointer<QIODevice> guardedOutput(pDevice);
-    QPointer<QIODevice> guardedSource(guardedArchive->getDevice());
-    if (!guardedOutput || !guardedSource || !guardedArchive->isUnpackOutputSupported(guardedOutput.data()) || !guardedArchive ||
-        XBinary::devicesAlias(guardedSource.data(), guardedOutput.data()) || !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    QIODevice *guardedOutput = pDevice;
+    QIODevice *guardedSource = getDevice();
+    if (!isUnpackOutputSupported(guardedOutput) || XBinary::devicesAlias(guardedSource, guardedOutput) || !isUnpackSourceCurrent(pState, pPdStruct) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -501,9 +473,7 @@ bool XKolibriKPack::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDST
 
     KPACK_UNPACK_CONTEXT *pContext = reinterpret_cast<KPACK_UNPACK_CONTEXT *>(pState->pContext);
 
-    const qint64 nFileSize = guardedArchive->getSize();
-    if (!guardedArchive || !guardedSource) return false;
-
+    const qint64 nFileSize = getSize();
     if ((nFileSize != pContext->nTotalSize) || (nFileSize <= KPACK_HEADER_SIZE)) {
         return false;
     }
@@ -526,9 +496,9 @@ bool XKolibriKPack::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDST
     }
 
     std::unique_ptr<QIODevice> pStage(XBinary::createFileBuffer(pContext->nUncompressedSize, pPdStruct));
-    if (!guardedArchive || !pStage || !guardedOutput || !guardedSource || !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive) return false;
+    if (!pStage || !isUnpackSourceCurrent(pState, pPdStruct)) return false;
 
-    SubDevice sd(guardedSource.data(), 0, nFileSize);
+    SubDevice sd(guardedSource, 0, nFileSize);
 
     bool bResult = false;
 
@@ -545,24 +515,19 @@ bool XKolibriKPack::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDST
         state.nProcessedOffset = 0;
         state.nProcessedLimit = pContext->nUncompressedSize;
 
-        bResult = XKolibriKPackDecoder::decompress(&state, pPdStruct) && guardedArchive && guardedOutput && guardedSource &&
-                  (state.nCountOutput == pContext->nUncompressedSize);
+        bResult = XKolibriKPackDecoder::decompress(&state, pPdStruct) && (state.nCountOutput == pContext->nUncompressedSize);
 
         sd.close();
     }
 
-    return bResult && guardedArchive && guardedOutput && guardedSource && guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) && guardedArchive &&
-           guardedArchive->publishUnpackOutput(pStage.get(), guardedOutput.data(), pState, pPdStruct);
+    return bResult && isUnpackSourceCurrent(pState, pPdStruct) && publishUnpackOutput(pStage.get(), guardedOutput, pState, pPdStruct);
 }
 
 bool XKolibriKPack::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
-    QPointer<XKolibriKPack> guardedArchive(this);
-
-    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive ||
-        (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
+    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }
 
@@ -575,22 +540,18 @@ bool XKolibriKPack::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
-    QPointer<XKolibriKPack> guardedArchive(this);
-
     Q_UNUSED(pPdStruct)
 
     if (!pState) {
         return false;
     }
 
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedArchive->ownsUnpackSource(pState)) return false;
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
 
     KPACK_UNPACK_CONTEXT *pContext = static_cast<KPACK_UNPACK_CONTEXT *>(pState->pContext);
-    guardedArchive->releaseUnpackSource(pState);
+    releaseUnpackSource(pState);
     pState->pContext = nullptr;
     delete pContext;
-    if (!guardedArchive) return false;
-
     pState->nCurrentOffset = 0;
     pState->nTotalSize = 0;
     pState->nCurrentIndex = 0;
@@ -616,27 +577,25 @@ XBinary *XKolibriKPack::createInstance(QIODevice *pDevice, bool bIsImage, XADDR 
 
 bool XKolibriKPack::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XKolibriKPack> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
-        if (!guardedThis || !bResult) return false;
-        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(guardedThis->XArchive::getInternalInfo(pPdStruct));
-        if (!guardedThis || !pInfo) return false;
-        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        if (!bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        if (!pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) = *pInfo;
     }
 
-    return guardedThis && bResult;
+    return bResult;
 }
 
 void *XKolibriKPack::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XKolibriKPack> guardedThis(this);
-    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
-    if (!guardedThis || !bHandled) return nullptr;
+    const bool bHandled = handleInternalInfo(pPdStruct);
+    if (!bHandled) return nullptr;
 
-    return &guardedThis->m_internalInfo;
+    return &m_internalInfo;
 }
 
 void XKolibriKPack::setInternalInfo(void *pInternalInfo)

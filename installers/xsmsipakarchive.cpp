@@ -7,7 +7,6 @@
 #include "Algos/xdcldecoder.h"
 
 #include <QFileInfo>
-#include <QPointer>
 #include <QtEndian>
 
 #include <cstring>
@@ -101,16 +100,15 @@ bool XSmsiPakArchive::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
 bool XSmsiPakArchive::scanSmsiPak(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
                                   PDSTRUCT *pPdStruct)
 {
-    QPointer<XSmsiPakArchive> guardedThis(this);
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || !isPdStructNotCanceled(pPdStruct) ||
+    if (!isPdStructNotCanceled(pPdStruct) ||
         (nTotalSize < (SMSIPAK_HEADER_SIZE + SMSIPAK_RECORD_SIZE))) {
         return false;
     }
 
     const QByteArray baHeader =
         read_array_process(0, SMSIPAK_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || (baHeader.size() != SMSIPAK_HEADER_SIZE)) return false;
+    if ((baHeader.size() != SMSIPAK_HEADER_SIZE)) return false;
     const uchar *pHeader =
         reinterpret_cast<const uchar *>(baHeader.constData());
     if (memcmp(pHeader, SMSIPAK_MAGIC, sizeof(SMSIPAK_MAGIC)) != 0) {
@@ -134,7 +132,7 @@ bool XSmsiPakArchive::scanSmsiPak(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
 
         const QByteArray baRecord =
             read_array_process(nPosition, SMSIPAK_RECORD_SIZE, pPdStruct);
-        if (!guardedThis || (baRecord.size() != SMSIPAK_RECORD_SIZE)) {
+        if ((baRecord.size() != SMSIPAK_RECORD_SIZE)) {
             return false;
         }
         const uchar *pRecord =
@@ -185,7 +183,7 @@ bool XSmsiPakArchive::scanSmsiPak(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
         nPosition = entry.nDataOffset + nPackedSize;
     }
 
-    if (!guardedThis || !isPdStructNotCanceled(pPdStruct) ||
+    if (!isPdStructNotCanceled(pPdStruct) ||
         listEntries.isEmpty() || (nPosition != nMemberEnd)) {
         return false;
     }
@@ -199,7 +197,7 @@ bool XSmsiPakArchive::scanSmsiPak(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
     if ((nTotalSize - nMemberEnd) >= nIndexSize) {
         const QByteArray baIndex =
             read_array_process(nMemberEnd, nIndexSize, pPdStruct);
-        if (!guardedThis || (baIndex.size() != nIndexSize)) return false;
+        if ((baIndex.size() != nIndexSize)) return false;
         const uchar *pIndex =
             reinterpret_cast<const uchar *>(baIndex.constData());
         bool bIndexValid =
@@ -227,18 +225,16 @@ bool XSmsiPakArchive::scanPsnCompress(QList<ENTRY> *pEntries,
                                       qint64 *pArchiveEnd,
                                       PDSTRUCT *pPdStruct)
 {
-    QPointer<XSmsiPakArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct) ||
+    if (!isPdStructNotCanceled(pPdStruct) ||
         (nTotalSize < (PSN_HEADER_SIZE + 3))) {
         return false;
     }
 
     const QByteArray baHeader =
         read_array_process(0, PSN_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        (baHeader.size() != PSN_HEADER_SIZE)) {
+    if ((baHeader.size() != PSN_HEADER_SIZE)) {
         return false;
     }
     const uchar *pHeader =
@@ -264,7 +260,7 @@ bool XSmsiPakArchive::scanPsnCompress(QList<ENTRY> *pEntries,
 
     const QByteArray baPacked =
         read_array_process(PSN_HEADER_SIZE, nPackedSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baPacked.size() != nPackedSize)) {
+    if ((baPacked.size() != nPackedSize)) {
         return false;
     }
 
@@ -287,8 +283,7 @@ bool XSmsiPakArchive::scanPsnCompress(QList<ENTRY> *pEntries,
     // the file that holds it - the same name the reference publishes. There is
     // exactly one member, so it can never collide with a sibling.
     QString sFileName =
-        QFileInfo(getDeviceFileName(guardedSource.data())).fileName();
-    if (!guardedThis || !guardedSource) return false;
+        QFileInfo(getDeviceFileName(guardedSource)).fileName();
     if (sFileName.isEmpty()) sFileName = QStringLiteral("data");
 
     ENTRY entry = {};

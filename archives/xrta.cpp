@@ -8,7 +8,6 @@
 #include "xrta.h"
 
 #include <QDateTime>
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -144,16 +143,15 @@ bool XRTA::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XRTA> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
     if (context.nInputSize < RTA_MAGIC_SIZE + 1) return false;
 
     const QByteArray baMagic = read_array_process(0, RTA_MAGIC_SIZE + 1, pPdStruct);
-    if (!guardedThis || !guardedSource || (baMagic.size() != RTA_MAGIC_SIZE + 1)) return false;
+    if (baMagic.size() != RTA_MAGIC_SIZE + 1) return false;
     if (memcmp(baMagic.constData(), "KJd\x00", 4) != 0) return false;
     // The reference refuses a container whose first record has an empty name:
     // that byte is the end marker, so such a file declares no members at all.
@@ -169,7 +167,7 @@ bool XRTA::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
         const qint64 nWindow = qMin<qint64>(RTA_MAX_RECORD_HEADER, context.nInputSize - nCurrent);
         const QByteArray baRecord = read_array_process(nCurrent, nWindow, pPdStruct);
-        if (!guardedThis || !guardedSource || (baRecord.size() != nWindow)) return false;
+        if (baRecord.size() != nWindow) return false;
         const uchar *pRecord = reinterpret_cast<const uchar *>(baRecord.constData());
 
         qint64 nPosition = 0;
@@ -215,7 +213,7 @@ bool XRTA::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (member.nPackedSize > 0) {
             if (member.nPackedSize < RTA_STREAM_PREFIX_SIZE) return false;
             const QByteArray baPrefix = read_array_process(member.nDataOffset, RTA_STREAM_PREFIX_SIZE, pPdStruct);
-            if (!guardedThis || !guardedSource || (baPrefix.size() != RTA_STREAM_PREFIX_SIZE)) return false;
+            if (baPrefix.size() != RTA_STREAM_PREFIX_SIZE) return false;
             const uchar *pPrefix = reinterpret_cast<const uchar *>(baPrefix.constData());
             if ((pPrefix[0] != RTA_STREAM_MAGIC_HIGH) || (pPrefix[1] != RTA_STREAM_MAGIC_LOW) || (pPrefix[2] > 1) ||
                 (pPrefix[3] != RTA_STREAM_RESERVED)) {
@@ -231,12 +229,12 @@ bool XRTA::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (!rtaRangeWithin(context.nInputSize, 0, context.nArchiveSize)) return false;
 
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return isPdStructNotCanceled(pPdStruct);
 }
 
 bool XRTA::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -397,11 +395,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XRTA::getDefaultUnpackProperties()
 
 bool XRTA::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XRTA> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -411,8 +408,8 @@ bool XRTA::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -426,15 +423,10 @@ bool XRTA::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

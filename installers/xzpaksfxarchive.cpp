@@ -22,7 +22,6 @@
 
 #include "Algos/xdcldecoder.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -139,12 +138,9 @@ bool XZPakSFXArchive::isNameField(const QByteArray &baName, QString *pName)
 
 bool XZPakSFXArchive::isDclPreludeAt(qint64 nOffset, PDSTRUCT *pPdStruct)
 {
-    QPointer<XZPakSFXArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource) return false;
-
+    QIODevice *guardedSource = getDevice();
     const QByteArray baPrelude = read_array_process(nOffset, 2, pPdStruct);
-    if (!guardedThis || !guardedSource || (baPrelude.size() != 2)) return false;
+    if ((baPrelude.size() != 2)) return false;
 
     const quint8 nLiteralMode = static_cast<quint8>(baPrelude.at(0));
     const quint8 nDictBits = static_cast<quint8>(baPrelude.at(1));
@@ -156,9 +152,7 @@ bool XZPakSFXArchive::isDclPreludeAt(qint64 nOffset, PDSTRUCT *pPdStruct)
 bool XZPakSFXArchive::readHeaderAt(qint64 nOffset, qint64 nLimit,
                                    quint16 nVersion, PDSTRUCT *pPdStruct)
 {
-    QPointer<XZPakSFXArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource) return false;
+    QIODevice *guardedSource = getDevice();
     // A self-extractor always carries a stub, so a zero offset here is a
     // trailer that does not describe this container - and refusing it keeps
     // this reader structurally unable to take a plain file away from XIBMZPak.
@@ -167,17 +161,13 @@ bool XZPakSFXArchive::readHeaderAt(qint64 nOffset, qint64 nLimit,
 
     const QByteArray baHeader =
         read_array_process(nOffset, ZPAKSFX_HEADER_PROBE_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource) return false;
     return zpakSfxIsMagic(baHeader, nVersion);
 }
 
 bool XZPakSFXArchive::walkVersion1(CONTEXT *pContext, qint32 nNumberOfMembers,
                                    PDSTRUCT *pPdStruct)
 {
-    QPointer<XZPakSFXArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource) return false;
-
+    QIODevice *guardedSource = getDevice();
     const qint64 nDirectorySize =
         static_cast<qint64>(nNumberOfMembers) * ZPAKSFX_V1_ENTRY_SIZE;
     const qint64 nDirectoryOffset = pContext->nTrailerOffset - nDirectorySize;
@@ -190,8 +180,7 @@ bool XZPakSFXArchive::walkVersion1(CONTEXT *pContext, qint32 nNumberOfMembers,
 
     const QByteArray baDirectory =
         read_array_process(nDirectoryOffset, nDirectorySize, pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        (baDirectory.size() != nDirectorySize)) {
+    if ((baDirectory.size() != nDirectorySize)) {
         return false;
     }
 
@@ -243,8 +232,6 @@ bool XZPakSFXArchive::walkVersion1(CONTEXT *pContext, qint32 nNumberOfMembers,
         if (member.nCompressedSize < ZPAKSFX_MIN_PACKED_SIZE) return false;
         if (member.nCompressedSize > nDirectoryOffset - nOffset) return false;
         if (!isDclPreludeAt(member.nDataOffset, pPdStruct)) return false;
-        if (!guardedThis || !guardedSource) return false;
-
         pContext->listMembers.append(member);
         nOffset += member.nCompressedSize;
     }
@@ -261,10 +248,7 @@ bool XZPakSFXArchive::walkVersion1(CONTEXT *pContext, qint32 nNumberOfMembers,
 bool XZPakSFXArchive::walkVersion2(CONTEXT *pContext, qint32 nNumberOfMembers,
                                    PDSTRUCT *pPdStruct)
 {
-    QPointer<XZPakSFXArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource) return false;
-
+    QIODevice *guardedSource = getDevice();
     qint64 nOffset = pContext->nArchiveOffset + ZPAKSFX_HEADER_SIZE;
     for (qint32 i = 0; i < nNumberOfMembers; i++) {
         if (!isPdStructNotCanceled(pPdStruct)) return false;
@@ -274,8 +258,7 @@ bool XZPakSFXArchive::walkVersion2(CONTEXT *pContext, qint32 nNumberOfMembers,
 
         const QByteArray baRecord =
             read_array_process(nOffset, ZPAKSFX_V2_RECORD_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            (baRecord.size() != ZPAKSFX_V2_RECORD_SIZE)) {
+        if ((baRecord.size() != ZPAKSFX_V2_RECORD_SIZE)) {
             return false;
         }
         if (static_cast<quint8>(baRecord.at(0)) != ZPAKSFX_V2_RECORD_TAG) {
@@ -311,7 +294,7 @@ bool XZPakSFXArchive::walkVersion2(CONTEXT *pContext, qint32 nNumberOfMembers,
 
         const QByteArray baName = read_array_process(
             nOffset + ZPAKSFX_V2_RECORD_SIZE, nNameSize, pPdStruct);
-        if (!guardedThis || !guardedSource || (baName.size() != nNameSize)) {
+        if ((baName.size() != nNameSize)) {
             return false;
         }
         // The size counts the terminator, and only the bytes in front of it are
@@ -326,8 +309,6 @@ bool XZPakSFXArchive::walkVersion2(CONTEXT *pContext, qint32 nNumberOfMembers,
         member.nUncompressedSize = 0;
         member.bUncompressedSizeKnown = false;
         if (!isDclPreludeAt(member.nDataOffset, pPdStruct)) return false;
-        if (!guardedThis || !guardedSource) return false;
-
         pContext->listMembers.append(member);
         nOffset = nDataOffset + member.nCompressedSize;
     }
@@ -344,15 +325,10 @@ bool XZPakSFXArchive::walkVersion2(CONTEXT *pContext, qint32 nNumberOfMembers,
 bool XZPakSFXArchive::scanMemberSize(MEMBER *pMember, PDSTRUCT *pPdStruct)
 {
     if (!pMember || !isPdStructNotCanceled(pPdStruct)) return false;
-
-    QPointer<XZPakSFXArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource) return false;
-
+    QIODevice *guardedSource = getDevice();
     const QByteArray baPacked = read_array_process(
         pMember->nDataOffset, pMember->nCompressedSize, pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        (baPacked.size() != pMember->nCompressedSize)) {
+    if ((baPacked.size() != pMember->nCompressedSize)) {
         return false;
     }
 
@@ -382,10 +358,8 @@ bool XZPakSFXArchive::parseContext(CONTEXT *pContext, bool bScanSizes,
                                    PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
-
-    QPointer<XZPakSFXArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     const qint64 nInputSize = guardedSource->size();
     CONTEXT context = {};
@@ -401,7 +375,6 @@ bool XZPakSFXArchive::parseContext(CONTEXT *pContext, bool bScanSizes,
         const qint64 nTrailerOffset = nInputSize - ZPAKSFX_V2_TRAILER_SIZE;
         const QByteArray baTrailer = read_array_process(
             nTrailerOffset, ZPAKSFX_V2_TRAILER_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource) return false;
         if (baTrailer.size() == ZPAKSFX_V2_TRAILER_SIZE) {
             const uchar *pTrailer =
                 reinterpret_cast<const uchar *>(baTrailer.constData());
@@ -412,12 +385,10 @@ bool XZPakSFXArchive::parseContext(CONTEXT *pContext, bool bScanSizes,
             if ((nNumberOfMembers >= 1) &&
                 (nNumberOfMembers <= ZPAKSFX_MAX_MEMBERS) &&
                 readHeaderAt(nArchiveOffset, nTrailerOffset, 2U, pPdStruct)) {
-                if (!guardedThis || !guardedSource) return false;
                 context.nVersion = 2U;
                 context.nArchiveOffset = nArchiveOffset;
                 context.nTrailerOffset = nTrailerOffset;
                 bParsed = walkVersion2(&context, nNumberOfMembers, pPdStruct);
-                if (!guardedThis || !guardedSource) return false;
             }
         }
     }
@@ -432,7 +403,6 @@ bool XZPakSFXArchive::parseContext(CONTEXT *pContext, bool bScanSizes,
         const qint64 nTrailerOffset = nInputSize - ZPAKSFX_V1_TRAILER_SIZE;
         const QByteArray baTrailer = read_array_process(
             nTrailerOffset, ZPAKSFX_V1_TRAILER_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource) return false;
         if (baTrailer.size() == ZPAKSFX_V1_TRAILER_SIZE) {
             const uchar *pTrailer =
                 reinterpret_cast<const uchar *>(baTrailer.constData());
@@ -442,12 +412,10 @@ bool XZPakSFXArchive::parseContext(CONTEXT *pContext, bool bScanSizes,
                 static_cast<qint32>(qFromLittleEndian<quint32>(pTrailer + 2)));
             if ((nNumberOfMembers >= 1) &&
                 readHeaderAt(nArchiveOffset, nTrailerOffset, 1U, pPdStruct)) {
-                if (!guardedThis || !guardedSource) return false;
                 context.nVersion = 1U;
                 context.nArchiveOffset = nArchiveOffset;
                 context.nTrailerOffset = nTrailerOffset;
                 bParsed = walkVersion1(&context, nNumberOfMembers, pPdStruct);
-                if (!guardedThis || !guardedSource) return false;
             }
         }
     }
@@ -462,14 +430,13 @@ bool XZPakSFXArchive::parseContext(CONTEXT *pContext, bool bScanSizes,
             // size unknown; methodToHandleMethod() then reports it as UNKNOWN so
             // extraction refuses it instead of writing a truncated file.
             scanMemberSize(&context.listMembers[i], pPdStruct);
-            if (!guardedThis || !guardedSource) return false;
         }
     }
 
     context.nArchiveSize = context.nInputSize;
     context.nFirstMemberOffset = context.listMembers.first().nDataOffset;
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 QString XZPakSFXArchive::methodToString(const MEMBER &member)
@@ -501,7 +468,7 @@ XZPakSFXArchive::~XZPakSFXArchive()
 
 bool XZPakSFXArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, false, pPdStruct);
@@ -693,9 +660,8 @@ bool XZPakSFXArchive::initUnpack(UNPACK_STATE *pState,
                                  const QMap<UNPACK_PROP, QVariant> &mapProperties,
                                  PDSTRUCT *pPdStruct)
 {
-    QPointer<XZPakSFXArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
     }
@@ -703,7 +669,7 @@ bool XZPakSFXArchive::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -720,9 +686,8 @@ bool XZPakSFXArchive::initUnpack(UNPACK_STATE *pState,
     }
     // bScanSizes = true: the extraction path needs the plaintext length of every
     // member, and the container does not store it anywhere.
-    if (!parseContext(pContext, true, pPdStruct) || !guardedThis ||
-        !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, true, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -739,16 +704,14 @@ bool XZPakSFXArchive::initUnpack(UNPACK_STATE *pState,
     pState->pContext = pContext;
 
     const bool bFinalized =
-        guardedThis->validateAndFinalizeUnpackSource(pState, pContext,
+        validateAndFinalizeUnpackSource(pState, pContext,
                                                      pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
+    if (!bFinalized) {
             delete pContext;
             *pState = UNPACK_STATE();
             return false;
-        }
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

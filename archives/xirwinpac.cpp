@@ -21,8 +21,6 @@
 #include "xirwinpac.h"
 
 #include <QFileInfo>
-#include <QPointer>
-
 #include <cstring>
 #include <new>
 
@@ -145,10 +143,10 @@ XIrwinPac::XIrwinPac(QIODevice *pDevice) : XArchive(pDevice)
 
 QString XIrwinPac::deriveMemberName()
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return IRWINPAC_FALLBACK_NAME;
 
-    const QString sDeviceName = XBinary::getDeviceFileName(guardedSource.data());
+    const QString sDeviceName = XBinary::getDeviceFileName(guardedSource);
     if (sDeviceName.isEmpty()) return IRWINPAC_FALLBACK_NAME;
 
     // The format stores no name at all.  The installer decides the target name
@@ -164,16 +162,15 @@ bool XIrwinPac::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XIrwinPac> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
     if (context.nInputSize < (IRWINPAC_HEADER_SIZE + IRWINPAC_CHUNK_HEADER_SIZE)) return false;
 
     const QByteArray baHeader = read_array_process(0, IRWINPAC_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != IRWINPAC_HEADER_SIZE)) return false;
+    if ((baHeader.size() != IRWINPAC_HEADER_SIZE)) return false;
     if (std::memcmp(baHeader.constData(), IRWINPAC_MAGIC, static_cast<size_t>(IRWINPAC_MAGIC_SIZE)) != 0) return false;
 
     const quint32 nDeclaredHeaderSize = static_cast<quint8>(baHeader.at(8)) | (static_cast<quint32>(static_cast<quint8>(baHeader.at(9))) << 8);
@@ -195,7 +192,7 @@ bool XIrwinPac::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (nBlocks >= IRWINPAC_MAX_BLOCKS) return false;
 
         const QByteArray baChunk = read_array_process(nOffset, IRWINPAC_CHUNK_HEADER_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baChunk.size() != IRWINPAC_CHUNK_HEADER_SIZE)) return false;
+        if ((baChunk.size() != IRWINPAC_CHUNK_HEADER_SIZE)) return false;
 
         const quint32 nFlag = static_cast<quint8>(baChunk.at(0)) | (static_cast<quint32>(static_cast<quint8>(baChunk.at(1))) << 8);
         const quint32 nChunkSize = static_cast<quint8>(baChunk.at(2)) | (static_cast<quint32>(static_cast<quint8>(baChunk.at(3))) << 8);
@@ -213,7 +210,7 @@ bool XIrwinPac::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
             if (nPayloadSize != static_cast<qint64>(nUnpackedSize)) return false;
         } else if (!bProbed) {
             const QByteArray baPayload = read_array_process(nOffset + IRWINPAC_CHUNK_HEADER_SIZE, nPayloadSize, pPdStruct);
-            if (!guardedThis || !guardedSource || (baPayload.size() != nPayloadSize)) return false;
+            if ((baPayload.size() != nPayloadSize)) return false;
             if (!irwinpacProbeBlock(baPayload, static_cast<qint32>(nUnpackedSize))) return false;
             bProbed = true;
         }
@@ -229,7 +226,7 @@ bool XIrwinPac::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     context.nNumberOfBlocks = nBlocks;
 
     context.sFileName = deriveMemberName();
-    if (!guardedThis || !guardedSource) return false;
+    if (!guardedSource) return false;
 
     *pContext = context;
 
@@ -240,13 +237,13 @@ bool XIrwinPac::isValid(PDSTRUCT *pPdStruct)
 {
     // The probe runs on a device the caller still owns: remember where its
     // cursor was and put it back, whatever the outcome.
-    QPointer<QIODevice> guardedSource(getDevice());
-    const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
+    QIODevice *guardedSource = getDevice();
+    const qint64 nSavedPosition = guardedSource->pos();
 
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
 
-    if (guardedSource && (nSavedPosition >= 0)) {
+    if ((nSavedPosition >= 0)) {
         guardedSource->seek(nSavedPosition);
     }
 
@@ -416,16 +413,15 @@ QMap<XBinary::UNPACK_PROP, QVariant> XIrwinPac::getDefaultUnpackProperties()
 
 bool XIrwinPac::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XIrwinPac> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
 
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) {
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) {
         return false;
     }
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -440,8 +436,8 @@ bool XIrwinPac::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
         return false;
     }
 
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) guardedThis->releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct)) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -457,15 +453,10 @@ bool XIrwinPac::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
 
     // Binding only stages the source; without this finalize the listing would
     // work and every extraction would silently produce nothing.
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

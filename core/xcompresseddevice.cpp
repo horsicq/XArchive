@@ -43,13 +43,13 @@ void XCompressedDevice::clearData()
     }
 
     if (m_pSubDevice) {
-        QPointer<SubDevice> guardedSubDevice(m_pSubDevice);
+        SubDevice *guardedSubDevice = m_pSubDevice;
         m_pSubDevice = nullptr;
         guardedSubDevice->close();
-        if (guardedSubDevice) delete guardedSubDevice.data();
+        if (guardedSubDevice) delete guardedSubDevice;
     }
 
-    QIODevice *pBufferDevice = m_pBufferDevice.data();
+    QIODevice *pBufferDevice = m_pBufferDevice;
     m_pBufferDevice = nullptr;
     XBinary::freeFileBuffer(&pBufferDevice);
     m_pOrigDevice = nullptr;
@@ -61,7 +61,7 @@ bool XCompressedDevice::setData(QIODevice *pDevice, const XBinary::FPART &fPart,
 {
     clearData();
 
-    QPointer<QIODevice> guardedDevice(pDevice);
+    QIODevice *guardedDevice = pDevice;
     if (!guardedDevice || guardedDevice->isSequential() || !guardedDevice || !guardedDevice->isReadable() || !guardedDevice || (fPart.nFileOffset < 0) ||
         (fPart.nFileSize < 0) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
@@ -84,10 +84,10 @@ bool XCompressedDevice::setData(QIODevice *pDevice, const XBinary::FPART &fPart,
         }
 
         m_pBufferDevice = XBinary::createFileBuffer(nUncompressedSize, pPdStruct);
-        QPointer<QIODevice> guardedBufferDevice(m_pBufferDevice);
-        if (guardedBufferDevice && guardedDevice && XDecompress().decompressFPART(fPart, guardedDevice.data(), guardedBufferDevice.data(), pPdStruct) && guardedDevice &&
+        QIODevice *guardedBufferDevice = m_pBufferDevice;
+        if (guardedBufferDevice && guardedDevice && XDecompress().decompressFPART(fPart, guardedDevice, guardedBufferDevice, pPdStruct) && guardedDevice &&
             guardedBufferDevice && XBinary::isPdStructNotCanceled(pPdStruct) && guardedBufferDevice->seek(0) && guardedBufferDevice) {
-            m_pCurrentDevice = guardedBufferDevice.data();
+            m_pCurrentDevice = guardedBufferDevice;
             m_bIsValid = true;
         }
         if (!guardedBufferDevice) m_pBufferDevice = nullptr;
@@ -96,11 +96,11 @@ bool XCompressedDevice::setData(QIODevice *pDevice, const XBinary::FPART &fPart,
             clearData();
             return false;
         }
-        m_pSubDevice = new (std::nothrow) SubDevice(guardedDevice.data(), fPart.nFileOffset, fPart.nFileSize);
-        QPointer<SubDevice> guardedSubDevice(m_pSubDevice);
+        m_pSubDevice = new (std::nothrow) SubDevice(guardedDevice, fPart.nFileOffset, fPart.nFileSize);
+        SubDevice *guardedSubDevice = m_pSubDevice;
         if (guardedSubDevice && guardedDevice && guardedSubDevice->open(QIODevice::ReadOnly) && guardedSubDevice && guardedDevice && guardedSubDevice->seek(0) &&
             guardedSubDevice && guardedDevice) {
-            m_pCurrentDevice = guardedSubDevice.data();
+            m_pCurrentDevice = guardedSubDevice;
             m_bIsValid = true;
         }
         if (!guardedSubDevice) m_pSubDevice = nullptr;
@@ -129,7 +129,7 @@ bool XCompressedDevice::open(OpenMode mode)
 
 QIODevice *XCompressedDevice::getOrigDevice()
 {
-    return m_pOrigDevice.data();
+    return m_pOrigDevice;
 }
 
 qint64 XCompressedDevice::size() const

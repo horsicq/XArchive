@@ -21,7 +21,6 @@
 #include "xap4archive.h"
 
 #include <QFileInfo>
-#include <QPointer>
 #include <QSet>
 
 #include <new>
@@ -304,13 +303,12 @@ bool XAP4Archive::findTocHeader(SCAN_CACHE *pCache, qint64 nFrom, qint64 nEnd,
     *pnFound = -1;
     *pnRecordCount = 0;
 
-    QPointer<XAP4Archive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || (nFrom < 0) || (nEnd > nInputSize)) return false;
+    QIODevice *guardedSource = getDevice();
+    if ((nFrom < 0) || (nEnd > nInputSize)) return false;
 
     qint64 nPos = nFrom;
     while ((nPos + AP4_TOC_HEADER_SIZE) <= nEnd) {
-        if (!guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
+        if (!isPdStructNotCanceled(pPdStruct)) {
             return false;
         }
         const qint64 nCacheEnd =
@@ -322,8 +320,7 @@ bool XAP4Archive::findTocHeader(SCAN_CACHE *pCache, qint64 nFrom, qint64 nEnd,
             const qint64 nChunkSize = qMin(AP4_SCAN_CHUNK_SIZE, nInputSize - nPos);
             if (nChunkSize < AP4_TOC_HEADER_SIZE) return true;
             pCache->baData = read_array_process(nPos, nChunkSize, pPdStruct);
-            if (!guardedThis || !guardedSource ||
-                (pCache->baData.size() != nChunkSize)) {
+            if ((pCache->baData.size() != nChunkSize)) {
                 pCache->nOffset = -1;
                 pCache->baData.clear();
                 return false;
@@ -357,15 +354,14 @@ bool XAP4Archive::probeMember(const MEMBER &member, bool bGateOnly,
     *pbProbeNull = false;
     *pbAllNull = false;
 
-    QPointer<XAP4Archive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || (member.nOffset < 0) || (member.nSize <= 0)) {
+    QIODevice *guardedSource = getDevice();
+    if ((member.nOffset < 0) || (member.nSize <= 0)) {
         return false;
     }
 
     const qint64 nProbeSize = qMin(member.nSize, AP4_PROBE_SIZE);
     *pbaProbe = read_array_process(member.nOffset, nProbeSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (pbaProbe->size() != nProbeSize) ||
+    if ((pbaProbe->size() != nProbeSize) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -381,7 +377,7 @@ bool XAP4Archive::probeMember(const MEMBER &member, bool bGateOnly,
     qint64 nPos = member.nOffset + nProbeSize;
     const qint64 nEnd = member.nOffset + member.nSize;
     while (nPos < nEnd) {
-        if (!guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
+        if (!isPdStructNotCanceled(pPdStruct)) {
             return false;
         }
         const qint64 nChunkSize = qMin(AP4_COPY_BUFFER_SIZE, nEnd - nPos);
@@ -389,7 +385,7 @@ bool XAP4Archive::probeMember(const MEMBER &member, bool bGateOnly,
             nChunkSize) {
             return false;
         }
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
         if (!ap4IsAllZero(baChunk.constData(), nChunkSize)) {
             *pbAllNull = false;
             break;
@@ -404,9 +400,8 @@ bool XAP4Archive::parseContext(CONTEXT *pContext, bool bGateOnly,
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XAP4Archive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -422,7 +417,7 @@ bool XAP4Archive::parseContext(CONTEXT *pContext, bool bGateOnly,
     QList<MEMBER> listAccepted;
 
     while (true) {
-        if (!guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
+        if (!isPdStructNotCanceled(pPdStruct)) {
             return false;
         }
         const bool bFirst = (nFirstTocOffset < 0);
@@ -436,8 +431,7 @@ bool XAP4Archive::parseContext(CONTEXT *pContext, bool bGateOnly,
         qint64 nFound = -1;
         quint8 nRecordCount = 0;
         if (!findTocHeader(&cache, nScanPos, nSearchEnd, context.nInputSize,
-                           &nFound, &nRecordCount, pPdStruct) ||
-            !guardedThis || !guardedSource) {
+                           &nFound, &nRecordCount, pPdStruct)) {
             return false;
         }
         if (nFound < 0) {
@@ -461,8 +455,7 @@ bool XAP4Archive::parseContext(CONTEXT *pContext, bool bGateOnly,
 
         const QByteArray baRecords =
             read_array_process(nFound + AP4_TOC_HEADER_SIZE, nRecordsSize, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            (baRecords.size() != nRecordsSize)) {
+        if ((baRecords.size() != nRecordsSize)) {
             return false;
         }
 
@@ -541,8 +534,7 @@ bool XAP4Archive::parseContext(CONTEXT *pContext, bool bGateOnly,
         bool bProbeNull = false;
         bool bAllNull = false;
         if (!probeMember(member, bGateOnly, &baProbe, &bProbeNull, &bAllNull,
-                         pPdStruct) ||
-            !guardedThis || !guardedSource) {
+                         pPdStruct)) {
             return false;
         }
         if (bAllNull) continue;
@@ -564,8 +556,8 @@ bool XAP4Archive::parseContext(CONTEXT *pContext, bool bGateOnly,
 
     // Names: the reference tool derives them from the container name and the
     // member extent, so they are reproduced here byte for byte.
-    const QString sDeviceName = XBinary::getDeviceFileName(guardedSource.data());
-    if (!guardedThis || !guardedSource) return false;
+    const QString sDeviceName = XBinary::getDeviceFileName(guardedSource);
+    if (!guardedSource) return false;
     QString sStem;
     if (!sDeviceName.isEmpty()) {
         sStem = QFileInfo(sDeviceName).completeBaseName();
@@ -601,12 +593,12 @@ bool XAP4Archive::parseContext(CONTEXT *pContext, bool bGateOnly,
     }
 
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XAP4Archive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     // There is no magic at all: the gate is the whole TOC chain plus the MP3
@@ -809,9 +801,8 @@ bool XAP4Archive::initUnpack(UNPACK_STATE *pState,
                              const QMap<UNPACK_PROP, QVariant> &mapProperties,
                              PDSTRUCT *pPdStruct)
 {
-    QPointer<XAP4Archive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
     }
@@ -819,7 +810,7 @@ bool XAP4Archive::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -841,10 +832,9 @@ bool XAP4Archive::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, false, pPdStruct) || !guardedThis ||
-        !guardedSource || pContext->listMembers.isEmpty() ||
+    if (!parseContext(pContext, false, pPdStruct) || pContext->listMembers.isEmpty() ||
         (pContext->nInputSize != guardedSource->size())) {
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -870,15 +860,10 @@ bool XAP4Archive::initUnpack(UNPACK_STATE *pState,
     pState->pContext = pContext;
 
     const bool bFinalized =
-        guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+        validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -949,20 +934,18 @@ XBinary::ARCHIVERECORD XAP4Archive::infoCurrent(UNPACK_STATE *pState,
 bool XAP4Archive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
                                 PDSTRUCT *pPdStruct)
 {
-    QPointer<XAP4Archive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    QPointer<QIODevice> guardedOutput(pDevice);
+    QIODevice *guardedSource = getDevice();
+    QIODevice *guardedOutput = pDevice;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    if (!operationGuard.isAcquired() || !pState || !guardedSource ||
-        !guardedOutput || !pState->pContext ||
-        devicesAlias(guardedSource.data(), guardedOutput.data()) ||
+    if (!operationGuard.isAcquired() || !pState || !pState->pContext ||
+        devicesAlias(guardedSource, guardedOutput) ||
         !isUnpackSourceCurrent(pState, pPdStruct) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
     CONTEXT *pContext = static_cast<CONTEXT *>(pState->pContext);
     const qint64 nCurrentSize = getSize();
-    if (!guardedThis || (nCurrentSize != pContext->nInputSize) ||
+    if ((nCurrentSize != pContext->nInputSize) ||
         (pState->nTotalSize != nCurrentSize) ||
         (pState->nNumberOfRecords != pContext->listMembers.size()) ||
         (pState->nCurrentIndex < 0) ||
@@ -979,8 +962,7 @@ bool XAP4Archive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
         // Stored member: the inherited STORE path copies the real extent.  It
         // acquires the operation guard itself, so ours must go first.
         operationGuard.release();
-        return guardedThis &&
-               guardedThis->XArchive::unpackCurrent(pState, pDevice, pPdStruct);
+        return XArchive::unpackCurrent(pState, pDevice, pPdStruct);
     }
 
     if (!isUnpackOutputSizeAllowed(pState->mapUnpackProperties, member.nSize)) {
@@ -1014,8 +996,7 @@ bool XAP4Archive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
     stage.pStage = createUnpackFileBuffer(member.nSize, pState->mapUnpackProperties,
                                           pPdStruct);
     if (!stage.pStage || (stage.pStage->size() != member.nSize) ||
-        !stage.pStage->seek(0) || !guardedThis || !guardedSource ||
-        !guardedOutput || !isUnpackSourceCurrent(pState, pPdStruct)) {
+        !stage.pStage->seek(0) || !isUnpackSourceCurrent(pState, pPdStruct)) {
         return false;
     }
 
@@ -1024,8 +1005,7 @@ bool XAP4Archive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
 
     qint64 nCopied = 0;
     while (nCopied < member.nSize) {
-        if (!guardedThis || !guardedSource || !guardedOutput ||
-            !isUnpackSourceCurrent(pState, pPdStruct) ||
+        if (!isUnpackSourceCurrent(pState, pPdStruct) ||
             !isPdStructNotCanceled(pPdStruct)) {
             return false;
         }
@@ -1034,7 +1014,7 @@ bool XAP4Archive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
                                nChunkSize, pPdStruct) != nChunkSize) {
             return false;
         }
-        if (!guardedThis || !guardedSource || !guardedOutput) return false;
+        if (!guardedSource) return false;
 
         uchar *pChunk = reinterpret_cast<uchar *>(baBuffer.data());
         for (qint64 i = 0; i < nChunkSize; ++i) {
@@ -1047,17 +1027,16 @@ bool XAP4Archive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
         nCopied += nChunkSize;
     }
 
-    if (!guardedThis || !guardedSource || !guardedOutput ||
-        (stage.pStage->size() != member.nSize) || !stage.pStage->seek(0) ||
+    if ((stage.pStage->size() != member.nSize) || !stage.pStage->seek(0) ||
         !isUnpackSourceCurrent(pState, pPdStruct) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
     // The cursor stays on the record start, exactly as the inherited STORE
     // path leaves it: infoCurrent() checks it and moveToNext() advances it.
-    const bool bPublished = publishUnpackOutput(stage.pStage, guardedOutput.data(),
+    const bool bPublished = publishUnpackOutput(stage.pStage, guardedOutput,
                                                 pState, pPdStruct);
-    return bPublished && guardedThis;
+    return bPublished;
 }
 
 bool XAP4Archive::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)

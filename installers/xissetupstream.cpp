@@ -20,7 +20,6 @@
  */
 #include "xissetupstream.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -65,15 +64,11 @@ XISSetupStream::~XISSetupStream()
 bool XISSetupStream::parseAt(qint64 nBaseOffset, CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
-
-    QPointer<XISSetupStream> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource) return false;
-
+    QIODevice *guardedSource = getDevice();
     if (!issRangeWithin(pContext->nInputSize, nBaseOffset, ISSETUPSTREAM_HEADER_SIZE)) return false;
 
     const QByteArray baHeader = read_array_process(nBaseOffset, ISSETUPSTREAM_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != ISSETUPSTREAM_HEADER_SIZE)) return false;
+    if ((baHeader.size() != ISSETUPSTREAM_HEADER_SIZE)) return false;
     const uchar *pHeader = (const uchar *)baHeader.constData();
 
     if (memcmp(baHeader.constData(), ISSETUPSTREAM_TAG, (size_t)ISSETUPSTREAM_TAG_SIZE) != 0) return false;
@@ -100,7 +95,7 @@ bool XISSetupStream::parseAt(qint64 nBaseOffset, CONTEXT *pContext, PDSTRUCT *pP
         if (!issRangeWithin(pContext->nInputSize, nOffset, ISSETUPSTREAM_RECORD_SIZE)) return false;
 
         const QByteArray baRecord = read_array_process(nOffset, ISSETUPSTREAM_RECORD_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baRecord.size() != ISSETUPSTREAM_RECORD_SIZE)) return false;
+        if ((baRecord.size() != ISSETUPSTREAM_RECORD_SIZE)) return false;
         const uchar *pRecord = (const uchar *)baRecord.constData();
 
         const quint32 nNameSize = qFromLittleEndian<quint32>(pRecord);
@@ -135,7 +130,7 @@ bool XISSetupStream::parseAt(qint64 nBaseOffset, CONTEXT *pContext, PDSTRUCT *pP
 
         if (!issRangeWithin(pContext->nInputSize, nOffset + ISSETUPSTREAM_RECORD_SIZE, (qint64)nNameSize)) return false;
         const QByteArray baName = read_array_process(nOffset + ISSETUPSTREAM_RECORD_SIZE, (qint64)nNameSize, pPdStruct);
-        if (!guardedThis || !guardedSource || (baName.size() != (qint32)nNameSize)) return false;
+        if ((baName.size() != (qint32)nNameSize)) return false;
 
         const QString sRawName = QString::fromUtf16(reinterpret_cast<const char16_t *>(baName.constData()), (qint32)(nNameSize / 2));
 
@@ -168,10 +163,8 @@ bool XISSetupStream::parseAt(qint64 nBaseOffset, CONTEXT *pContext, PDSTRUCT *pP
 bool XISSetupStream::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
-
-    QPointer<XISSetupStream> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -182,13 +175,11 @@ bool XISSetupStream::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     while ((nScanOffset + ISSETUPSTREAM_TAG_SIZE) <= context.nInputSize) {
         if (!isPdStructNotCanceled(pPdStruct)) return false;
         const qint64 nFound = find_array(nScanOffset, context.nInputSize - nScanOffset, ISSETUPSTREAM_TAG, ISSETUPSTREAM_TAG_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource) return false;
         if (nFound == -1) break;
         if (parseAt(nFound, &context, pPdStruct)) {
             bFound = true;
             break;
         }
-        if (!guardedThis || !guardedSource) return false;
         nScanOffset = nFound + 1;
     }
 
@@ -240,8 +231,7 @@ QByteArray XISSetupStream::propertyOf(const MEMBER &member)
 bool XISSetupStream::isValid(PDSTRUCT *pPdStruct)
 {
     // getRecords-style probing displaces the caller's cursor, so snapshot it.
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource) return false;
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -398,11 +388,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XISSetupStream::getDefaultUnpackProperties(
 
 bool XISSetupStream::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XISSetupStream> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -412,8 +401,8 @@ bool XISSetupStream::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QV
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -426,15 +415,13 @@ bool XISSetupStream::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QV
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
             delete pContext;
             *pState = UNPACK_STATE();
             return false;
-        }
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

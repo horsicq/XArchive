@@ -20,7 +20,6 @@
  */
 #include "xclparchive.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -70,16 +69,15 @@ bool XCLPArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XCLPArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
     if (context.nInputSize < CLP_HEADER_SIZE) return false;
 
     const QByteArray baHeader = read_array_process(0, CLP_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != CLP_HEADER_SIZE)) return false;
+    if ((baHeader.size() != CLP_HEADER_SIZE)) return false;
     const quint16 nIdentifier = qFromLittleEndian<quint16>((const uchar *)baHeader.constData());
     if ((nIdentifier != CLP_ID_WIN3) && (nIdentifier != CLP_ID_WINNT)) return false;
     const qint32 nCount = (qint32)qFromLittleEndian<quint16>((const uchar *)baHeader.constData() + 2);
@@ -91,7 +89,7 @@ bool XCLPArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (!isPdStructNotCanceled(pPdStruct)) return false;
         const qint64 nRecordOffset = CLP_HEADER_SIZE + ((qint64)i * CLP_RECORD_SIZE);
         const QByteArray baRecord = read_array_process(nRecordOffset, CLP_RECORD_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baRecord.size() != CLP_RECORD_SIZE)) return false;
+        if ((baRecord.size() != CLP_RECORD_SIZE)) return false;
         const uchar *pRecord = (const uchar *)baRecord.constData();
 
         const quint16 nFormat = qFromLittleEndian<quint16>(pRecord);
@@ -113,7 +111,7 @@ bool XCLPArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
         if ((nFormat == CLP_CF_TEXT) || (nFormat == CLP_CF_OEMTEXT) || (nFormat == CLP_CF_UNICODETEXT)) {
             const QByteArray baText = read_array_process(nDataOffset, nSize, pPdStruct);
-            if (!guardedThis || !guardedSource || (baText.size() != nSize)) return false;
+            if ((baText.size() != nSize)) return false;
             qint64 nLength = nSize;
             if (nFormat == CLP_CF_UNICODETEXT) {
                 nLength = 0;
@@ -137,7 +135,7 @@ bool XCLPArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
             const qint64 nInfoSize = (nFormat == CLP_CF_DIBV5) ? 0x7c : 0x28;
             if (nSize < nInfoSize) continue;
             const QByteArray baInfo = read_array_process(nDataOffset, nInfoSize, pPdStruct);
-            if (!guardedThis || !guardedSource || (baInfo.size() != nInfoSize)) return false;
+            if ((baInfo.size() != nInfoSize)) return false;
             const uchar *pInfo = (const uchar *)baInfo.constData();
             const qint32 nWidth = (qint32)qFromLittleEndian<quint32>(pInfo + 4);
             const qint32 nHeight = (qint32)qFromLittleEndian<quint32>(pInfo + 8);
@@ -198,7 +196,7 @@ QString XCLPArchive::describe(const MEMBER &member)
 bool XCLPArchive::isValid(PDSTRUCT *pPdStruct)
 {
     // getRecords-style probing displaces the caller's cursor, so snapshot it.
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -350,11 +348,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XCLPArchive::getDefaultUnpackProperties()
 
 bool XCLPArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XCLPArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -364,8 +361,8 @@ bool XCLPArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVari
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -378,15 +375,10 @@ bool XCLPArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVari
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

@@ -67,14 +67,13 @@ XBinary *XLZXArchive::createInstance(QIODevice *pDevice, bool bIsImage,
 bool XLZXArchive::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
                              PDSTRUCT *pPdStruct)
 {
-    QPointer<XLZXArchive> guardedThis(this);
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || (nTotalSize < (LZX_HEADER_SIZE + LZX_ENTRY_HEADER_SIZE)) ||
+    if ((nTotalSize < (LZX_HEADER_SIZE + LZX_ENTRY_HEADER_SIZE)) ||
         !XBinary::isPdStructNotCanceled(pPdStruct))
         return false;
     const QByteArray archiveHeader = read_array_process(0, LZX_HEADER_SIZE,
                                                         pPdStruct);
-    if (!guardedThis || (archiveHeader.size() != LZX_HEADER_SIZE) ||
+    if ((archiveHeader.size() != LZX_HEADER_SIZE) ||
         (std::memcmp(archiveHeader.constData(), "LZX", 3) != 0))
         return false;
 
@@ -95,7 +94,7 @@ bool XLZXArchive::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
             return false;
         const QByteArray header = read_array_process(
             nOffset, LZX_ENTRY_HEADER_SIZE, pPdStruct);
-        if (!guardedThis || (header.size() != LZX_ENTRY_HEADER_SIZE))
+        if ((header.size() != LZX_ENTRY_HEADER_SIZE))
             return false;
         const uchar *p = reinterpret_cast<const uchar *>(header.constData());
         const qint64 nFileSize = qFromLittleEndian<quint32>(p + 2);
@@ -113,7 +112,7 @@ bool XLZXArchive::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
         const QByteArray nameData = read_array_process(
             nOffset + LZX_ENTRY_HEADER_SIZE, nNameLength, pPdStruct);
         QString sName;
-        if (!guardedThis || (nameData.size() != nNameLength) ||
+        if ((nameData.size() != nNameLength) ||
             !decodeLZXName(nameData, &sName))
             return false;
         QString sUniqueName;

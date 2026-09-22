@@ -46,7 +46,7 @@ quint32 cqLe32(const char *p)
 
 class COPYQM_PARSE_RESULT {
 public:
-    COPYQM_PARSE_RESULT(const QPointer<QIODevice> &pDevice, qint64 nSavedPosition)
+    COPYQM_PARSE_RESULT(QIODevice *pDevice, qint64 nSavedPosition)
         : m_pDevice(pDevice), m_nSavedPosition(nSavedPosition)
     {
     }
@@ -58,7 +58,7 @@ public:
     }
 
 private:
-    QPointer<QIODevice> m_pDevice;
+    QIODevice *m_pDevice;
     qint64 m_nSavedPosition;
 };
 }  // namespace
@@ -75,18 +75,13 @@ XCopyQM::~XCopyQM()
     for (UNPACK_CONTEXT *pContext : contexts) delete pContext;
 }
 
-bool XCopyQM::isDeviceReplacementAllowed() const
-{
-    return m_setContexts.isEmpty();
-}
-
 bool XCopyQM::_parse(QList<FILE_ENTRY> *pEntries, qint64 *pnSourceSize, PDSTRUCT *pPdStruct)
 {
     if (pEntries) pEntries->clear();
     if (pnSourceSize) *pnSourceSize = 0;
     if (!isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<QIODevice> pDevice(getDevice());
+    QIODevice *pDevice = getDevice();
     if (!pDevice || !pDevice->isOpen() || !pDevice->isReadable() || pDevice->isSequential()) return false;
     const qint64 sourceSize = pDevice->size();
     const qint64 savedPosition = pDevice->pos();
@@ -338,7 +333,7 @@ bool XCopyQM::_isContextCurrent(const UNPACK_STATE *pState, const UNPACK_CONTEXT
 {
     return pState && pContext && m_setContexts.contains(const_cast<UNPACK_CONTEXT *>(pContext)) && (pState->pContext == pContext) &&
            (pContext->pOwnerState == pState) && !pState->baUnpackSourceToken.isEmpty() && (pState->baUnpackSourceToken == pContext->baToken) &&
-           (pContext->pSourceDevice.data() == getDevice()) && (pContext->nDeviceGeneration == getDeviceGeneration()) &&
+           (pContext->pSourceDevice == getDevice()) && (pContext->nDeviceGeneration == getDeviceGeneration()) &&
            (pState->nTotalSize == pContext->nSourceSize) && (pState->nNumberOfRecords == pContext->listEntries.size()) &&
            (pState->nCurrentIndex == pContext->nCurrentIndex) && (pState->nCurrentOffset == pContext->nCurrentOffset);
 }
@@ -401,7 +396,7 @@ bool XCopyQM::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *
         return false;
     }
     UNPACK_CONTEXT *pContext = static_cast<UNPACK_CONTEXT *>(pState->pContext);
-    if (!_isContextCurrent(pState, pContext) || devicesAlias(pContext->pSourceDevice.data(), pDevice) || (pContext->nCurrentIndex < 0) ||
+    if (!_isContextCurrent(pState, pContext) || devicesAlias(pContext->pSourceDevice, pDevice) || (pContext->nCurrentIndex < 0) ||
         (pContext->nCurrentIndex >= pContext->listEntries.size())) {
         return false;
     }

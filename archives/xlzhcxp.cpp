@@ -6,7 +6,6 @@
 #include "xlzhcxp.h"
 
 #include <QFileInfo>
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -33,9 +32,8 @@ bool XLZHCXP::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XLZHCXP> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -45,7 +43,7 @@ bool XLZHCXP::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     }
 
     const QByteArray baHeader = read_array_process(0, 6, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != 6)) return false;
+    if ((baHeader.size() != 6)) return false;
     const uchar *pHeader = reinterpret_cast<const uchar *>(baHeader.constData());
     if (qFromLittleEndian<quint16>(pHeader) != LZHCXP_MAGIC) return false;
 
@@ -64,7 +62,7 @@ bool XLZHCXP::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if ((qint64(nFirstBlockSize) + 4) != context.nInputSize) return false;
         const QByteArray baTerminator =
             read_array_process(3 + nFirstBlockSize, 1, pPdStruct);
-        if (!guardedThis || !guardedSource || (baTerminator.size() != 1) ||
+        if ((baTerminator.size() != 1) ||
             (baTerminator.at(0) != 0)) {
             return false;
         }
@@ -75,8 +73,7 @@ bool XLZHCXP::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const QByteArray baStream = read_array_process(
         context.nStreamOffset, context.nStreamSize, pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        (baStream.size() != context.nStreamSize)) {
+    if ((baStream.size() != context.nStreamSize)) {
         return false;
     }
 
@@ -92,8 +89,8 @@ bool XLZHCXP::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     context.nUncompressedSize = baUnpacked.size();
 
     context.sFileName =
-        QFileInfo(XBinary::getDeviceFileName(guardedSource.data())).fileName();
-    if (!guardedThis || !guardedSource) return false;
+        QFileInfo(XBinary::getDeviceFileName(guardedSource)).fileName();
+    if (!guardedSource) return false;
     if (context.sFileName.isEmpty()) {
         context.sFileName = QStringLiteral("lzhcxp_data");
     }
@@ -105,11 +102,11 @@ bool XLZHCXP::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XLZHCXP::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
-    const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
+    QIODevice *guardedSource = getDevice();
+    const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
-    if (guardedSource && (nSavedPosition >= 0)) {
+    if ((nSavedPosition >= 0)) {
         guardedSource->seek(nSavedPosition);
     }
     return bResult;
@@ -267,9 +264,8 @@ bool XLZHCXP::initUnpack(UNPACK_STATE *pState,
                          const QMap<UNPACK_PROP, QVariant> &mapProperties,
                          PDSTRUCT *pPdStruct)
 {
-    QPointer<XLZHCXP> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
     }
@@ -277,8 +273,7 @@ bool XLZHCXP::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
-        !isPdStructNotCanceled(pPdStruct)) {
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -292,8 +287,8 @@ bool XLZHCXP::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct)) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -309,16 +304,11 @@ bool XLZHCXP::initUnpack(UNPACK_STATE *pState,
     pState->pContext = pContext;
 
     const bool bFinalized =
-        guardedThis->validateAndFinalizeUnpackSource(pState, pContext,
+        validateAndFinalizeUnpackSource(pState, pContext,
                                                      pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

@@ -5,7 +5,6 @@
 
 #include "xardi1sfx.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <cstring>
@@ -137,13 +136,12 @@ XARDI1SFX::~XARDI1SFX()
 // the one position-fixed marker the file has.
 bool XARDI1SFX::acceptRecordAt(qint64 nRecordOffset, qint64 nStreamEnd, HEADER *pHeader, PDSTRUCT *pPdStruct)
 {
-    QPointer<XARDI1SFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pHeader || !guardedSource) return false;
     if ((nRecordOffset < 0) || (nRecordOffset > nStreamEnd - ARDI1_RECORD_SIZE)) return false;
 
     const QByteArray baRecord = read_array_process(nRecordOffset, ARDI1_RECORD_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baRecord.size() != ARDI1_RECORD_SIZE)) return false;
+    if (!guardedSource || (baRecord.size() != ARDI1_RECORD_SIZE)) return false;
 
     const uchar *pData = reinterpret_cast<const uchar *>(baRecord.constData());
 
@@ -185,8 +183,7 @@ bool XARDI1SFX::acceptRecordAt(qint64 nRecordOffset, qint64 nStreamEnd, HEADER *
 
 bool XARDI1SFX::readHeader(HEADER *pHeader, PDSTRUCT *pPdStruct)
 {
-    QPointer<XARDI1SFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pHeader || !guardedSource || guardedSource->isSequential()) return false;
 
     const qint64 nInputSize = guardedSource->size();
@@ -196,7 +193,7 @@ bool XARDI1SFX::readHeader(HEADER *pHeader, PDSTRUCT *pPdStruct)
     // nothing else in this reader ever runs on a file that is not an ARDI
     // diskette self-extractor.
     const QByteArray baTail = read_array_process(nInputSize - ARDI1_TAIL_TEXT_SIZE, ARDI1_TAIL_TEXT_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baTail.size() != ARDI1_TAIL_TEXT_SIZE)) return false;
+    if (!guardedSource || (baTail.size() != ARDI1_TAIL_TEXT_SIZE)) return false;
     if (memcmp(baTail.constData(), ARDI1_TAIL_PREFIX, ARDI1_TAIL_PREFIX_SIZE) != 0) return false;
     if (memcmp(baTail.constData() + ARDI1_TAIL_PREFIX_SIZE + 4, ARDI1_TAIL_SUFFIX, ARDI1_TAIL_SUFFIX_SIZE) != 0) return false;
 
@@ -215,7 +212,7 @@ bool XARDI1SFX::readHeader(HEADER *pHeader, PDSTRUCT *pPdStruct)
 
     while ((nAttempt < ARDI1_MAX_CANDIDATES) && (nSearchOffset + ARDI1_NEEDLE_SIZE <= nStreamEnd) && isPdStructNotCanceled(pPdStruct)) {
         const qint64 nFound = find_array(nSearchOffset, nStreamEnd - nSearchOffset, ARDI1_NEEDLE, ARDI1_NEEDLE_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
         if (nFound < 0) return false;
 
         nAttempt++;
@@ -227,7 +224,7 @@ bool XARDI1SFX::readHeader(HEADER *pHeader, PDSTRUCT *pPdStruct)
             *pHeader = header;
             return true;
         }
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
     }
 
     return false;
@@ -244,11 +241,10 @@ bool XARDI1SFX::readHeader(HEADER *pHeader, PDSTRUCT *pPdStruct)
 // 0x02) so that nothing the container states about the image is dropped.
 bool XARDI1SFX::measurePrologue(const HEADER &header, qint64 *pnPrologueSize, QString *psLabel, PDSTRUCT *pPdStruct)
 {
-    QPointer<XARDI1SFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pnPrologueSize || !guardedSource) return false;
 
-    SubDevice subDevice(guardedSource.data(), header.nStreamOffset, header.nCompressedSize);
+    SubDevice subDevice(guardedSource, header.nStreamOffset, header.nCompressedSize);
     ARDI1PrologueDevice prologueDevice;
     if (!subDevice.open(QIODevice::ReadOnly)) return false;
     if (!prologueDevice.open(QIODevice::WriteOnly)) {
@@ -269,7 +265,7 @@ bool XARDI1SFX::measurePrologue(const HEADER &header, qint64 *pnPrologueSize, QS
 
     prologueDevice.close();
     subDevice.close();
-    if (!guardedThis || !guardedSource) return false;
+    if (!guardedSource) return false;
 
     // Failure is expected and means nothing on its own -- it is how the cap
     // stops the decoder.  Failure WITHOUT the cap having fired is a real
@@ -320,14 +316,13 @@ bool XARDI1SFX::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XARDI1SFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
     context.nPrologueSize = -1;
-    if (!readHeader(&context.header, pPdStruct) || !guardedThis || !guardedSource) return false;
+    if (!readHeader(&context.header, pPdStruct) || !guardedSource) return false;
 
     context.nTotalSize = context.nInputSize;
 
@@ -339,21 +334,21 @@ bool XARDI1SFX::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     // strings the container does hold (the tag-0x02 label text and the image's
     // FAT12 volume label) both repeat across carriers, so neither can be used
     // instead.  See the header comment for the measured collisions.
-    QString sBaseName = XBinary::getDeviceFileBaseName(guardedSource.data());
-    if (!guardedThis || !guardedSource) return false;
+    QString sBaseName = XBinary::getDeviceFileBaseName(guardedSource);
+    if (!guardedSource) return false;
     if (sBaseName.isEmpty()) sBaseName = QStringLiteral("disk");
     context.sImageName = sBaseName + QStringLiteral(".img");
 
     qint64 nPrologueSize = -1;
     QString sLabel;
-    if (measurePrologue(context.header, &nPrologueSize, &sLabel, pPdStruct) && guardedThis && guardedSource) {
+    if (measurePrologue(context.header, &nPrologueSize, &sLabel, pPdStruct) && guardedSource) {
         if ((nPrologueSize >= 0) && (nPrologueSize <= std::numeric_limits<qint64>::max() - context.header.nImageSize)) {
             context.nPrologueSize = nPrologueSize;
             context.nBlockSize = nPrologueSize + context.header.nImageSize;
             context.sLabel = sLabel;
         }
     }
-    if (!guardedThis || !guardedSource) return false;
+    if (!guardedSource) return false;
 
     *pContext = context;
     return true;
@@ -399,7 +394,7 @@ XBinary::ARCHIVERECORD XARDI1SFX::imageRecord(const CONTEXT &context)
 
 bool XARDI1SFX::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     HEADER header = {};
     const bool bResult = readHeader(&header, pPdStruct);
@@ -561,11 +556,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XARDI1SFX::getDefaultUnpackProperties()
 
 bool XARDI1SFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XARDI1SFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -575,8 +569,8 @@ bool XARDI1SFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -600,15 +594,10 @@ bool XARDI1SFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
     pState->nNumberOfRecords = 1;
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

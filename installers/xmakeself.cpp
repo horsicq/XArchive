@@ -5,7 +5,6 @@
 
 #include "xmakeself.h"
 
-#include <QPointer>
 #include <QRegularExpression>
 #include <QtEndian>
 
@@ -142,10 +141,8 @@ QString XMakeself::extractShellValue(const QByteArray &baScript,
 bool XMakeself::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
-
-    QPointer<XMakeself> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -157,7 +154,7 @@ bool XMakeself::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     const qint64 nScanSize = qMin<qint64>(MAKESELF_SCAN_SIZE,
                                           context.nInputSize);
     const QByteArray baScan = read_array_process(0, nScanSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baScan.size() != nScanSize)) {
+    if ((baScan.size() != nScanSize)) {
         return false;
     }
 
@@ -218,7 +215,6 @@ bool XMakeself::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
                 nCandidate,
                 qMin<qint64>(MAKESELF_TAR_BLOCK, context.nInputSize - nCandidate),
                 pPdStruct);
-            if (!guardedThis || !guardedSource) return false;
             payloadKind = classifyPayload(baMagic);
             if (payloadKind != PAYLOAD_KIND_UNKNOWN) nPayloadOffset = nCandidate;
         }
@@ -255,7 +251,6 @@ bool XMakeself::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         const QByteArray baHead = read_array_process(
             nPayloadOffset, qMin<qint64>(4096, context.nPayloadSize),
             pPdStruct);
-        if (!guardedThis || !guardedSource) return false;
         const qint64 nHeaderSize = gzipHeaderSize(baHead);
         if ((nHeaderSize < 10) || (nHeaderSize >= context.nPayloadSize)) {
             return false;
@@ -267,7 +262,7 @@ bool XMakeself::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         context.nStreamSize = context.nPayloadSize - nHeaderSize - 8;
         const QByteArray baTrailer = read_array_process(
             context.nInputSize - 4, 4, pPdStruct);
-        if (!guardedThis || !guardedSource || (baTrailer.size() != 4)) {
+        if ((baTrailer.size() != 4)) {
             return false;
         }
         context.nUncompressedSize = static_cast<qint64>(
@@ -278,8 +273,7 @@ bool XMakeself::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     }
     if (context.nStreamSize <= 0) return false;
 
-    QString sBaseName = XBinary::getDeviceFileBaseName(guardedSource.data());
-    if (!guardedThis || !guardedSource) return false;
+    QString sBaseName = XBinary::getDeviceFileBaseName(guardedSource);
     if (sBaseName.isEmpty()) sBaseName = QStringLiteral("makeself");
     context.sFileName = sBaseName + QStringLiteral(".tar");
 
@@ -314,7 +308,7 @@ QString XMakeself::methodName(PAYLOAD_KIND payloadKind)
 
 bool XMakeself::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -494,9 +488,8 @@ bool XMakeself::initUnpack(UNPACK_STATE *pState,
                            const QMap<UNPACK_PROP, QVariant> &mapProperties,
                            PDSTRUCT *pPdStruct)
 {
-    QPointer<XMakeself> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
     }
@@ -504,7 +497,7 @@ bool XMakeself::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -519,8 +512,8 @@ bool XMakeself::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct)) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -541,16 +534,14 @@ bool XMakeself::initUnpack(UNPACK_STATE *pState,
     pState->nNumberOfRecords = 1;
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(
+    const bool bFinalized = validateAndFinalizeUnpackSource(
         pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
+    if (!bFinalized) {
             delete pContext;
             *pState = UNPACK_STATE();
             return false;
-        }
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

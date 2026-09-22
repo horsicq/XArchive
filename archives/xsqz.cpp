@@ -5,7 +5,6 @@
 #include "xsqz.h"
 
 #include <QDir>
-#include <QPointer>
 #include <QtEndian>
 
 #include <cstring>
@@ -75,16 +74,15 @@ bool XSQZ::parseInternalInfo(INTERNAL_INFO *pInfo, PDSTRUCT *pPdStruct)
     if (pInfo) *pInfo = INTERNAL_INFO();
     if (!pInfo || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XSQZ> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedThis || !guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!guardedSource || guardedSource->isSequential()) return false;
 
     const qint64 nFileSize = getSize();
-    if (!guardedThis || !guardedSource ||
+    if (!guardedSource ||
         (nFileSize < (SQZ_ARCHIVE_HEADER_SIZE + 1))) return false;
 
     const QByteArray baArchiveHeader = read_array_process(0, SQZ_ARCHIVE_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baArchiveHeader.size() != SQZ_ARCHIVE_HEADER_SIZE) ||
+    if (!guardedSource || (baArchiveHeader.size() != SQZ_ARCHIVE_HEADER_SIZE) ||
         (memcmp(baArchiveHeader.constData(), "HLSQZ", 5) != 0)) {
         return false;
     }
@@ -98,10 +96,10 @@ bool XSQZ::parseInternalInfo(INTERNAL_INFO *pInfo, PDSTRUCT *pPdStruct)
     bool bSawPostfix = false;
 
     while (XBinary::isPdStructNotCanceled(pPdStruct)) {
-        if (!guardedThis || !guardedSource || (nOffset < SQZ_ARCHIVE_HEADER_SIZE) || (nOffset >= nFileSize)) return false;
+        if (!guardedSource || (nOffset < SQZ_ARCHIVE_HEADER_SIZE) || (nOffset >= nFileSize)) return false;
 
         const quint8 nHeaderLength = read_uint8(nOffset);
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
 
         if (nHeaderLength == 0) {
             // The HLSQZ postfix is optional; one archive in the reference set
@@ -127,7 +125,7 @@ bool XSQZ::parseInternalInfo(INTERNAL_INFO *pInfo, PDSTRUCT *pPdStruct)
             } else if (nHeaderLength == 4) {
                 nSkipHeader = 5;
             }
-            if (!guardedThis || !guardedSource ||
+            if (!guardedSource ||
                 (static_cast<qint64>(nExtraSize) >
                  (nFileSize - nOffset - nSkipHeader))) return false;
             if (nHeaderLength == 3) {
@@ -145,7 +143,7 @@ bool XSQZ::parseInternalInfo(INTERNAL_INFO *pInfo, PDSTRUCT *pPdStruct)
         const qint64 nHeaderSize = static_cast<qint64>(nHeaderLength) + 2;
         if (nHeaderSize > (nFileSize - nOffset)) return false;
         const QByteArray baHeader = read_array_process(nOffset, nHeaderSize, pPdStruct);
-        if (!guardedThis || !guardedSource || (baHeader.size() != nHeaderSize)) return false;
+        if (!guardedSource || (baHeader.size() != nHeaderSize)) return false;
 
         quint8 nCalculatedCheck = 0;
         for (qint32 i = 2; i < baHeader.size(); ++i) nCalculatedCheck = static_cast<quint8>(nCalculatedCheck + static_cast<quint8>(baHeader.at(i)));
@@ -182,7 +180,7 @@ bool XSQZ::parseInternalInfo(INTERNAL_INFO *pInfo, PDSTRUCT *pPdStruct)
         nOffset = nDataOffset + static_cast<qint64>(nCompressedSize);
     }
 
-    if (!guardedThis || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct) || listMembers.isEmpty() || (nArchiveSize <= 0)) return false;
+    if (!guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct) || listMembers.isEmpty() || (nArchiveSize <= 0)) return false;
 
     pInfo->bIsValid = true;
     pInfo->nFileSize = nFileSize;
@@ -285,7 +283,6 @@ QMap<XBinary::UNPACK_PROP, QVariant> XSQZ::getDefaultUnpackProperties()
 
 bool XSQZ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSQZ> guardedThis(this);
     if (m_bUnpackOperationInProgress) return false;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState) return false;
@@ -296,12 +293,12 @@ bool XSQZ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     pState->pContext = nullptr;
     *pState = UNPACK_STATE();
     delete pOldContext;
-    if (!guardedThis || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
-    if (!bindUnpackSource(pState, pPdStruct) || !guardedThis) return false;
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    if (!bindUnpackSource(pState, pPdStruct)) return false;
 
     INTERNAL_INFO info;
-    if (!parseInternalInfo(&info, pPdStruct) || !guardedThis) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseInternalInfo(&info, pPdStruct)) {
+        releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
         return false;
     }
@@ -322,11 +319,6 @@ bool XSQZ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     pState->mapUnpackProperties = mapProperties;
 
     if (!validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
         pState->pContext = nullptr;
         releaseUnpackSource(pState);
         delete pContext;
@@ -370,10 +362,9 @@ XBinary::ARCHIVERECORD XSQZ::rawRecord(const MEMBER &member) const
 
 XBinary::ARCHIVERECORD XSQZ::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSQZ> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed() || !pState || !pState->pContext) return ARCHIVERECORD();
-    if (!isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis || !XBinary::isPdStructNotCanceled(pPdStruct)) return ARCHIVERECORD();
+    if (!isUnpackSourceCurrent(pState, pPdStruct) || !XBinary::isPdStructNotCanceled(pPdStruct)) return ARCHIVERECORD();
 
     SQZ_UNPACK_CONTEXT *pContext = static_cast<SQZ_UNPACK_CONTEXT *>(pState->pContext);
     if ((pState->nNumberOfRecords != pContext->info.listMembers.count()) || (pState->nCurrentIndex < 0) ||
@@ -386,9 +377,8 @@ XBinary::ARCHIVERECORD XSQZ::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
 bool XSQZ::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSQZ> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis ||
+    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }

@@ -20,7 +20,6 @@
  */
 #include "xgob.h"
 
-#include <QPointer>
 #include <QSet>
 
 #include <cstring>
@@ -84,8 +83,7 @@ bool XGob::scanGob(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
     if (pEntries) pEntries->clear();
     if (pArchiveEnd) *pArchiveEnd = 0;
 
-    QPointer<XGob> guardedThis(this);
-    QPointer<QIODevice> guardedDevice(getDevice());
+    QIODevice *guardedDevice = getDevice();
     if (!guardedDevice || guardedDevice->isSequential() ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
@@ -107,7 +105,7 @@ bool XGob::scanGob(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
                     (guardedDevice->pos() == nSavedPosition);
     }
 
-    if (!guardedThis || !bRestored || !bResult || (getFileType() != FT_GOB) ||
+    if (!bRestored || !bResult || (getFileType() != FT_GOB) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -168,18 +166,16 @@ QList<QString> XGob::getSearchSignatures()
 bool XGob::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
                       PDSTRUCT *pPdStruct)
 {
-    QPointer<XGob> guardedThis(this);
     const qint64 nTotalSize = getSize();
     // Header plus a directory holding at least one record.
-    if (!guardedThis ||
-        (nTotalSize < (GOB_HEADER_SIZE + 4 + GOB_RECORD_SIZE)) ||
+    if ((nTotalSize < (GOB_HEADER_SIZE + 4 + GOB_RECORD_SIZE)) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     const QByteArray baHeader =
         read_array_process(0, GOB_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || (baHeader.size() != GOB_HEADER_SIZE) ||
+    if ((baHeader.size() != GOB_HEADER_SIZE) ||
         (memcmp(baHeader.constData(), "GOB\x0a", 4) != 0)) {
         return false;
     }
@@ -208,7 +204,7 @@ bool XGob::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
 
     const QByteArray baDirectory =
         read_array_process(nDirectoryOffset, nDirectorySize, pPdStruct);
-    if (!guardedThis || (baDirectory.size() != nDirectorySize)) return false;
+    if ((baDirectory.size() != nDirectorySize)) return false;
 
     const uchar *pDirectory =
         reinterpret_cast<const uchar *>(baDirectory.constData());
@@ -223,7 +219,7 @@ bool XGob::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
     QHash<QString, QString> mapResolvedDirectories;
 
     for (qint64 i = 0; i < nRecordCount; ++i) {
-        if (!guardedThis || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
             return false;
         }
         const qint64 nRecordOffset = 4 + i * GOB_RECORD_SIZE;
@@ -263,7 +259,7 @@ bool XGob::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
         listEntries.append(entry);
     }
 
-    if (!guardedThis || !XBinary::isPdStructNotCanceled(pPdStruct) ||
+    if (!XBinary::isPdStructNotCanceled(pPdStruct) ||
         (listEntries.count() != (qint32)nRecordCount)) {
         return false;
     }
@@ -277,7 +273,6 @@ bool XGob::initUnpack(UNPACK_STATE *pState,
                       const QMap<UNPACK_PROP, QVariant> &mapProperties,
                       PDSTRUCT *pPdStruct)
 {
-    QPointer<XGob> guardedThis(this);
     if (m_bUnpackOperationInProgress) return false;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState) return false;
@@ -292,15 +287,14 @@ bool XGob::initUnpack(UNPACK_STATE *pState,
     pState->pContext = nullptr;
     *pState = UNPACK_STATE();
     delete pOldContext;
-    if (!guardedThis || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!isPdStructNotCanceled(pPdStruct)) return false;
 
     const bool bBound = bindUnpackSource(pState, pPdStruct);
-    if (!guardedThis || !bBound) return false;
+    if (!bBound) return false;
 
     QList<ENTRY> listEntries;
     qint64 nArchiveEnd = 0;
     const bool bScanned = scanGob(&listEntries, &nArchiveEnd, pPdStruct);
-    if (!guardedThis) return false;
     if (!bScanned || listEntries.isEmpty() ||
         !isPdStructNotCanceled(pPdStruct)) {
         releaseUnpackSource(pState);
@@ -309,8 +303,8 @@ bool XGob::initUnpack(UNPACK_STATE *pState,
     }
 
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || !rangeWithin(nTotalSize, 0, nArchiveEnd)) {
-        if (guardedThis) {
+    if (!rangeWithin(nTotalSize, 0, nArchiveEnd)) {
+        {
             releaseUnpackSource(pState);
             *pState = UNPACK_STATE();
         }
@@ -336,7 +330,6 @@ bool XGob::initUnpack(UNPACK_STATE *pState,
     // Paired with the bindUnpackSource() above; on failure the source has to
     // be released before the context dies or the token outlives its owner.
     if (!validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
-        if (!guardedThis) return false;
         pState->pContext = nullptr;
         releaseUnpackSource(pState);
         delete pContext;
@@ -350,7 +343,6 @@ bool XGob::initUnpack(UNPACK_STATE *pState,
 XBinary::ARCHIVERECORD XGob::infoCurrent(UNPACK_STATE *pState,
                                          PDSTRUCT *pPdStruct)
 {
-    QPointer<XGob> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(
         &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed() || !pState || !pState->pContext) {
@@ -358,12 +350,12 @@ XBinary::ARCHIVERECORD XGob::infoCurrent(UNPACK_STATE *pState,
     }
 
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent ||
+    if (!bSourceCurrent ||
         !isPdStructNotCanceled(pPdStruct)) return ARCHIVERECORD();
 
     GOB_CONTEXT *pContext = static_cast<GOB_CONTEXT *>(pState->pContext);
     const qint64 nCurrentSize = getSize();
-    if (!guardedThis || (pState->nTotalSize != nCurrentSize) ||
+    if ((pState->nTotalSize != nCurrentSize) ||
         (getFileType() != FT_GOB) ||
         (pState->nNumberOfRecords != pContext->listEntries.count()) ||
         (pState->nCurrentIndex < 0) ||
@@ -398,19 +390,18 @@ XBinary::ARCHIVERECORD XGob::infoCurrent(UNPACK_STATE *pState,
 
 bool XGob::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XGob> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState || !pState->pContext) {
         return false;
     }
 
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent ||
+    if (!bSourceCurrent ||
         !isPdStructNotCanceled(pPdStruct)) return false;
 
     GOB_CONTEXT *pContext = static_cast<GOB_CONTEXT *>(pState->pContext);
     const qint64 nCurrentSize = getSize();
-    if (!guardedThis || (pState->nTotalSize != nCurrentSize) ||
+    if ((pState->nTotalSize != nCurrentSize) ||
         (getFileType() != FT_GOB) ||
         (pState->nNumberOfRecords != pContext->listEntries.count()) ||
         (pState->nCurrentIndex < 0) ||

@@ -48,8 +48,8 @@ static quint32 lhaReadLe32(const QByteArray &baData, qint32 nOffset)
 // Physical offsets stay relative to the original source for every native API.
 static qint64 lhaFirstMemberOffset(XLHA *pArchive, XBinary::PDSTRUCT *pPdStruct)
 {
-    QPointer<XLHA> archive(pArchive);
-    QPointer<QIODevice> source(archive ? archive->getDevice() : nullptr);
+    XLHA *archive = pArchive;
+    QIODevice *source = archive ? archive->getDevice() : nullptr;
     if (!archive || !source || !source->isOpen() || !source->isReadable() || source->isSequential() ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) return -1;
     if (!archive || !source) return -1;
@@ -67,7 +67,7 @@ static qint64 lhaFirstMemberOffset(XLHA *pArchive, XBinary::PDSTRUCT *pPdStruct)
 
 static bool lhaPmaSfxTailValid(XLHA *pArchive, qint64 offset, qint64 size, XBinary::PDSTRUCT *pPdStruct)
 {
-    QPointer<XLHA> archive(pArchive);
+    XLHA *archive = pArchive;
     if (!archive || !XBinary::isPdStructNotCanceled(pPdStruct) || offset < 0 || offset > size) return false;
     if (offset == size) return true;
     // Ordinary PMarc2 writes its end marker and pads the final CP/M record
@@ -97,24 +97,23 @@ qint64 XLHA::_getLevel1ExtHeadersSize(qint64 nOffset, qint64 nBaseHeaderSize)
 
 bool XLHA::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<XLHA> guardedArchive(this);
-    QPointer<QIODevice> guardedDevice(getDevice());
-    const qint64 nSavedPos = guardedDevice ? guardedDevice->pos() : -1;
-    const qint64 first = guardedArchive ? lhaFirstMemberOffset(guardedArchive, pPdStruct) : -1;
+    QIODevice *guardedDevice = getDevice();
+    const qint64 nSavedPos = guardedDevice->pos();
+    const qint64 first = lhaFirstMemberOffset(this, pPdStruct);
     LHA_MEMBER member = {};
-    bool bValid = guardedArchive && first >= 0 && guardedArchive->_readMember(first, &member, pPdStruct);
-    if (guardedArchive && bValid && first > 0) {
-        const qint64 size = guardedArchive->getSize();
+    bool bValid = first >= 0 && _readMember(first, &member, pPdStruct);
+    if (bValid && first > 0) {
+        const qint64 size = getSize();
         qint64 offset = first + member.nRecordSize;
         qint32 count = 1;
-        while (guardedArchive && count < 65536 && XBinary::isPdStructNotCanceled(pPdStruct)) {
-            if (!guardedArchive->_readMember(offset, &member, pPdStruct)) break;
+        while (count < 65536 && XBinary::isPdStructNotCanceled(pPdStruct)) {
+            if (!_readMember(offset, &member, pPdStruct)) break;
             offset += member.nRecordSize; ++count;
         }
-        bValid = guardedArchive && count < 65536 && lhaPmaSfxTailValid(guardedArchive, offset, size, pPdStruct);
+        bValid = count < 65536 && lhaPmaSfxTailValid(this, offset, size, pPdStruct);
     }
-    if (guardedDevice && (nSavedPos >= 0)) guardedDevice->seek(nSavedPos);
-    return guardedArchive && bValid;
+    if ((nSavedPos >= 0)) guardedDevice->seek(nSavedPos);
+    return bValid;
 }
 
 bool XLHA::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
@@ -166,12 +165,11 @@ bool XLHA::_isMemberTag(const QByteArray &baHeader)
 // Keep one checked member parser for detection, enumeration and file maps.
 bool XLHA::_readMember(qint64 nOffset, LHA_MEMBER *pMember, PDSTRUCT *pPdStruct)
 {
-    QPointer<XLHA> guardedArchive(this);
     if (!pMember || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
-    const qint64 nFileSize = guardedArchive->getSize();
-    if (!guardedArchive || (nOffset < 0) || (nOffset > nFileSize) || (nFileSize - nOffset < 22)) return false;
-    const QByteArray baPrefix = guardedArchive->read_array(nOffset, qMin<qint64>(32, nFileSize - nOffset));
-    if (!guardedArchive || (baPrefix.size() < 22) || !guardedArchive->_isMemberTag(baPrefix)) return false;
+    const qint64 nFileSize = getSize();
+    if ((nOffset < 0) || (nOffset > nFileSize) || (nFileSize - nOffset < 22)) return false;
+    const QByteArray baPrefix = read_array(nOffset, qMin<qint64>(32, nFileSize - nOffset));
+    if ((baPrefix.size() < 22) || !_isMemberTag(baPrefix)) return false;
 
     LHA_MEMBER member = {};
     member.nLevel = static_cast<quint8>(baPrefix.at(20));
@@ -196,8 +194,8 @@ bool XLHA::_readMember(qint64 nOffset, LHA_MEMBER *pMember, PDSTRUCT *pPdStruct)
         return false;
     }
     if ((nBaseSize > nHeaderLimit) || (nBaseSize > nFileSize - nOffset)) return false;
-    QByteArray baHeader = guardedArchive->read_array(nOffset, nBaseSize);
-    if (!guardedArchive || (baHeader.size() != nBaseSize)) return false;
+    QByteArray baHeader = read_array(nOffset, nBaseSize);
+    if ((baHeader.size() != nBaseSize)) return false;
 
     QByteArray baName;
     QByteArray baPath;
@@ -223,8 +221,8 @@ bool XLHA::_readMember(qint64 nOffset, LHA_MEMBER *pMember, PDSTRUCT *pPdStruct)
                 if ((nNextSize < 3) || (nNextSize > nHeaderLimit - baHeader.size()) ||
                     (nNextSize > member.nCompressedSize - nExtTotal) ||
                     (nNextSize > nFileSize - nOffset - baHeader.size())) return false;
-                const QByteArray baExtra = guardedArchive->read_array(nOffset + baHeader.size(), nNextSize);
-                if (!guardedArchive || (baExtra.size() != nNextSize)) return false;
+                const QByteArray baExtra = read_array(nOffset + baHeader.size(), nNextSize);
+                if ((baExtra.size() != nNextSize)) return false;
                 baHeader.append(baExtra);
                 nExtTotal += nNextSize;
             }
@@ -303,7 +301,6 @@ bool XLHA::_readMember(qint64 nOffset, LHA_MEMBER *pMember, PDSTRUCT *pPdStruct)
     return XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
-
 bool XLHA::_isHeaderChecksumValid(const QByteArray &baHeader)
 {
     if (baHeader.size() < 3) return false;
@@ -359,9 +356,7 @@ XBinary::FT XLHA::getFileType()
 
 QString XLHA::getFileFormatExt()
 {
-    QPointer<XLHA> guardedArchive(this);
     const qint64 first = lhaFirstMemberOffset(this, nullptr);
-    if (!guardedArchive) return QString();
     if (first > 0) return QStringLiteral("com");
     QString sResult = "lha";
     QString _sVersion = getVersion().left(2);
@@ -390,9 +385,8 @@ QString XLHA::getMIMEString()
 QString XLHA::getVersion()
 {
     // The SFX envelope does not have a numeric creator-version field.
-    QPointer<XLHA> guardedArchive(this);
     const qint64 first = lhaFirstMemberOffset(this, nullptr);
-    if (!guardedArchive || first > 0) return QString();
+    if (first > 0) return QString();
     return read_ansiString(3, 3);
 }
 
@@ -425,8 +419,6 @@ bool XLHA::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     }
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
-    QPointer<XLHA> guardedArchive(this);
-
     bool bResult = false;
 
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
@@ -436,23 +428,18 @@ bool XLHA::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     }
 
     if (pState) {
-        if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedArchive->ownsUnpackSource(pState)) return false;
-        guardedArchive->releaseUnpackSource(pState);
+        if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
+        releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
         if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
-        const bool bBound = guardedArchive->bindUnpackSource(pState, pPdStruct);
-        if (!guardedArchive || !bBound) return false;
+        const bool bBound = bindUnpackSource(pState, pPdStruct);
+        if (!bBound) return false;
 
         pState->mapUnpackProperties = mapProperties;
-        const qint64 first = lhaFirstMemberOffset(guardedArchive, pPdStruct);
-        if (!guardedArchive) return false;
-        if (first < 0) { guardedArchive->releaseUnpackSource(pState); *pState = UNPACK_STATE(); return false; }
+        const qint64 first = lhaFirstMemberOffset(this, pPdStruct);
+        if (first < 0) { releaseUnpackSource(pState); *pState = UNPACK_STATE(); return false; }
         pState->nCurrentOffset = first;
-        pState->nTotalSize = guardedArchive->getSize();
-        if (!guardedArchive) {
-            *pState = UNPACK_STATE();
-            return false;
-        }
+        pState->nTotalSize = getSize();
         pState->nCurrentIndex = 0;
         pState->nNumberOfRecords = 0;
         pState->pContext = nullptr;
@@ -460,29 +447,21 @@ bool XLHA::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         qint64 nOffset = first;
         while (XBinary::isPdStructNotCanceled(pPdStruct)) {
             LHA_MEMBER member = {};
-            if (!guardedArchive->_readMember(nOffset, &member, pPdStruct)) break;
-            if (!guardedArchive) return false;
+            if (!_readMember(nOffset, &member, pPdStruct)) break;
             if ((pState->nNumberOfRecords == (std::numeric_limits<qint32>::max)()) ||
                 (first > 0 && pState->nNumberOfRecords >= 65536)) break;
             ++pState->nNumberOfRecords;
             nOffset += member.nRecordSize;
         }
-        if (!guardedArchive) return false;
-
         bResult = (pState->nNumberOfRecords > 0) && XBinary::isPdStructNotCanceled(pPdStruct);
         if (bResult && first > 0) {
-            bResult = pState->nNumberOfRecords < 65536 && lhaPmaSfxTailValid(guardedArchive, nOffset, pState->nTotalSize, pPdStruct);
-            if (!guardedArchive) return false;
+            bResult = pState->nNumberOfRecords < 65536 && lhaPmaSfxTailValid(this, nOffset, pState->nTotalSize, pPdStruct);
         }
         if (bResult) {
-            bResult = guardedArchive->validateAndFinalizeUnpackSource(pState, pPdStruct);
-            if (!guardedArchive) {
-                *pState = UNPACK_STATE();
-                return false;
-            }
+            bResult = validateAndFinalizeUnpackSource(pState, pPdStruct);
         }
         if (!bResult) {
-            guardedArchive->releaseUnpackSource(pState);
+            releaseUnpackSource(pState);
             *pState = UNPACK_STATE();
         }
     }
@@ -494,12 +473,11 @@ XBinary::ARCHIVERECORD XLHA::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
-    QPointer<XLHA> guardedArchive(this);
     XBinary::ARCHIVERECORD result = {};
-    if (pState && guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) && guardedArchive && (pState->nCurrentIndex >= 0) &&
+    if (pState && isUnpackSourceCurrent(pState, pPdStruct) && (pState->nCurrentIndex >= 0) &&
         (pState->nCurrentIndex < pState->nNumberOfRecords)) {
         LHA_MEMBER member = {};
-        if (!guardedArchive->_readMember(pState->nCurrentOffset, &member, pPdStruct) || !guardedArchive) return result;
+        if (!_readMember(pState->nCurrentOffset, &member, pPdStruct)) return result;
         result.nStreamOffset = pState->nCurrentOffset + member.nHeaderSize;
         result.nStreamSize = member.nCompressedSize;
         result.mapProperties.insert(FPART_PROP_ORIGINALNAME, member.sFileName);
@@ -518,14 +496,12 @@ bool XLHA::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
-    QPointer<XLHA> guardedArchive(this);
-
     bool bResult = false;
 
-    if (pState && guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) && guardedArchive && (pState->nCurrentIndex >= 0) &&
+    if (pState && isUnpackSourceCurrent(pState, pPdStruct) && (pState->nCurrentIndex >= 0) &&
         (pState->nCurrentIndex < pState->nNumberOfRecords)) {
         LHA_MEMBER member = {};
-        if (!guardedArchive->_readMember(pState->nCurrentOffset, &member, pPdStruct) || !guardedArchive) return false;
+        if (!_readMember(pState->nCurrentOffset, &member, pPdStruct)) return false;
         pState->nCurrentOffset += member.nRecordSize;
         pState->nCurrentIndex++;
 
@@ -572,9 +548,8 @@ QList<XBinary::XFHEADER> XLHA::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *
 {
     QList<XBinary::XFHEADER> listResult;
 
-    QPointer<XLHA> guardedArchive(this);
     const qint64 first = lhaFirstMemberOffset(this, pPdStruct);
-    if (!guardedArchive || first < 0) return listResult;
+    if (first < 0) return listResult;
     quint32 nStructID = xfStruct.nStructID;
 
     if (nStructID == STRUCTID_UNKNOWN) {
@@ -821,11 +796,9 @@ QList<XBinary::FPART> XLHA::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         return listResult;
     }
 
-    QPointer<XLHA> guardedArchive(this);
     const qint64 first = lhaFirstMemberOffset(this, pPdStruct);
-    if (!guardedArchive || first < 0) return listResult;
+    if (first < 0) return listResult;
     qint64 nFileSize = getSize() - first;
-    if (!guardedArchive) return listResult;
     qint64 nCurrentOffset = first;
     qint64 nMaxOffset = first;
     if (first > 0 && (nFileParts & FILEPART_HEADER) && lhaCanAppendPart(nLimit, listResult)) {
@@ -907,27 +880,25 @@ XBinary *XLHA::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
 
 bool XLHA::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XLHA> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
-        if (!guardedThis || !bResult) return false;
-        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(guardedThis->XArchive::getInternalInfo(pPdStruct));
-        if (!guardedThis || !pInfo) return false;
-        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        if (!bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        if (!pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) = *pInfo;
     }
 
-    return guardedThis && bResult;
+    return bResult;
 }
 
 void *XLHA::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XLHA> guardedThis(this);
-    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
-    if (!guardedThis || !bHandled) return nullptr;
+    const bool bHandled = handleInternalInfo(pPdStruct);
+    if (!bHandled) return nullptr;
 
-    return &guardedThis->m_internalInfo;
+    return &m_internalInfo;
 }
 
 void XLHA::setInternalInfo(void *pInternalInfo)

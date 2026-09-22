@@ -5,7 +5,6 @@
 
 #include "xarcv2.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -118,9 +117,8 @@ bool XARCV2::parseContext(CONTEXT *pContext, bool bProbeScramble,
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XARCV2> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.scramble = SCRAMBLE_NONE;
@@ -132,8 +130,7 @@ bool XARCV2::parseContext(CONTEXT *pContext, bool bProbeScramble,
 
     const QByteArray baArchiveHeader =
         read_array_process(0, ARCV2_ARCHIVE_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        baArchiveHeader.size() != ARCV2_ARCHIVE_HEADER_SIZE) {
+    if (baArchiveHeader.size() != ARCV2_ARCHIVE_HEADER_SIZE) {
         return false;
     }
     const uchar *pArchiveHeader =
@@ -162,8 +159,7 @@ bool XARCV2::parseContext(CONTEXT *pContext, bool bProbeScramble,
         }
         const QByteArray baPrefix =
             read_array_process(nOffset, ARCV2_BLOCK_PREFIX_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            baPrefix.size() != ARCV2_BLOCK_PREFIX_SIZE) {
+        if (baPrefix.size() != ARCV2_BLOCK_PREFIX_SIZE) {
             return false;
         }
         const uchar *pPrefix =
@@ -190,8 +186,7 @@ bool XARCV2::parseContext(CONTEXT *pContext, bool bProbeScramble,
 
         const QByteArray baHeader =
             read_array_process(nOffset, nBlockHeaderSize, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            baHeader.size() != nBlockHeaderSize) {
+        if (baHeader.size() != nBlockHeaderSize) {
             return false;
         }
         const QByteArray baName =
@@ -239,8 +234,7 @@ bool XARCV2::parseContext(CONTEXT *pContext, bool bProbeScramble,
         context.listMembers.append(member);
         nOffset = member.nDataOffset + member.nDataSize;
     }
-    if ((nOffset != context.nInputSize) || context.listMembers.isEmpty() ||
-        !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
+    if ((nOffset != context.nInputSize) || context.listMembers.isEmpty() || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -258,8 +252,7 @@ bool XARCV2::parseContext(CONTEXT *pContext, bool bProbeScramble,
             _getCRC32(member.nDataOffset, member.nDataSize, 0xffffffffU,
                       _getCRC32Table_EDB88320(), pPdStruct) ^
             0xffffffffU;
-        if (!guardedThis || !guardedSource ||
-            !isPdStructNotCanceled(pPdStruct)) {
+        if (!isPdStructNotCanceled(pPdStruct)) {
             return false;
         }
         if (nCalculatedCRC != member.nPackedCRC32) return false;
@@ -271,8 +264,7 @@ bool XARCV2::parseContext(CONTEXT *pContext, bool bProbeScramble,
     if (bProbeScramble) {
         context.scramble = probeScramble(context.listMembers,
                                          &context.bScrambleProbed, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            !isPdStructNotCanceled(pPdStruct)) {
+        if (!isPdStructNotCanceled(pPdStruct)) {
             return false;
         }
     }
@@ -288,14 +280,12 @@ bool XARCV2::streamEndsAtDeclaredLength(const MEMBER &member,
     const qint64 nLength = member.nUncompressedSize;
     if ((nLength <= 0) || (nLength >= ARCV2_PROBE_MAX_UNPACKED)) return false;
 
-    QPointer<XARCV2> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
 
     QByteArray baPacked =
         read_array_process(member.nDataOffset, member.nDataSize, pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        baPacked.size() != member.nDataSize) {
+    if (baPacked.size() != member.nDataSize) {
         return false;
     }
     if (scramble != SCRAMBLE_NONE) {
@@ -316,7 +306,7 @@ bool XARCV2::streamEndsAtDeclaredLength(const MEMBER &member,
     if (!XDecompress::decompressArcvLzhuf(baPacked,
                                           static_cast<qint32>(nLength), false,
                                           &baUnpacked, pPdStruct) ||
-        (baUnpacked.size() != nLength) || !guardedThis || !guardedSource) {
+        (baUnpacked.size() != nLength)) {
         return false;
     }
     QByteArray baOverrun;
@@ -412,7 +402,7 @@ XARCV2::SCRAMBLE XARCV2::probeScramble(const QList<MEMBER> &listMembers,
 
 bool XARCV2::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     // Validation never probes: the probe decompresses real payloads, which has
@@ -660,9 +650,8 @@ bool XARCV2::initUnpack(UNPACK_STATE *pState,
                         const QMap<UNPACK_PROP, QVariant> &mapProperties,
                         PDSTRUCT *pPdStruct)
 {
-    QPointer<XARCV2> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
     }
@@ -670,7 +659,7 @@ bool XARCV2::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -685,9 +674,8 @@ bool XARCV2::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, true, pPdStruct) || !guardedThis ||
-        !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, true, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -717,16 +705,11 @@ bool XARCV2::initUnpack(UNPACK_STATE *pState,
     pState->pContext = pContext;
 
     const bool bFinalized =
-        guardedThis->validateAndFinalizeUnpackSource(pState, pContext,
+        validateAndFinalizeUnpackSource(pState, pContext,
                                                      pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

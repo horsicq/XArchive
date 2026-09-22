@@ -8,7 +8,6 @@
 #include <QtEndian>
 
 #include <QBuffer>
-#include <QPointer>
 #include <QSet>
 #include <QTimeZone>
 
@@ -191,7 +190,7 @@ QDateTime amigaDateTime(const QByteArray &baBlock)
 }  // namespace
 
 struct XADFArchive::PARSER {
-    QPointer<XADFArchive> guardedArchive;
+    XADFArchive *guardedArchive;
     CONTEXT *pContext;
     PDSTRUCT *pPdStruct;
     QSet<qint32> stReservedBlocks;
@@ -662,16 +661,15 @@ bool XADFArchive::readBlock(qint32 nBlock, QByteArray *pBlock,
 
 bool XADFArchive::parseImage(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
-    QPointer<XADFArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pContext || !guardedThis || !guardedSource ||
+    QIODevice *guardedSource = getDevice();
+    if (!pContext || !guardedSource ||
         !guardedSource->isOpen() || !guardedSource->isReadable() ||
-        guardedSource->isSequential() || !guardedThis || !guardedSource ||
+        guardedSource->isSequential() || !guardedSource ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
     const qint64 nImageSize = getSize();
-    if (!guardedThis || !guardedSource ||
+    if (!guardedSource ||
         ((nImageSize != ADF_DD_IMAGE_SIZE) && (nImageSize != ADF_HD_IMAGE_SIZE))) {
         return false;
     }
@@ -680,8 +678,8 @@ bool XADFArchive::parseImage(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     pContext->nImageSize = nImageSize;
     pContext->nBlockCount = static_cast<qint32>(nImageSize / ADF_BLOCK_SIZE);
     pContext->nRootBlock = pContext->nBlockCount / 2;
-    PARSER parser(guardedThis.data(), pContext, pPdStruct);
-    return parser.parseRoot() && guardedThis && guardedSource &&
+    PARSER parser(this, pContext, pPdStruct);
+    return parser.parseRoot() && guardedSource &&
            XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
@@ -751,9 +749,8 @@ bool XADFArchive::initUnpack(
     const QMap<UNPACK_PROP, QVariant> &mapProperties,
     PDSTRUCT *pPdStruct)
 {
-    QPointer<XADFArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedThis || !guardedSource ||
+    QIODevice *guardedSource = getDevice();
+    if (!pState || !guardedSource ||
         guardedSource->isSequential() || m_bUnpackOperationInProgress) {
         return false;
     }
@@ -761,7 +758,7 @@ bool XADFArchive::initUnpack(
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) || !guardedSource ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -772,7 +769,7 @@ bool XADFArchive::initUnpack(
 
     CONTEXT *pContext = new (std::nothrow) CONTEXT;
     if (!pContext) goto failed;
-    if (!parseImage(pContext, pPdStruct) || !guardedThis || !guardedSource ||
+    if (!parseImage(pContext, pPdStruct) || !guardedSource ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         goto failed;
     }
@@ -791,7 +788,7 @@ bool XADFArchive::initUnpack(
     return true;
 
 failed:
-    if (guardedThis) releaseUnpackSource(pState);
+    releaseUnpackSource(pState);
     delete pContext;
     *pState = UNPACK_STATE();
     return false;
@@ -800,11 +797,10 @@ failed:
 XBinary::ARCHIVERECORD XADFArchive::infoCurrent(UNPACK_STATE *pState,
                                                  PDSTRUCT *pPdStruct)
 {
-    QPointer<XADFArchive> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(
         &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed() || !pState || !pState->pContext ||
-        !guardedThis || !isUnpackSourceCurrent(pState, pPdStruct) ||
+        !isUnpackSourceCurrent(pState, pPdStruct) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return ARCHIVERECORD();
     }
@@ -853,14 +849,13 @@ XBinary::ARCHIVERECORD XADFArchive::infoCurrent(UNPACK_STATE *pState,
 bool XADFArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
                                 PDSTRUCT *pPdStruct)
 {
-    QPointer<XADFArchive> guardedThis(this);
-    QPointer<QIODevice> guardedOutput(pDevice);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedOutput = pDevice;
+    QIODevice *guardedSource = getDevice();
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState || !pState->pContext ||
-        !guardedThis || !guardedOutput || !guardedSource ||
-        !isUnpackOutputSupported(guardedOutput.data()) ||
-        devicesAlias(guardedSource.data(), guardedOutput.data()) ||
+        !guardedOutput || !guardedSource ||
+        !isUnpackOutputSupported(guardedOutput) ||
+        devicesAlias(guardedSource, guardedOutput) ||
         !isUnpackSourceCurrent(pState, pPdStruct) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
@@ -877,12 +872,12 @@ bool XADFArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
 
     if (member.bIsDirectory) {
         QBuffer emptyStage;
-        if (!emptyStage.open(QIODevice::ReadWrite) || !guardedThis ||
+        if (!emptyStage.open(QIODevice::ReadWrite) ||
             !guardedOutput || !isUnpackSourceCurrent(pState, pPdStruct)) {
             return false;
         }
-        return publishUnpackOutput(&emptyStage, guardedOutput.data(), pState,
-                                   pPdStruct) && guardedThis;
+        return publishUnpackOutput(&emptyStage, guardedOutput, pState,
+                                   pPdStruct);
     }
 
     if ((member.nSize < 0) || (member.nStoredSize < 0) ||
@@ -915,14 +910,14 @@ bool XADFArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
     }
 
     std::unique_ptr<QIODevice> pStage(createFileBuffer(member.nSize, pPdStruct));
-    if (!pStage || !pStage->seek(0) || !guardedThis || !guardedOutput ||
+    if (!pStage || !pStage->seek(0) || !guardedOutput ||
         !guardedSource) {
         return false;
     }
 
     qint64 nWritten = 0;
     for (const DATA_BLOCK &dataBlock : member.listDataBlocks) {
-        if (!guardedThis || !guardedOutput || !guardedSource ||
+        if (!guardedOutput || !guardedSource ||
             (dataBlock.nBlock < ADF_BOOT_BLOCKS) ||
             (dataBlock.nBlock >= pContext->nBlockCount) ||
             (dataBlock.nPayloadOffset < 0) ||
@@ -938,7 +933,7 @@ bool XADFArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
         const QByteArray baBlock = read_array_process(
             static_cast<qint64>(dataBlock.nBlock) * ADF_BLOCK_SIZE,
             ADF_BLOCK_SIZE, pPdStruct);
-        if (!guardedThis || !guardedOutput || !guardedSource ||
+        if (!guardedOutput || !guardedSource ||
             (baBlock.size() != ADF_BLOCK_SIZE) ||
             !isUnpackSourceCurrent(pState, pPdStruct)) {
             return false;
@@ -946,7 +941,7 @@ bool XADFArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
 
         qint64 nBlockWritten = 0;
         while (nBlockWritten < dataBlock.nPayloadSize) {
-            if (!guardedThis || !guardedOutput || !guardedSource ||
+            if (!guardedOutput || !guardedSource ||
                 !XBinary::isPdStructNotCanceled(pPdStruct)) {
                 return false;
             }
@@ -963,24 +958,23 @@ bool XADFArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
     }
 
     if ((nWritten != member.nSize) || (pStage->size() != member.nSize) ||
-        !pStage->seek(0) || !guardedThis || !guardedOutput ||
+        !pStage->seek(0) || !guardedOutput ||
         !guardedSource || !isUnpackSourceCurrent(pState, pPdStruct) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
-    const bool bResult = publishUnpackOutput(pStage.get(), guardedOutput.data(),
+    const bool bResult = publishUnpackOutput(pStage.get(), guardedOutput,
                                              pState, pPdStruct);
-    if (bResult && guardedThis) pState->nCurrentOffset = member.nSize;
-    return bResult && guardedThis;
+    if (bResult) pState->nCurrentOffset = member.nSize;
+    return bResult;
 }
 
 bool XADFArchive::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XADFArchive> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState || !pState->pContext ||
-        !guardedThis || !isUnpackSourceCurrent(pState, pPdStruct) ||
+        !isUnpackSourceCurrent(pState, pPdStruct) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }

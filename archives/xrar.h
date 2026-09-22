@@ -252,7 +252,7 @@ private:
     FILEHEADER5 readFileHeader5(qint64 nOffset);
     static bool decodeRar4UnicodeName(const QByteArray &nameData, QString *pResult);
     static bool decodeRar5Name(const QByteArray &nameData, QString *pResult);
-    static bool _initUnpackFail(QPointer<XRar> *pGuardedArchive, XBinary::UNPACK_STATE *pUnpackState, RAR_UNPACK_CONTEXT *pContext);
+    static bool _initUnpackFail(XRar *pGuardedArchive, XBinary::UNPACK_STATE *pUnpackState, RAR_UNPACK_CONTEXT *pContext);
 
     // Decrypt a single RAR5 encrypted header block (IV + AES-CBC data)
     // Returns decrypted header bytes; sets *pConsumedSize to total bytes consumed from file

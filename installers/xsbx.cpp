@@ -6,7 +6,6 @@
 #include "xsbx.h"
 
 #include <QDateTime>
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -125,13 +124,12 @@ void XSBX::fillRecordProperties(const MEMBER &member, QMap<FPART_PROP, QVariant>
 
 bool XSBX::readMember(qint64 nOffset, qint64 nInputSize, MEMBER *pMember, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSBX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pMember || !guardedSource) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pMember) return false;
     if (!sbxRangeWithin(nInputSize, nOffset, SBX_HEADER_SIZE)) return false;
 
     const QByteArray baHeader = read_array_process(nOffset, SBX_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != SBX_HEADER_SIZE)) return false;
+    if ((baHeader.size() != SBX_HEADER_SIZE)) return false;
     const uchar *pHeader = reinterpret_cast<const uchar *>(baHeader.constData());
 
     if (qFromLittleEndian<quint32>(pHeader) != SBX_SIGNATURE) return false;
@@ -147,7 +145,7 @@ bool XSBX::readMember(qint64 nOffset, qint64 nInputSize, MEMBER *pMember, PDSTRU
     if (!sbxRangeWithin(nInputSize, nOffset + SBX_HEADER_SIZE, nNameLength + 4)) return false;
 
     const QByteArray baTail = read_array_process(nOffset + SBX_HEADER_SIZE, nNameLength + 4, pPdStruct);
-    if (!guardedThis || !guardedSource || (baTail.size() != nNameLength + 4)) return false;
+    if ((baTail.size() != nNameLength + 4)) return false;
 
     const qint64 nUncompressedSize =
         static_cast<qint64>(qFromLittleEndian<qint32>(reinterpret_cast<const uchar *>(baTail.constData()) + nNameLength));
@@ -179,9 +177,8 @@ bool XSBX::readMember(qint64 nOffset, qint64 nInputSize, MEMBER *pMember, PDSTRU
 // this must never accept a short walk.
 bool XSBX::walkChain(qint64 nStart, qint64 nInputSize, QList<MEMBER> *pListMembers, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSBX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pListMembers || !guardedSource) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pListMembers) return false;
     pListMembers->clear();
     if ((nStart < 0) || (nStart >= nInputSize)) return false;
 
@@ -192,7 +189,7 @@ bool XSBX::walkChain(qint64 nStart, qint64 nInputSize, QList<MEMBER> *pListMembe
         if (pListMembers->size() >= SBX_MAX_MEMBERS) return false;
 
         MEMBER member = {};
-        if (!readMember(nOffset, nInputSize, &member, pPdStruct) || !guardedThis || !guardedSource) return false;
+        if (!readMember(nOffset, nInputSize, &member, pPdStruct)) return false;
 
         pListMembers->append(member);
         nOffset = member.nDataOffset + member.nPackedSize;
@@ -208,9 +205,8 @@ bool XSBX::walkChain(qint64 nStart, qint64 nInputSize, QList<MEMBER> *pListMembe
 
 bool XSBX::locateContainer(qint64 *pnContainerOffset, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSBX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pnContainerOffset || !guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pnContainerOffset || guardedSource->isSequential()) return false;
 
     const qint64 nInputSize = guardedSource->size();
     if (nInputSize < SBX_HEADER_SIZE + SBX_FIXED_OVERHEAD) return false;
@@ -218,7 +214,7 @@ bool XSBX::locateContainer(qint64 *pnContainerOffset, PDSTRUCT *pPdStruct)
     // The carrier is an executable.  Refusing everything else keeps the scan
     // below from being reachable for data files at all.
     const QByteArray baMZ = read_array_process(0, 2, pPdStruct);
-    if (!guardedThis || !guardedSource || (baMZ.size() != 2)) return false;
+    if ((baMZ.size() != 2)) return false;
     if ((static_cast<quint8>(baMZ.at(0)) != 'M') || (static_cast<quint8>(baMZ.at(1)) != 'Z')) return false;
 
     QList<MEMBER> listMembers;
@@ -226,19 +222,15 @@ bool XSBX::locateContainer(qint64 *pnContainerOffset, PDSTRUCT *pPdStruct)
     // A PE carrier puts the chain exactly at the overlay, so try that first: it
     // costs one memory-map walk instead of a scan over the whole image.
     XPE pe(getDevice());
-    if (pe.isValid(pPdStruct) && guardedThis && guardedSource) {
+    if (pe.isValid(pPdStruct) && guardedSource) {
         const qint64 nOverlayOffset = pe.getOverlayOffset(pPdStruct);
-        if (!guardedThis || !guardedSource) return false;
         if ((nOverlayOffset > 0) && (nOverlayOffset < nInputSize)) {
             if (walkChain(nOverlayOffset, nInputSize, &listMembers, pPdStruct)) {
                 *pnContainerOffset = nOverlayOffset;
                 return true;
             }
-            if (!guardedThis || !guardedSource) return false;
         }
     }
-    if (!guardedThis || !guardedSource) return false;
-
     // NE carriers have no dependable overlay calculation, and a PE whose
     // sections do not account for the whole image would miss the offset above.
     char szTag[4] = {};
@@ -253,15 +245,12 @@ bool XSBX::locateContainer(qint64 *pnContainerOffset, PDSTRUCT *pPdStruct)
         if (nSearchOffset >= nInputSize) break;
 
         const qint64 nCandidate = find_array(nSearchOffset, nInputSize - nSearchOffset, szTag, 4, pPdStruct);
-        if (!guardedThis || !guardedSource) return false;
         if (nCandidate <= 0) break;
 
         if (walkChain(nCandidate, nInputSize, &listMembers, pPdStruct)) {
             *pnContainerOffset = nCandidate;
             return true;
         }
-        if (!guardedThis || !guardedSource) return false;
-
         nSearchOffset = nCandidate + 1;
     }
 
@@ -271,16 +260,14 @@ bool XSBX::locateContainer(qint64 *pnContainerOffset, PDSTRUCT *pPdStruct)
 bool XSBX::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
-
-    QPointer<XSBX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
 
-    if (!locateContainer(&context.nContainerOffset, pPdStruct) || !guardedThis || !guardedSource) return false;
-    if (!walkChain(context.nContainerOffset, context.nInputSize, &context.listMembers, pPdStruct) || !guardedThis || !guardedSource) return false;
+    if (!locateContainer(&context.nContainerOffset, pPdStruct)) return false;
+    if (!walkChain(context.nContainerOffset, context.nInputSize, &context.listMembers, pPdStruct)) return false;
 
     // The chain closes on the last byte of the file by construction, so the
     // container plus its carrier is the whole file.
@@ -293,7 +280,7 @@ bool XSBX::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XSBX::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     qint64 nContainerOffset = 0;
     const bool bResult = locateContainer(&nContainerOffset, pPdStruct);
@@ -448,11 +435,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XSBX::getDefaultUnpackProperties()
 
 bool XSBX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSBX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -462,8 +448,8 @@ bool XSBX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -477,15 +463,13 @@ bool XSBX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
             delete pContext;
             *pState = UNPACK_STATE();
             return false;
-        }
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

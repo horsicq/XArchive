@@ -22,7 +22,6 @@
 
 #include "Algos/include/zlib.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <cstring>
@@ -110,13 +109,12 @@ bool XCFLArchive::readBlock(qint64 nOffset, qint64 nExpandedSize, qint64 nInputS
 {
     if (!pbaResult || !pnBlockSize) return false;
 
-    QPointer<XCFLArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     if (!cflRangeWithin(nInputSize, nOffset, 8)) return false;
 
     const QByteArray baBlockHeader = read_array_process(nOffset, 8, pPdStruct);
-    if (!guardedThis || !guardedSource || (baBlockHeader.size() != 8)) return false;
+    if ((baBlockHeader.size() != 8)) return false;
     const uchar *pBlockHeader = (const uchar *)baBlockHeader.constData();
     const qint32 nMethod = (qint32)qFromLittleEndian<quint32>(pBlockHeader);
     const qint64 nBlockSize = (qint32)qFromLittleEndian<quint32>(pBlockHeader + 4);
@@ -125,7 +123,7 @@ bool XCFLArchive::readBlock(qint64 nOffset, qint64 nExpandedSize, qint64 nInputS
         if (nBlockSize != nExpandedSize) return false;
         if (!cflRangeWithin(nInputSize, nOffset + 8, nExpandedSize)) return false;
         const QByteArray baStored = read_array_process(nOffset + 8, nExpandedSize, pPdStruct);
-        if (!guardedThis || !guardedSource || (baStored.size() != nExpandedSize)) return false;
+        if ((baStored.size() != nExpandedSize)) return false;
         *pbaResult = baStored;
         *pnBlockSize = 8 + nExpandedSize;
         return true;
@@ -135,13 +133,13 @@ bool XCFLArchive::readBlock(qint64 nOffset, qint64 nExpandedSize, qint64 nInputS
     if (!cflRangeWithin(nInputSize, nOffset + 8, 4)) return false;
 
     const QByteArray baExpandedSize = read_array_process(nOffset + 8, 4, pPdStruct);
-    if (!guardedThis || !guardedSource || (baExpandedSize.size() != 4)) return false;
+    if ((baExpandedSize.size() != 4)) return false;
     if ((qint64)(qint32)qFromLittleEndian<quint32>((const uchar *)baExpandedSize.constData()) != nExpandedSize) return false;
 
     const qint64 nPackedSize = nBlockSize - 4;
     if (!cflRangeWithin(nInputSize, nOffset + 12, nPackedSize)) return false;
     const QByteArray baPacked = read_array_process(nOffset + 12, nPackedSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baPacked.size() != nPackedSize)) return false;
+    if ((baPacked.size() != nPackedSize)) return false;
 
     if (!cflInflate(baPacked, nExpandedSize, pbaResult)) return false;
     *pnBlockSize = 8 + 4 + nPackedSize;
@@ -153,16 +151,15 @@ bool XCFLArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XCFLArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
     if (context.nInputSize < CFL_HEADER_SIZE) return false;
 
     const QByteArray baHeader = read_array_process(0, CFL_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != CFL_HEADER_SIZE)) return false;
+    if ((baHeader.size() != CFL_HEADER_SIZE)) return false;
     if (baHeader.left(4) != QByteArray("CFL3", 4)) return false;
 
     const uchar *pHeader = (const uchar *)baHeader.constData();
@@ -174,7 +171,7 @@ bool XCFLArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     QByteArray baDirectory;
     qint64 nDirectoryBlockSize = 0;
     if (!readBlock(nDirectoryOffset, nDirectorySize, context.nInputSize, &baDirectory, &nDirectoryBlockSize, pPdStruct)) return false;
-    if (!guardedThis || !guardedSource || (baDirectory.size() != nDirectorySize)) return false;
+    if ((baDirectory.size() != nDirectorySize)) return false;
 
     const uchar *pDirectory = (const uchar *)baDirectory.constData();
     qint64 nPosition = 0;
@@ -224,7 +221,7 @@ bool XCFLArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         } else if (nMethod == CFL_METHOD_ZLIB) {
             if (!cflRangeWithin(context.nInputSize, nDataOffset, 8)) return false;
             const QByteArray baBlockHeader = read_array_process(nDataOffset, 8, pPdStruct);
-            if (!guardedThis || !guardedSource || (baBlockHeader.size() != 8)) return false;
+            if ((baBlockHeader.size() != 8)) return false;
             const uchar *pBlockHeader = (const uchar *)baBlockHeader.constData();
             const qint64 nBlockSize = (qint32)qFromLittleEndian<quint32>(pBlockHeader);
             const qint64 nExpandedSize = (qint32)qFromLittleEndian<quint32>(pBlockHeader + 4);
@@ -241,7 +238,7 @@ bool XCFLArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
             // DEFLATE extent instead.
             if (nPackedSize < CFL_ZLIB_HEADER_SIZE) return false;
             const QByteArray baStreamHeader = read_array_process(nDataOffset + 8, CFL_ZLIB_HEADER_SIZE, pPdStruct);
-            if (!guardedThis || !guardedSource || (baStreamHeader.size() != CFL_ZLIB_HEADER_SIZE)) return false;
+            if ((baStreamHeader.size() != CFL_ZLIB_HEADER_SIZE)) return false;
             if (!cflIsZlibHeader(baStreamHeader)) return false;
             member.nDataOffset = nDataOffset + 8 + CFL_ZLIB_HEADER_SIZE;
             member.nCompressedSize = nPackedSize - CFL_ZLIB_HEADER_SIZE;
@@ -265,7 +262,7 @@ bool XCFLArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XCFLArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -443,11 +440,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XCFLArchive::getDefaultUnpackProperties()
 
 bool XCFLArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XCFLArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -457,8 +453,8 @@ bool XCFLArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVari
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -471,15 +467,10 @@ bool XCFLArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVari
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

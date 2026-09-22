@@ -41,32 +41,29 @@ XIS7Inx::XIS7Inx(QIODevice *pDevice) : XArchive(pDevice)
 bool XIS7Inx::_readAndCheckHeader(PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
-
-    QPointer<XIS7Inx> guardedArchive(this);
-
-    QPointer<QIODevice> guardedDevice(guardedArchive->getDevice());
-    if (!guardedArchive || !guardedDevice) return false;
+    QIODevice *guardedDevice = getDevice();
+    if (!guardedDevice) return false;
 
     // Detection probes a device the caller still owns: remember where it was
     // and put it back before returning.
     const qint64 nSavedPosition = guardedDevice->pos();
 
-    const qint64 nSize = guardedArchive->getSize();
-    if (!guardedArchive || !guardedDevice) return false;
+    const qint64 nSize = getSize();
+    if (!guardedDevice) return false;
 
     bool bResult = false;
 
     if (nSize > IS7INX_SIGNATURE_SIZE) {
-        const QByteArray baHeader = guardedArchive->read_array(0, (qint32)IS7INX_SIGNATURE_SIZE);
+        const QByteArray baHeader = read_array(0, (qint32)IS7INX_SIGNATURE_SIZE);
 
-        if (guardedArchive && guardedDevice && (baHeader.size() == (qint32)IS7INX_SIGNATURE_SIZE)) {
+        if (guardedDevice && (baHeader.size() == (qint32)IS7INX_SIGNATURE_SIZE)) {
             bResult = (memcmp(baHeader.constData(), IS7INX_SIGNATURE, (size_t)IS7INX_SIGNATURE_SIZE) == 0);
         }
     }
 
     if (guardedDevice) guardedDevice->seek(nSavedPosition);
 
-    return guardedArchive && guardedDevice && bResult;
+    return guardedDevice && bResult;
 }
 
 bool XIS7Inx::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
@@ -339,7 +336,6 @@ QMap<XBinary::UNPACK_PROP, QVariant> XIS7Inx::getDefaultUnpackProperties()
 
 bool XIS7Inx::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XIS7Inx> guardedArchive(this);
     bool bResult = false;
 
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
@@ -347,8 +343,8 @@ bool XIS7Inx::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant>
         pPdStruct = &pdStructEmpty;
     }
 
-    if (pState && !m_bUnpackOperationInProgress && ((!pState->pContext && pState->baUnpackSourceToken.isEmpty()) || guardedArchive->ownsUnpackSource(pState))) {
-        if (!guardedArchive->finishUnpack(pState, nullptr) || !guardedArchive) return false;
+    if (pState && !m_bUnpackOperationInProgress && ((!pState->pContext && pState->baUnpackSourceToken.isEmpty()) || ownsUnpackSource(pState))) {
+        if (!finishUnpack(pState, nullptr)) return false;
         UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
         if (!operationGuard.isAcquired()) return false;
 
@@ -356,22 +352,19 @@ bool XIS7Inx::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant>
             return false;
         }
 
-        const bool bBound = guardedArchive->bindUnpackSource(pState, pPdStruct);
-        if (!guardedArchive || !bBound) return false;
+        const bool bBound = bindUnpackSource(pState, pPdStruct);
+        if (!bBound) return false;
 
-        const bool bValid = guardedArchive->_readAndCheckHeader(pPdStruct);
-        if (!guardedArchive) return false;
+        const bool bValid = _readAndCheckHeader(pPdStruct);
         if (!bValid) {
-            guardedArchive->releaseUnpackSource(pState);
+            releaseUnpackSource(pState);
             return false;
         }
 
-        const qint64 nSize = guardedArchive->getSize();
-        if (!guardedArchive) return false;
-
+        const qint64 nSize = getSize();
         IS7INX_UNPACK_CONTEXT *pContext = new (std::nothrow) IS7INX_UNPACK_CONTEXT;
         if (!pContext) {
-            guardedArchive->releaseUnpackSource(pState);
+            releaseUnpackSource(pState);
             return false;
         }
 
@@ -385,11 +378,10 @@ bool XIS7Inx::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant>
         pState->pContext = pContext;
         pState->mapUnpackProperties = mapProperties;
 
-        bResult = guardedArchive->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-        if (!guardedArchive) return false;
+        bResult = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
         if (!bResult) {
             pState->pContext = nullptr;
-            guardedArchive->releaseUnpackSource(pState);
+            releaseUnpackSource(pState);
             delete pContext;
             *pState = UNPACK_STATE();
         }
@@ -402,11 +394,9 @@ XBinary::ARCHIVERECORD XIS7Inx::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdS
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
-    QPointer<XIS7Inx> guardedArchive(this);
-
     XBinary::ARCHIVERECORD result = {};
 
-    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive) {
+    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct)) {
         return result;
     }
 
@@ -431,9 +421,7 @@ bool XIS7Inx::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
-    QPointer<XIS7Inx> guardedArchive(this);
-
-    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive ||
+    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) ||
         (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }
@@ -447,22 +435,18 @@ bool XIS7Inx::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
-    QPointer<XIS7Inx> guardedArchive(this);
-
     Q_UNUSED(pPdStruct)
 
     if (!pState) {
         return false;
     }
 
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedArchive->ownsUnpackSource(pState)) return false;
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
 
     IS7INX_UNPACK_CONTEXT *pContext = static_cast<IS7INX_UNPACK_CONTEXT *>(pState->pContext);
-    guardedArchive->releaseUnpackSource(pState);
+    releaseUnpackSource(pState);
     pState->pContext = nullptr;
     delete pContext;
-    if (!guardedArchive) return false;
-
     pState->nCurrentOffset = 0;
     pState->nTotalSize = 0;
     pState->nCurrentIndex = 0;
@@ -488,27 +472,25 @@ XBinary *XIS7Inx::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModul
 
 bool XIS7Inx::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XIS7Inx> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
-        if (!guardedThis || !bResult) return false;
-        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(guardedThis->XArchive::getInternalInfo(pPdStruct));
-        if (!guardedThis || !pInfo) return false;
-        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        if (!bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        if (!pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) = *pInfo;
     }
 
-    return guardedThis && bResult;
+    return bResult;
 }
 
 void *XIS7Inx::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XIS7Inx> guardedThis(this);
-    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
-    if (!guardedThis || !bHandled) return nullptr;
+    const bool bHandled = handleInternalInfo(pPdStruct);
+    if (!bHandled) return nullptr;
 
-    return &guardedThis->m_internalInfo;
+    return &m_internalInfo;
 }
 
 void XIS7Inx::setInternalInfo(void *pInternalInfo)

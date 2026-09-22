@@ -9,7 +9,6 @@
 
 #include <QDate>
 #include <QDateTime>
-#include <QPointer>
 #include <QTime>
 
 #include <new>
@@ -67,9 +66,7 @@ QString XSQ::sanitizeName(const QByteArray &baRawName)
 bool XSQ::parseHeader(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
-
-    QPointer<XSQ> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -80,7 +77,7 @@ bool XSQ::parseHeader(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const qint64 nProbeSize = qMin(context.nInputSize, SQ_MAGIC_SIZE + SQ_MAX_NAME + 1 + SQ_DATE_SIZE);
     const QByteArray baProbe = read_array_process(0, nProbeSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baProbe.size() != nProbeSize)) return false;
+    if (!guardedSource || (baProbe.size() != nProbeSize)) return false;
     const char *pProbe = baProbe.constData();
 
     if (!sqIsMagic(pProbe)) return false;
@@ -127,21 +124,20 @@ bool XSQ::parseHeader(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nStreamSize <= 0) return false;
 
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XSQ::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext) return false;
-    QPointer<XSQ> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
 
     CONTEXT context = {};
-    if (!parseHeader(&context, pPdStruct) || !guardedThis || !guardedSource) return false;
+    if (!parseHeader(&context, pPdStruct) || !guardedSource) return false;
     if (context.nStreamSize > 0x7FFFFFFF) return false;
 
     const QByteArray baPacked = read_array_process(context.nStreamOffset, context.nStreamSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baPacked.size() != context.nStreamSize)) return false;
+    if (!guardedSource || (baPacked.size() != context.nStreamSize)) return false;
 
     qint64 nRawSize = 0;
     if (!XSQDecoder::measure(baPacked, SQ_MAX_OUTPUT, &nRawSize, pPdStruct)) return false;
@@ -149,12 +145,12 @@ bool XSQ::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     context.nUncompressedSize = nRawSize;
 
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XSQ::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseHeader(&context, pPdStruct);
@@ -312,11 +308,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XSQ::getDefaultUnpackProperties()
 
 bool XSQ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSQ> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -326,8 +321,8 @@ bool XSQ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &ma
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || (pContext->nUncompressedSize < 0)) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource || (pContext->nUncompressedSize < 0)) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -341,15 +336,10 @@ bool XSQ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &ma
     pState->nNumberOfRecords = 1;
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

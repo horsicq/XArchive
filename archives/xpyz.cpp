@@ -208,13 +208,12 @@ XBinary *XPYZ::createInstance(QIODevice *pDevice, bool bIsImage,
 bool XPYZ::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
                       PDSTRUCT *pPdStruct)
 {
-    QPointer<XPYZ> guardedThis(this);
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || (nTotalSize < 16) ||
+    if ((nTotalSize < 16) ||
         !XBinary::isPdStructNotCanceled(pPdStruct))
         return false;
     const QByteArray header = read_array_process(0, 12, pPdStruct);
-    if (!guardedThis || (header.size() != 12) ||
+    if ((header.size() != 12) ||
         (std::memcmp(header.constData(), "PYZ\0", 4) != 0))
         return false;
     const qint64 nTocOffset = qFromBigEndian<quint32>(
@@ -225,7 +224,7 @@ bool XPYZ::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
 
     const QByteArray tocData = read_array_process(
         nTocOffset, nTotalSize - nTocOffset, pPdStruct);
-    if (!guardedThis || (tocData.size() != (nTotalSize - nTocOffset)))
+    if (tocData.size() != (nTotalSize - nTocOffset))
         return false;
     QVariant root;
     MarshalReader reader(tocData);
@@ -272,7 +271,7 @@ bool XPYZ::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
 
         const QByteArray compressed = read_array_process(
             nDataOffset, nDataSize, pPdStruct);
-        if (!guardedThis || (compressed.size() != nDataSize)) return false;
+        if (compressed.size() != nDataSize) return false;
         QBuffer buffer;
         buffer.setData(compressed);
         if (!buffer.open(QIODevice::ReadOnly)) return false;
@@ -282,7 +281,7 @@ bool XPYZ::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
             (nZlibSize == nDataSize) ? zlib.getRecords(1, pPdStruct)
                                      : QList<XArchive::RECORD>();
         buffer.close();
-        if (!guardedThis || (records.count() != 1) ||
+        if ((records.count() != 1) ||
             (records.constFirst().spInfo.nUncompressedSize < 0))
             return false;
 

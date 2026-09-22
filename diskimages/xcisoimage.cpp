@@ -21,7 +21,6 @@
 #include "xcisoimage.h"
 
 #include <QFileInfo>
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -42,8 +41,7 @@ bool XCisoImage::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XCisoImage> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -52,7 +50,7 @@ bool XCisoImage::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     if (context.nInputSize < CISO_HEADER_SIZE) return false;
     const QByteArray baHeader = read_array_process(0, CISO_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != CISO_HEADER_SIZE)) return false;
+    if (!guardedSource || (baHeader.size() != CISO_HEADER_SIZE)) return false;
     if (baHeader.left(4) != QByteArray("CISO")) return false;
     const uchar *pHeader = (const uchar *)baHeader.constData();
 
@@ -65,8 +63,8 @@ bool XCisoImage::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     context.nCompressedSize = context.nInputSize;
     context.nUncompressedSize = nTotal;
 
-    QString sName = QFileInfo(getDeviceFileName(guardedSource.data())).fileName();
-    if (!guardedThis || !guardedSource) return false;
+    QString sName = QFileInfo(getDeviceFileName(guardedSource)).fileName();
+    if (!guardedSource) return false;
     if (sName.isEmpty()) sName = QStringLiteral("image");
     context.sFileName = sName + QStringLiteral(".iso");
 
@@ -77,7 +75,7 @@ bool XCisoImage::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XCisoImage::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -222,11 +220,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XCisoImage::getDefaultUnpackProperties()
 
 bool XCisoImage::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XCisoImage> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -236,8 +233,8 @@ bool XCisoImage::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVaria
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -250,15 +247,10 @@ bool XCisoImage::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVaria
     pState->nNumberOfRecords = 1;
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

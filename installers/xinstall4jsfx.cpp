@@ -5,8 +5,6 @@
 
 #include "xinstall4jsfx.h"
 
-#include <QPointer>
-
 #include <new>
 
 #include "xpe.h"
@@ -87,24 +85,22 @@ XInstall4jSFX::~XInstall4jSFX()
 // launchers of the corpus and nowhere else.
 bool XInstall4jSFX::locateContainer(qint64 *pnContainerOffset, PDSTRUCT *pPdStruct)
 {
-    QPointer<XInstall4jSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pnContainerOffset || !guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pnContainerOffset || guardedSource->isSequential()) return false;
 
     const qint64 nInputSize = guardedSource->size();
     if (nInputSize < I4J_MIN_CONTAINER) return false;
 
     XPE pe(getDevice());
-    if (!pe.isValid(pPdStruct) || !guardedThis || !guardedSource) return false;
+    if (!pe.isValid(pPdStruct)) return false;
     const qint64 nContainerOffset = pe.getOverlayOffset(pPdStruct);
-    if (!guardedThis || !guardedSource) return false;
     if ((nContainerOffset <= 0) || (nContainerOffset >= nInputSize)) return false;
 
     const qint64 nContainerSize = nInputSize - nContainerOffset;
     if ((nContainerSize < I4J_MIN_CONTAINER) || (nContainerSize > I4J_MAX_CONTAINER)) return false;
 
     const QByteArray baHead = read_array_process(nContainerOffset, 16, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHead.size() != 16)) return false;
+    if ((baHead.size() != 16)) return false;
     const quint8 *pHead = (const quint8 *)baHead.constData();
 
     if (i4jRd32(pHead) != I4J_MAGIC_HEAD) return false;
@@ -125,9 +121,8 @@ bool XInstall4jSFX::locateContainer(qint64 *pnContainerOffset, PDSTRUCT *pPdStru
 // about the payload: key 101 names the product, key 2003 lists the members.
 bool XInstall4jSFX::parseVariables(CONTEXT *pContext, QByteArray *pbaNameList, PDSTRUCT *pPdStruct)
 {
-    QPointer<XInstall4jSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pContext || !pbaNameList || !guardedSource) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pContext || !pbaNameList) return false;
 
     qint64 nPosition = pContext->nContainerOffset + 4;
     qint32 nCount = 0;
@@ -136,7 +131,7 @@ bool XInstall4jSFX::parseVariables(CONTEXT *pContext, QByteArray *pbaNameList, P
     for (qint32 nTable = 0; nTable < 2; nTable++) {
         if (nPosition > pContext->nInputSize - 4) return false;
         const QByteArray baCount = read_array_process(nPosition, 4, pPdStruct);
-        if (!guardedThis || !guardedSource || (baCount.size() != 4)) return false;
+        if ((baCount.size() != 4)) return false;
         nCount = (qint32)i4jRd32((const quint8 *)baCount.constData());
         nPosition += 4;
 
@@ -150,7 +145,7 @@ bool XInstall4jSFX::parseVariables(CONTEXT *pContext, QByteArray *pbaNameList, P
             if (nPosition > pContext->nInputSize - 8) return false;
 
             const QByteArray baEntry = read_array_process(nPosition, 8, pPdStruct);
-            if (!guardedThis || !guardedSource || (baEntry.size() != 8)) return false;
+            if ((baEntry.size() != 8)) return false;
             const quint8 *pEntry = (const quint8 *)baEntry.constData();
 
             const qint32 nKey = (qint32)i4jRd32(pEntry);
@@ -161,7 +156,7 @@ bool XInstall4jSFX::parseVariables(CONTEXT *pContext, QByteArray *pbaNameList, P
 
             if ((nTable == 0) && (nKey == I4J_KEY_PRODUCTNAME) && pContext->sProductName.isEmpty() && (nLength > 0)) {
                 const QByteArray baValue = read_array_process(nPosition, nLength, pPdStruct);
-                if (!guardedThis || !guardedSource || (baValue.size() != nLength)) return false;
+                if ((baValue.size() != nLength)) return false;
                 pContext->sProductName = QString::fromLatin1(baValue.constData(), baValue.size());
             } else if ((nTable == 0) && (nKey == I4J_KEY_FILELIST)) {
                 if (nLength > I4J_MAX_NAMELIST) return false;
@@ -169,7 +164,7 @@ bool XInstall4jSFX::parseVariables(CONTEXT *pContext, QByteArray *pbaNameList, P
                 // table the format describes.
                 if (bNameListFound) return false;
                 *pbaNameList = read_array_process(nPosition, nLength, pPdStruct);
-                if (!guardedThis || !guardedSource || (pbaNameList->size() != nLength)) return false;
+                if ((pbaNameList->size() != nLength)) return false;
                 bNameListFound = true;
             }
 
@@ -186,9 +181,8 @@ bool XInstall4jSFX::parseVariables(CONTEXT *pContext, QByteArray *pbaNameList, P
 // One member per name in the key 2003 list, in that order.
 bool XInstall4jSFX::parseMembers(CONTEXT *pContext, const QByteArray &baNameList, PDSTRUCT *pPdStruct)
 {
-    QPointer<XInstall4jSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pContext || !guardedSource) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pContext) return false;
 
     QList<QByteArray> listNames = baNameList.split(';');
     // The list is ';'-TERMINATED, so the split leaves one empty element behind
@@ -210,7 +204,7 @@ bool XInstall4jSFX::parseMembers(CONTEXT *pContext, const QByteArray &baNameList
         if (nPosition > pContext->nInputSize - 8) return false;
 
         const QByteArray baHeader = read_array_process(nPosition, 8, pPdStruct);
-        if (!guardedThis || !guardedSource || (baHeader.size() != 8)) return false;
+        if ((baHeader.size() != 8)) return false;
         const quint8 *pHeader = (const quint8 *)baHeader.constData();
 
         const qint64 nSize = (qint64)i4jRd32(pHeader);
@@ -254,15 +248,14 @@ bool XInstall4jSFX::parseMembers(CONTEXT *pContext, const QByteArray &baNameList
 // bound.
 bool XInstall4jSFX::parseTrailer(CONTEXT *pContext, qint64 *pnPosition, PDSTRUCT *pPdStruct)
 {
-    QPointer<XInstall4jSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pContext || !pnPosition || !guardedSource) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pContext || !pnPosition) return false;
 
     qint64 nPosition = *pnPosition;
     if (nPosition > pContext->nInputSize - 8) return false;
 
     const QByteArray baHead = read_array_process(nPosition, 8, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHead.size() != 8)) return false;
+    if ((baHead.size() != 8)) return false;
     const quint8 *pHead = (const quint8 *)baHead.constData();
 
     if (i4jRd32(pHead) != I4J_MAGIC_TAIL) return false;
@@ -277,19 +270,19 @@ bool XInstall4jSFX::parseTrailer(CONTEXT *pContext, qint64 *pnPosition, PDSTRUCT
         if (nPosition > pContext->nInputSize - 2) return false;
 
         QByteArray baLength = read_array_process(nPosition, 2, pPdStruct);
-        if (!guardedThis || !guardedSource || (baLength.size() != 2)) return false;
+        if ((baLength.size() != 2)) return false;
         const qint32 nNameLength = (qint32)((((quint32)(quint8)baLength.at(0)) << 8) | (quint32)(quint8)baLength.at(1));
         if ((nNameLength <= 0) || (nNameLength > I4J_MAX_NAMELENGTH)) return false;
         nPosition += 2;
 
         if ((qint64)nNameLength > pContext->nInputSize - nPosition) return false;
         const QByteArray baName = read_array_process(nPosition, nNameLength, pPdStruct);
-        if (!guardedThis || !guardedSource || (baName.size() != nNameLength)) return false;
+        if ((baName.size() != nNameLength)) return false;
         nPosition += nNameLength;
 
         if (nPosition > pContext->nInputSize - 8) return false;
         const QByteArray baSize = read_array_process(nPosition, 8, pPdStruct);
-        if (!guardedThis || !guardedSource || (baSize.size() != 8)) return false;
+        if ((baSize.size() != 8)) return false;
         const quint64 nRawSize = i4jRd64BE((const quint8 *)baSize.constData());
         if (nRawSize > (quint64)Q_INT64_C(0x7fffffffffffffff)) return false;
         const qint64 nSize = (qint64)nRawSize;
@@ -314,18 +307,14 @@ bool XInstall4jSFX::parseTrailer(CONTEXT *pContext, qint64 *pnPosition, PDSTRUCT
 bool XInstall4jSFX::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
-
-    QPointer<XInstall4jSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource) return false;
-
+    QIODevice *guardedSource = getDevice();
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
-    if (!locateContainer(&context.nContainerOffset, pPdStruct) || !guardedThis || !guardedSource) return false;
+    if (!locateContainer(&context.nContainerOffset, pPdStruct)) return false;
 
     QByteArray baNameList;
-    if (!parseVariables(&context, &baNameList, pPdStruct) || !guardedThis || !guardedSource) return false;
-    if (!parseMembers(&context, baNameList, pPdStruct) || !guardedThis || !guardedSource) return false;
+    if (!parseVariables(&context, &baNameList, pPdStruct)) return false;
+    if (!parseMembers(&context, baNameList, pPdStruct)) return false;
     if (context.listMembers.isEmpty()) return false;
 
     if (context.nArchiveSize > context.nInputSize) context.nArchiveSize = context.nInputSize;
@@ -357,7 +346,7 @@ void XInstall4jSFX::fillMemberProperties(const CONTEXT &context, qint32 nIndex, 
 
 bool XInstall4jSFX::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     qint64 nContainerOffset = 0;
     const bool bResult = locateContainer(&nContainerOffset, pPdStruct);
@@ -498,11 +487,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XInstall4jSFX::getDefaultUnpackProperties()
 
 bool XInstall4jSFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XInstall4jSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -512,8 +500,8 @@ bool XInstall4jSFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVa
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -527,15 +515,13 @@ bool XInstall4jSFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVa
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
             delete pContext;
             *pState = UNPACK_STATE();
             return false;
-        }
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

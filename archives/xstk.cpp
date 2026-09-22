@@ -46,32 +46,26 @@ XStk::XStk(QIODevice *pDevice) : XArchive(pDevice)
 bool XStk::_isStk2(PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
-    QPointer<XStk> guardedArchive(this);
 
-    if (guardedArchive->getSize() < N_STK2_HEADER_SIZE) return false;
-    if (!guardedArchive) return false;
+    if (getSize() < N_STK2_HEADER_SIZE) return false;
 
     // The later generation is the only one with a magic: "STK2." + a version digit.
-    const QByteArray baSig = guardedArchive->read_array(0, 5);
-    if (!guardedArchive) return false;
+    const QByteArray baSig = read_array(0, 5);
 
     return (baSig == QByteArray("STK2.", 5));
 }
 
 bool XStk::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<XStk> guardedArchive(this);
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
-    const qint64 nSize = guardedArchive->getSize();
-    if (!guardedArchive) return false;
+    const qint64 nSize = getSize();
 
     // The STK2.1 generation has a signature and a completely different layout.
-    if (guardedArchive->_isStk2(pPdStruct)) {
-        if (!guardedArchive) return false;
-        return guardedArchive->_isValidStk2(pPdStruct);
+    if (_isStk2(pPdStruct)) {
+        return _isValidStk2(pPdStruct);
     }
 
     // Minimum: uint16 count + one 22-byte entry.
@@ -79,8 +73,7 @@ bool XStk::isValid(PDSTRUCT *pPdStruct)
         return false;
     }
 
-    const quint16 nNumFiles = guardedArchive->read_uint16(0);
-    if (!guardedArchive) return false;
+    const quint16 nNumFiles = read_uint16(0);
 
     // STK is headerless; keep the count within a sane bound to reject noise.
     if ((nNumFiles == 0) || (nNumFiles > 20000)) {
@@ -92,8 +85,8 @@ bool XStk::isValid(PDSTRUCT *pPdStruct)
         return false;
     }
 
-    const QByteArray baDir = guardedArchive->read_array(2, (qint32)(nNumFiles * N_STK_ENTRY_SIZE));
-    if (!guardedArchive || (baDir.size() != (qint32)(nNumFiles * N_STK_ENTRY_SIZE))) {
+    const QByteArray baDir = read_array(2, (qint32)(nNumFiles * N_STK_ENTRY_SIZE));
+    if (baDir.size() != (qint32)(nNumFiles * N_STK_ENTRY_SIZE)) {
         return false;
     }
 
@@ -153,23 +146,17 @@ bool XStk::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 
 bool XStk::_isValidStk2(PDSTRUCT *pPdStruct)
 {
-    QPointer<XStk> guardedArchive(this);
-
-    const qint64 nSize = guardedArchive->getSize();
-    if (!guardedArchive) return false;
+    const qint64 nSize = getSize();
     if (nSize < N_STK2_HEADER_SIZE) return false;
 
     // Directory offset is the last header field; the directory sits after the header and in-bounds.
-    const qint64 nDirOffset = guardedArchive->read_uint32(28);
-    if (!guardedArchive) return false;
+    const qint64 nDirOffset = read_uint32(28);
     if ((nDirOffset < N_STK2_HEADER_SIZE) || ((nDirOffset + 8) > nSize)) return false;
 
-    const quint32 nNumFiles = guardedArchive->read_uint32(nDirOffset);
-    if (!guardedArchive) return false;
+    const quint32 nNumFiles = read_uint32(nDirOffset);
     if ((nNumFiles == 0) || (nNumFiles > 65535)) return false;
 
-    const qint64 nMetaOffset = guardedArchive->read_uint32(nDirOffset + 4);
-    if (!guardedArchive) return false;
+    const qint64 nMetaOffset = read_uint32(nDirOffset + 4);
     // The name list fills [dirOffset+8, metaOffset); the fixed-size metadata records must fit
     // between metaOffset and EOF.
     if ((nMetaOffset < (nDirOffset + 8)) || (nMetaOffset > nSize)) return false;
@@ -182,8 +169,7 @@ bool XStk::_isValidStk2(PDSTRUCT *pPdStruct)
     for (quint32 i = 0; i < nNumFiles; i++) {
         if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
-        const qint64 nStored = guardedArchive->read_uint32(nMetaOffset + (qint64)i * N_STK2_RECORD_SIZE + 40);
-        if (!guardedArchive) return false;
+        const qint64 nStored = read_uint32(nMetaOffset + (qint64)i * N_STK2_RECORD_SIZE + 40);
 
         nCum += nStored;
         if (nCum > nDirOffset) return false;  // data would spill into the directory
@@ -194,28 +180,24 @@ bool XStk::_isValidStk2(PDSTRUCT *pPdStruct)
 
 bool XStk::_parseEntries(QList<STK_RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 {
-    QPointer<XStk> guardedArchive(this);
     if (!pListRecords) return false;
 
     // Delegate the signed generation to its own parser.
-    if (guardedArchive->_isStk2(pPdStruct)) {
-        if (!guardedArchive) return false;
-        return guardedArchive->_parseEntriesStk2(pListRecords, pPdStruct);
+    if (_isStk2(pPdStruct)) {
+        return _parseEntriesStk2(pListRecords, pPdStruct);
     }
 
-    const qint64 nSize = guardedArchive->getSize();
-    if (!guardedArchive) return false;
+    const qint64 nSize = getSize();
 
-    const quint16 nNumFiles = guardedArchive->read_uint16(0);
-    if (!guardedArchive) return false;
+    const quint16 nNumFiles = read_uint16(0);
 
     const qint64 nDirEnd = 2 + (qint64)nNumFiles * N_STK_ENTRY_SIZE;
     if ((nNumFiles == 0) || (nDirEnd > nSize)) {
         return false;
     }
 
-    const QByteArray baDir = guardedArchive->read_array(2, (qint32)(nNumFiles * N_STK_ENTRY_SIZE));
-    if (!guardedArchive || (baDir.size() != (qint32)(nNumFiles * N_STK_ENTRY_SIZE))) {
+    const QByteArray baDir = read_array(2, (qint32)(nNumFiles * N_STK_ENTRY_SIZE));
+    if (baDir.size() != (qint32)(nNumFiles * N_STK_ENTRY_SIZE)) {
         return false;
     }
 
@@ -243,8 +225,7 @@ bool XStk::_parseEntries(QList<STK_RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 
         if (nCompress == 1) {
             // Compressed chunk: uint32 uncompressed size + Coktel LZSS stream.
-            const quint32 nUncomp = guardedArchive->read_uint32(nOffset);
-            if (!guardedArchive) return false;
+            const quint32 nUncomp = read_uint32(nOffset);
 
             record.bCompressed = true;
             record.nDataOffset = nOffset + 4;
@@ -271,22 +252,17 @@ bool XStk::_parseEntries(QList<STK_RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 
 bool XStk::_parseEntriesStk2(QList<STK_RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 {
-    QPointer<XStk> guardedArchive(this);
     if (!pListRecords) return false;
 
-    const qint64 nSize = guardedArchive->getSize();
-    if (!guardedArchive) return false;
+    const qint64 nSize = getSize();
 
-    const qint64 nDirOffset = guardedArchive->read_uint32(28);
-    if (!guardedArchive) return false;
+    const qint64 nDirOffset = read_uint32(28);
     if ((nDirOffset < N_STK2_HEADER_SIZE) || ((nDirOffset + 8) > nSize)) return false;
 
-    const quint32 nNumFiles = guardedArchive->read_uint32(nDirOffset);
-    if (!guardedArchive) return false;
+    const quint32 nNumFiles = read_uint32(nDirOffset);
     if ((nNumFiles == 0) || (nNumFiles > 65535)) return false;
 
-    const qint64 nMetaOffset = guardedArchive->read_uint32(nDirOffset + 4);
-    if (!guardedArchive) return false;
+    const qint64 nMetaOffset = read_uint32(nDirOffset + 4);
     if ((nMetaOffset < (nDirOffset + 8)) || (nMetaOffset > nSize)) return false;
     const qint64 nMetaBytes = (qint64)nNumFiles * N_STK2_RECORD_SIZE;
     if ((nMetaOffset + nMetaBytes) > nSize) return false;
@@ -295,11 +271,11 @@ bool XStk::_parseEntriesStk2(QList<STK_RECORD> *pListRecords, PDSTRUCT *pPdStruc
     // once; each record's name pointer is an absolute file offset into this blob.
     const qint64 nNameBase = nDirOffset + 8;
     const qint64 nNameBytes = nMetaOffset - nNameBase;
-    const QByteArray baNames = guardedArchive->read_array(nNameBase, (qint32)nNameBytes);
-    if (!guardedArchive || (baNames.size() != (qint32)nNameBytes)) return false;
+    const QByteArray baNames = read_array(nNameBase, (qint32)nNameBytes);
+    if (baNames.size() != (qint32)nNameBytes) return false;
 
-    const QByteArray baMeta = guardedArchive->read_array(nMetaOffset, (qint32)nMetaBytes);
-    if (!guardedArchive || (baMeta.size() != (qint32)nMetaBytes)) return false;
+    const QByteArray baMeta = read_array(nMetaOffset, (qint32)nMetaBytes);
+    if (baMeta.size() != (qint32)nMetaBytes) return false;
 
     qint64 nCum = N_STK2_HEADER_SIZE;
     for (quint32 i = 0; i < nNumFiles; i++) {
@@ -407,13 +383,9 @@ XBinary::OSNAME XStk::getOsName()
 
 QString XStk::getVersion()
 {
-    QPointer<XStk> guardedArchive(this);
-
     // The signed generation embeds "STK2." + a version digit at offset 0.
-    if (guardedArchive->_isStk2(nullptr)) {
-        if (!guardedArchive) return QString();
-        const QByteArray baSig = guardedArchive->read_array(3, 3);  // "2.1"
-        if (!guardedArchive) return QString();
+    if (_isStk2(nullptr)) {
+        const QByteArray baSig = read_array(3, 3);  // "2.1"
         return QString::fromLatin1(baSig.constData(), baSig.size());
     }
 
@@ -592,11 +564,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XStk::getDefaultUnpackProperties()
 
 bool XStk::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XStk> guardedArchive(this);
-    if (!pState || m_bUnpackOperationInProgress || ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedArchive->ownsUnpackSource(pState))) {
+    if (!pState || m_bUnpackOperationInProgress || ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState))) {
         return false;
     }
-    if (!guardedArchive->finishUnpack(pState, nullptr) || !guardedArchive) return false;
+    if (!finishUnpack(pState, nullptr)) return false;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
 
@@ -604,29 +575,24 @@ bool XStk::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         return false;
     }
 
-    const bool bBound = guardedArchive->bindUnpackSource(pState, pPdStruct);
-    if (!guardedArchive || !bBound) return false;
+    const bool bBound = bindUnpackSource(pState, pPdStruct);
+    if (!bBound) return false;
 
-    const bool bValid = guardedArchive->isValid(pPdStruct);
-    if (!guardedArchive) return false;
+    const bool bValid = isValid(pPdStruct);
     if (!bValid) {
-        guardedArchive->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         return false;
     }
 
     STK_UNPACK_CONTEXT *pContext = new (std::nothrow) STK_UNPACK_CONTEXT;
     if (!pContext) {
-        guardedArchive->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         return false;
     }
 
-    const bool bParsed = guardedArchive->_parseEntries(&(pContext->listRecords), pPdStruct);
-    if (!guardedArchive) {
-        delete pContext;
-        return false;
-    }
+    const bool bParsed = _parseEntries(&(pContext->listRecords), pPdStruct);
     if (!bParsed || !isPdStructNotCanceled(pPdStruct)) {
-        guardedArchive->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         return false;
     }
@@ -634,19 +600,13 @@ bool XStk::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     pState->pContext = pContext;
     pState->nCurrentIndex = 0;
     pState->nNumberOfRecords = pContext->listRecords.count();
-    pState->nTotalSize = guardedArchive->getSize();
-    if (!guardedArchive) {
-        *pState = UNPACK_STATE();
-        delete pContext;
-        return false;
-    }
+    pState->nTotalSize = getSize();
     pState->nCurrentOffset = 0;
     pState->mapUnpackProperties = mapProperties;
 
-    if (!guardedArchive->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
-        if (!guardedArchive) return false;
+    if (!validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
         pState->pContext = nullptr;
-        guardedArchive->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -659,11 +619,10 @@ XBinary::ARCHIVERECORD XStk::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
-    QPointer<XStk> guardedArchive(this);
 
     ARCHIVERECORD result = {};
 
-    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive ||
+    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) ||
         (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return result;
     }
@@ -690,9 +649,8 @@ bool XStk::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
-    QPointer<XStk> guardedArchive(this);
 
-    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive ||
+    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) ||
         (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }
@@ -706,7 +664,6 @@ bool XStk::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
-    QPointer<XStk> guardedArchive(this);
 
     Q_UNUSED(pPdStruct)
 
@@ -714,13 +671,12 @@ bool XStk::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         return false;
     }
 
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedArchive->ownsUnpackSource(pState)) return false;
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
 
     STK_UNPACK_CONTEXT *pContext = static_cast<STK_UNPACK_CONTEXT *>(pState->pContext);
-    guardedArchive->releaseUnpackSource(pState);
+    releaseUnpackSource(pState);
     pState->pContext = nullptr;
     delete pContext;
-    if (!guardedArchive) return false;
 
     pState->nCurrentOffset = 0;
     pState->nTotalSize = 0;
@@ -734,27 +690,25 @@ bool XStk::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 bool XStk::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XStk> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
-        if (!guardedThis || !bResult) return false;
-        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(guardedThis->XArchive::getInternalInfo(pPdStruct));
-        if (!guardedThis || !pInfo) return false;
-        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        if (!bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        if (!pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) = *pInfo;
     }
 
-    return guardedThis && bResult;
+    return bResult;
 }
 
 void *XStk::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XStk> guardedThis(this);
-    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
-    if (!guardedThis || !bHandled) return nullptr;
+    const bool bHandled = handleInternalInfo(pPdStruct);
+    if (!bHandled) return nullptr;
 
-    return &guardedThis->m_internalInfo;
+    return &m_internalInfo;
 }
 
 void XStk::setInternalInfo(void *pInternalInfo)

@@ -23,7 +23,6 @@
 #include "Algos/xcopyqmdecoder.h"
 
 #include <QFileInfo>
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -47,8 +46,7 @@ bool XCopyQMArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XCopyQMArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -56,7 +54,7 @@ bool XCopyQMArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nInputSize <= COPYQM_HEADER_SIZE) return false;
 
     const QByteArray baHeader = read_array_process(0, COPYQM_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != COPYQM_HEADER_SIZE)) return false;
+    if (!guardedSource || (baHeader.size() != COPYQM_HEADER_SIZE)) return false;
     const uchar *pHeader = (const uchar *)baHeader.constData();
 
     if ((pHeader[0] != 'C') || (pHeader[1] != 'Q') || (pHeader[2] != 0x14)) return false;
@@ -70,11 +68,11 @@ bool XCopyQMArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     // Nothing declares the image length, so measure the stream.
     const QByteArray baPacked = read_array_process(context.nDataOffset, context.nCompressedSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baPacked.size() != context.nCompressedSize)) return false;
+    if (!guardedSource || (baPacked.size() != context.nCompressedSize)) return false;
     if (!XCopyQMDecoder::measure(baPacked, &context.nUncompressedSize)) return false;
 
-    QString sName = QFileInfo(getDeviceFileName(guardedSource.data())).fileName();
-    if (!guardedThis || !guardedSource) return false;
+    QString sName = QFileInfo(getDeviceFileName(guardedSource)).fileName();
+    if (!guardedSource) return false;
     if (sName.isEmpty()) sName = QStringLiteral("image");
     context.sFileName = sName + QStringLiteral(".img");
 
@@ -85,7 +83,7 @@ bool XCopyQMArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XCopyQMArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -230,11 +228,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XCopyQMArchive::getDefaultUnpackProperties(
 
 bool XCopyQMArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XCopyQMArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -244,8 +241,8 @@ bool XCopyQMArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QV
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -258,15 +255,10 @@ bool XCopyQMArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QV
     pState->nNumberOfRecords = 1;
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

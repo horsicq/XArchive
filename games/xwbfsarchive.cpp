@@ -4,7 +4,6 @@
  */
 #include "xwbfsarchive.h"
 
-#include <QPointer>
 #include <QSet>
 
 #include <cstring>
@@ -182,17 +181,16 @@ XWBFSArchive::getDefaultUnpackProperties()
 
 bool XWBFSArchive::scanArchive(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
-    QPointer<XWBFSArchive> guardedThis(this);
-    if (!pContext || !guardedThis || !getDevice() ||
+    if (!pContext || !getDevice() ||
         getDevice()->isSequential() || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     const qint64 nSourceSize = getSize();
-    if (!guardedThis || (nSourceSize < WBFS_HEADER_FIXED_SIZE)) return false;
+    if ((nSourceSize < WBFS_HEADER_FIXED_SIZE)) return false;
     const QByteArray baFixedHeader = read_array_process(
         0, WBFS_HEADER_FIXED_SIZE, pPdStruct);
-    if (!guardedThis || (baFixedHeader.size() != WBFS_HEADER_FIXED_SIZE) ||
+    if ((baFixedHeader.size() != WBFS_HEADER_FIXED_SIZE) ||
         !isPdStructNotCanceled(pPdStruct) ||
         (memcmp(baFixedHeader.constData(), "WBFS", 4) != 0)) {
         return false;
@@ -261,7 +259,7 @@ bool XWBFSArchive::scanArchive(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const QByteArray baHeader = read_array_process(0, nHDSectorSize,
                                                     pPdStruct);
-    if (!guardedThis || (baHeader.size() != nHDSectorSize) ||
+    if ((baHeader.size() != nHDSectorSize) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -289,7 +287,7 @@ bool XWBFSArchive::scanArchive(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         }
         const QByteArray baDiscInfo = read_array_process(
             nDiscInfoOffset, nDiscInfoSize, pPdStruct);
-        if (!guardedThis || (baDiscInfo.size() != nDiscInfoSize) ||
+        if ((baDiscInfo.size() != nDiscInfoSize) ||
             !isPdStructNotCanceled(pPdStruct)) {
             return false;
         }
@@ -389,7 +387,7 @@ bool XWBFSArchive::scanArchive(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     pContext->nWbfsBlockSize = nWbfsBlockSize;
     pContext->nMapEntries = nMapEntries;
     pContext->nDiscInfoSize = nDiscInfoSize;
-    return guardedThis && isPdStructNotCanceled(pPdStruct);
+    return isPdStructNotCanceled(pPdStruct);
 }
 
 bool XWBFSArchive::initUnpack(
@@ -397,8 +395,7 @@ bool XWBFSArchive::initUnpack(
     const QMap<UNPACK_PROP, QVariant> &mapProperties,
     PDSTRUCT *pPdStruct)
 {
-    QPointer<XWBFSArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
@@ -407,7 +404,7 @@ bool XWBFSArchive::initUnpack(
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) || !guardedSource ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -420,7 +417,7 @@ bool XWBFSArchive::initUnpack(
     bool bResult = false;
     if (!resolveUnpackOutputPolicy(mapProperties, &policy)) goto failed;
     pContext = new (std::nothrow) CONTEXT;
-    if (!pContext || !scanArchive(pContext, pPdStruct) || !guardedThis ||
+    if (!pContext || !scanArchive(pContext, pPdStruct) ||
         !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
         goto failed;
     }
@@ -450,7 +447,7 @@ bool XWBFSArchive::initUnpack(
 
 failed:
     if (!bResult) {
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
     }
@@ -460,17 +457,16 @@ failed:
 XBinary::ARCHIVERECORD XWBFSArchive::infoCurrent(UNPACK_STATE *pState,
                                                   PDSTRUCT *pPdStruct)
 {
-    QPointer<XWBFSArchive> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress,
                                           &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed() || !pState || !pState->pContext ||
-        !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis ||
+        !isUnpackSourceCurrent(pState, pPdStruct) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return ARCHIVERECORD();
     }
     CONTEXT *pContext = static_cast<CONTEXT *>(pState->pContext);
     const qint64 nCurrentSize = getSize();
-    if (!guardedThis || (nCurrentSize != pContext->nSourceSize) ||
+    if ((nCurrentSize != pContext->nSourceSize) ||
         (pState->nTotalSize != nCurrentSize) ||
         (pState->nNumberOfRecords != pContext->listEntries.count()) ||
         (pState->nCurrentIndex < 0) ||
@@ -507,20 +503,19 @@ XBinary::ARCHIVERECORD XWBFSArchive::infoCurrent(UNPACK_STATE *pState,
 bool XWBFSArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
                                   PDSTRUCT *pPdStruct)
 {
-    QPointer<XWBFSArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    QPointer<QIODevice> guardedOutput(pDevice);
+    QIODevice *guardedSource = getDevice();
+    QIODevice *guardedOutput = pDevice;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState || !guardedSource ||
         !guardedOutput || !pState->pContext ||
-        devicesAlias(guardedSource.data(), guardedOutput.data()) ||
+        devicesAlias(guardedSource, guardedOutput) ||
         !isUnpackSourceCurrent(pState, pPdStruct) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
     CONTEXT *pContext = static_cast<CONTEXT *>(pState->pContext);
     const qint64 nCurrentSize = getSize();
-    if (!guardedThis || (nCurrentSize != pContext->nSourceSize) ||
+    if ((nCurrentSize != pContext->nSourceSize) ||
         (pState->nTotalSize != nCurrentSize) ||
         (pState->nNumberOfRecords != pContext->listEntries.count()) ||
         (pState->nCurrentIndex < 0) ||
@@ -573,7 +568,7 @@ bool XWBFSArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
     std::unique_ptr<QIODevice> pStage(createFileBuffer(entry.nVirtualSize,
                                                         pPdStruct));
     if (!pStage || (pStage->size() != entry.nVirtualSize) ||
-        !pStage->seek(0) || !guardedThis || !guardedSource ||
+        !pStage->seek(0) || !guardedSource ||
         !guardedOutput || !isUnpackSourceCurrent(pState, pPdStruct)) {
         return false;
     }
@@ -590,7 +585,7 @@ bool XWBFSArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
         entry.baBlockMap.constData());
 
     for (qint64 i = 0; i < nMapBlocksToProcess; ++i) {
-        if (!guardedThis || !guardedSource || !guardedOutput ||
+        if (!guardedSource || !guardedOutput ||
             !isUnpackSourceCurrent(pState, pPdStruct) ||
             !isPdStructNotCanceled(pPdStruct)) {
             return false;
@@ -614,7 +609,7 @@ bool XWBFSArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
             entry.nWbfsBlockSize, entry.nVirtualSize - nLogicalOffset);
         qint64 nCopied = 0;
         while (nCopied < nBlockOutputSize) {
-            if (!guardedThis || !guardedSource || !guardedOutput ||
+            if (!guardedSource || !guardedOutput ||
                 !isUnpackSourceCurrent(pState, pPdStruct) ||
                 !isPdStructNotCanceled(pPdStruct)) {
                 return false;
@@ -623,8 +618,7 @@ bool XWBFSArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
                 baBuffer.size(), nBlockOutputSize - nCopied);
             if ((read_array_process(nPhysicalOffset + nCopied,
                                     baBuffer.data(), nChunkSize,
-                                    pPdStruct) != nChunkSize) ||
-                !guardedThis || !guardedSource || !guardedOutput ||
+                                    pPdStruct) != nChunkSize) || !guardedSource || !guardedOutput ||
                 (safeWriteData(pStage.get(), nLogicalOffset + nCopied,
                                baBuffer.constData(), nChunkSize,
                                pPdStruct) != nChunkSize)) {
@@ -634,28 +628,27 @@ bool XWBFSArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
         }
     }
 
-    if (!guardedThis || !guardedSource || !guardedOutput ||
+    if (!guardedSource || !guardedOutput ||
         (pStage->size() != entry.nVirtualSize) || !pStage->seek(0) ||
         !isUnpackSourceCurrent(pState, pPdStruct) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
     const bool bPublished = publishUnpackOutput(pStage.get(),
-                                                 guardedOutput.data(), pState,
+                                                 guardedOutput, pState,
                                                  pPdStruct);
-    if (bPublished && guardedThis) {
+    if (bPublished) {
         pState->nCurrentOffset = entry.nDiscInfoOffset +
                                  entry.nDiscInfoSize;
     }
-    return bPublished && guardedThis;
+    return bPublished;
 }
 
 bool XWBFSArchive::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XWBFSArchive> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState || !pState->pContext ||
-        !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis ||
+        !isUnpackSourceCurrent(pState, pPdStruct) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }

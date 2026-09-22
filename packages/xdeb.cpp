@@ -46,7 +46,7 @@ public:
     }
 
 private:
-    QPointer<QIODevice> m_pDevice;
+    QIODevice *m_pDevice;
     qint64 m_nPosition;
 };
 
@@ -205,27 +205,25 @@ quint32 XDEB::ftStringToStructID(const QString &sFtString)
 
 bool XDEB::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XDEB> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = guardedThis->X_Ar::handleInternalInfo(pPdStruct);
-        if (!guardedThis || !bResult) return false;
-        X_Ar::INTERNAL_INFO *pInfo = static_cast<X_Ar::INTERNAL_INFO *>(guardedThis->X_Ar::getInternalInfo(pPdStruct));
-        if (!guardedThis || !pInfo) return false;
-        static_cast<X_Ar::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
+        bResult = X_Ar::handleInternalInfo(pPdStruct);
+        if (!bResult) return false;
+        X_Ar::INTERNAL_INFO *pInfo = static_cast<X_Ar::INTERNAL_INFO *>(X_Ar::getInternalInfo(pPdStruct));
+        if (!pInfo) return false;
+        static_cast<X_Ar::INTERNAL_INFO &>(m_internalInfo) = *pInfo;
     }
 
-    return guardedThis && bResult;
+    return bResult;
 }
 
 void *XDEB::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XDEB> guardedThis(this);
-    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
-    if (!guardedThis || !bHandled) return nullptr;
+    const bool bHandled = handleInternalInfo(pPdStruct);
+    if (!bHandled) return nullptr;
 
-    return &guardedThis->m_internalInfo;
+    return &m_internalInfo;
 }
 
 void XDEB::setInternalInfo(void *pInternalInfo)

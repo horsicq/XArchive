@@ -5,7 +5,6 @@
 
 #include "xswag.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <cstring>
@@ -134,8 +133,7 @@ bool XSWAG::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XSWAG> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -147,7 +145,7 @@ bool XSWAG::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     context.nFooterOffset = context.nInputSize - SWAG_FOOTER_SIZE;
     const QByteArray baFooter =
         read_array_process(context.nFooterOffset, SWAG_FOOTER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource ||
+    if (!guardedSource ||
         (baFooter.size() != SWAG_FOOTER_SIZE)) {
         return false;
     }
@@ -170,7 +168,7 @@ bool XSWAG::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
         const QByteArray baFixed =
             read_array_process(nOffset, SWAG_FIXED_HEADER_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource ||
+        if (!guardedSource ||
             (baFixed.size() != SWAG_FIXED_HEADER_SIZE)) {
             return false;
         }
@@ -180,7 +178,7 @@ bool XSWAG::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
         const QByteArray baHeader =
             read_array_process(nOffset, nHeaderSize + 2, pPdStruct);
-        if (!guardedThis || !guardedSource ||
+        if (!guardedSource ||
             (baHeader.size() != nHeaderSize + 2)) {
             return false;
         }
@@ -202,7 +200,7 @@ bool XSWAG::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     }
 
     if (context.listMembers.isEmpty()) return false;
-    if (!guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
+    if (!guardedSource || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -213,7 +211,7 @@ bool XSWAG::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XSWAG::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -405,8 +403,7 @@ bool XSWAG::initUnpack(UNPACK_STATE *pState,
                        const QMap<UNPACK_PROP, QVariant> &mapProperties,
                        PDSTRUCT *pPdStruct)
 {
-    QPointer<XSWAG> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
@@ -415,7 +412,7 @@ bool XSWAG::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) || !guardedSource ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -431,9 +428,9 @@ bool XSWAG::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis ||
+    if (!parseContext(pContext, pPdStruct) ||
         !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -451,16 +448,11 @@ bool XSWAG::initUnpack(UNPACK_STATE *pState,
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(
+    const bool bFinalized = validateAndFinalizeUnpackSource(
         pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

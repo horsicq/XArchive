@@ -10,7 +10,6 @@
 #include <QFileInfo>
 #include <QMutex>
 #include <QMutexLocker>
-#include <QPointer>
 #include <QTemporaryDir>
 
 #include <limits>
@@ -146,13 +145,12 @@ static bool dearkModuleHasNativeReader(const QString &sModule)
 
 bool XDearkArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XDearkArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct) || !guardedThis || !guardedSource) return false;
+    if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
 
     DEARK_UNPACK_CONTEXT *pContext = new (std::nothrow) DEARK_UNPACK_CONTEXT();
     if (!pContext) {
@@ -175,8 +173,8 @@ bool XDearkArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVa
     {
         QFile inputFile(QDir(pContext->pTemporaryDir->path()).filePath(QStringLiteral("input.bin")));
         if (!inputFile.open(QIODevice::ReadWrite | QIODevice::Truncate)) goto init_failed;
-        bResult = XBinary::copyDeviceMemory(guardedSource.data(), 0, &inputFile, 0, nSourceSize, pPdStruct);
-        if (!guardedThis || !guardedSource || !bResult || (inputFile.size() != nSourceSize)) goto init_failed;
+        bResult = XBinary::copyDeviceMemory(guardedSource, 0, &inputFile, 0, nSourceSize, pPdStruct);
+        if (!bResult || (inputFile.size() != nSourceSize)) goto init_failed;
         inputFile.close();
     }
 
@@ -203,7 +201,7 @@ bool XDearkArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVa
         // plain level-1 -lh5- .lzh and a UDZO .dmg (whose first stripe is a
         // bare zlib stream at offset 0) were both reported as "Legacy archive
         // (Deark)" and XLHA / XDMG never ran (ISSUE-34).
-        if (!guardedThis || !guardedSource || !bResult ||
+        if (!bResult ||
             !XDearkDecoder::isSupportedModule(pContext->sModule) || dearkModuleHasNativeReader(pContext->sModule)) {
             if (!decoderResult.errorMessage.isEmpty()) XBinary::setPdStructErrorString(pPdStruct, decoderResult.errorMessage);
             goto init_failed;
@@ -221,7 +219,7 @@ bool XDearkArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVa
     }
 
     pContext->pInnerArchive = new (std::nothrow) XZip(pContext->pZipFile);
-    if (!pContext->pInnerArchive || !pContext->pInnerArchive->initUnpack(&pContext->innerState, mapProperties, pPdStruct) || !guardedThis || !guardedSource ||
+    if (!pContext->pInnerArchive || !pContext->pInnerArchive->initUnpack(&pContext->innerState, mapProperties, pPdStruct) ||
         (pContext->innerState.nNumberOfRecords <= 0) || (pContext->innerState.nCurrentIndex != 0)) {
         goto init_failed;
     }
@@ -235,11 +233,11 @@ bool XDearkArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVa
     pState->nNumberOfRecords = pContext->innerState.nNumberOfRecords;
     pState->pContext = pContext;
     bResult = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bResult) goto init_failed;
+    if (!bResult) goto init_failed;
     return true;
 
 init_failed:
-    if (guardedThis) guardedThis->releaseUnpackSource(pState);
+    releaseUnpackSource(pState);
     delete pContext;
     *pState = UNPACK_STATE();
     return false;
@@ -295,15 +293,14 @@ static void dearkDropSynthesizedTimestamp(XBinary::ARCHIVERECORD *pRecord)
 XBinary::ARCHIVERECORD XDearkArchive::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
-    QPointer<XDearkArchive> guardedThis(this);
-    if (!operationGuard.isAllowed() || !pState || !guardedThis || !isUnpackSourceCurrent(pState, pPdStruct) ||
+    if (!operationGuard.isAllowed() || !pState || !isUnpackSourceCurrent(pState, pPdStruct) ||
         (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) return ARCHIVERECORD();
     DEARK_UNPACK_CONTEXT *pContext = static_cast<DEARK_UNPACK_CONTEXT *>(pState->pContext);
     if (!pContext || !pContext->pInnerArchive || !pContext->pZipFile ||
         (pContext->innerState.nCurrentIndex != pState->nCurrentIndex) ||
         (pContext->innerState.nNumberOfRecords != pState->nNumberOfRecords)) return ARCHIVERECORD();
     ARCHIVERECORD record = pContext->pInnerArchive->infoCurrent(&pContext->innerState, pPdStruct);
-    if (!guardedThis || !isUnpackSourceCurrent(pState, pPdStruct) || record.mapProperties.isEmpty() ||
+    if (!isUnpackSourceCurrent(pState, pPdStruct) || record.mapProperties.isEmpty() ||
         !markArchiveStreamRecord(&record, pState->nCurrentIndex)) return ARCHIVERECORD();
     dearkDropSynthesizedTimestamp(&record);
     return record;
@@ -312,8 +309,7 @@ XBinary::ARCHIVERECORD XDearkArchive::infoCurrent(UNPACK_STATE *pState, PDSTRUCT
 bool XDearkArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    QPointer<XDearkArchive> guardedThis(this);
-    if (!operationGuard.isAcquired() || !pState || !pDevice || !guardedThis || !isUnpackSourceCurrent(pState, pPdStruct) || devicesAlias(getDevice(), pDevice)) return false;
+    if (!operationGuard.isAcquired() || !pState || !pDevice || !isUnpackSourceCurrent(pState, pPdStruct) || devicesAlias(getDevice(), pDevice)) return false;
     DEARK_UNPACK_CONTEXT *pContext = static_cast<DEARK_UNPACK_CONTEXT *>(pState->pContext);
     if (!pContext || !pContext->pInnerArchive || !pContext->pZipFile ||
         (pContext->innerState.nCurrentIndex != pState->nCurrentIndex) ||
@@ -321,7 +317,7 @@ bool XDearkArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDST
     pContext->innerState.spOutputBudget = pState->spOutputBudget;
     pContext->innerState.mapUnpackProperties = pState->mapUnpackProperties;
     const bool bResult = pContext->pInnerArchive->unpackCurrent(&pContext->innerState, pDevice, pPdStruct);
-    if (!guardedThis || !bResult || !isUnpackSourceCurrent(pState, pPdStruct) ||
+    if (!bResult || !isUnpackSourceCurrent(pState, pPdStruct) ||
         (pContext->innerState.nCurrentIndex != pState->nCurrentIndex)) return false;
     pState->nCurrentOffset = 0;
     return true;
@@ -330,15 +326,14 @@ bool XDearkArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDST
 bool XDearkArchive::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    QPointer<XDearkArchive> guardedThis(this);
-    if (!operationGuard.isAcquired() || !pState || !guardedThis || !isUnpackSourceCurrent(pState, pPdStruct)) return false;
+    if (!operationGuard.isAcquired() || !pState || !isUnpackSourceCurrent(pState, pPdStruct)) return false;
     DEARK_UNPACK_CONTEXT *pContext = static_cast<DEARK_UNPACK_CONTEXT *>(pState->pContext);
     if (!pContext || !pContext->pInnerArchive || (pContext->innerState.nCurrentIndex != pState->nCurrentIndex) ||
         (pContext->innerState.nNumberOfRecords != pState->nNumberOfRecords) ||
         (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) return false;
     const qint32 previous = pState->nCurrentIndex;
     const bool bResult = pContext->pInnerArchive->moveToNext(&pContext->innerState, pPdStruct);
-    if (!guardedThis || !isUnpackSourceCurrent(pState, pPdStruct) ||
+    if (!isUnpackSourceCurrent(pState, pPdStruct) ||
         (pContext->innerState.nNumberOfRecords != pState->nNumberOfRecords)) return false;
     if (bResult) {
         if ((pContext->innerState.nCurrentIndex != previous + 1) || (pContext->innerState.nCurrentIndex >= pState->nNumberOfRecords)) return false;

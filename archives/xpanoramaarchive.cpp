@@ -23,7 +23,6 @@
 #include "Algos/xpanoramadecoder.h"
 
 #include <QFileInfo>
-#include <QPointer>
 
 #include <new>
 
@@ -44,16 +43,15 @@ bool XPanoramaArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XPanoramaArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
     if (context.nInputSize < PANORAMA_MIN_SIZE) return false;
 
     const QByteArray baHeader = read_array_process(0, PANORAMA_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || ((qint64)baHeader.size() != PANORAMA_HEADER_SIZE)) return false;
+    if ((qint64)baHeader.size() != PANORAMA_HEADER_SIZE) return false;
 
     quint32 nSeed = 0;
     if (!XPanoramaDecoder::seedFromHeader(baHeader, &nSeed)) return false;
@@ -64,8 +62,7 @@ bool XPanoramaArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     context.nUncompressedSize = context.nInputSize;
     context.baProperty = XPanoramaDecoder::seedToProperty(nSeed);
 
-    QString sName = QFileInfo(getDeviceFileName(guardedSource.data())).completeBaseName();
-    if (!guardedThis || !guardedSource) return false;
+    QString sName = QFileInfo(getDeviceFileName(guardedSource)).completeBaseName();
     if (sName.isEmpty()) sName = QStringLiteral("archive");
     context.sFileName = sName + QStringLiteral(".rar");
 
@@ -76,7 +73,7 @@ bool XPanoramaArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XPanoramaArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -223,11 +220,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XPanoramaArchive::getDefaultUnpackPropertie
 
 bool XPanoramaArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XPanoramaArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -237,8 +233,8 @@ bool XPanoramaArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, 
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct)) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -251,15 +247,9 @@ bool XPanoramaArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, 
     pState->nNumberOfRecords = 1;
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
-        pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

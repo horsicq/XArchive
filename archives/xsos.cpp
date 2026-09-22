@@ -5,7 +5,6 @@
 
 #include "xsos.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -49,8 +48,7 @@ bool XSOS::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XSOS> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -61,7 +59,7 @@ bool XSOS::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if ((context.nInputSize % SOS_SECTOR_SIZE) != 0) return false;
 
     const QByteArray baBoot = read_array_process(0, SOS_BOOTBLOCK_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baBoot.size() != SOS_BOOTBLOCK_SIZE)) return false;
+    if (!guardedSource || (baBoot.size() != SOS_BOOTBLOCK_SIZE)) return false;
     const uchar *pBoot = (const uchar *)baBoot.constData();
 
     if (memcmp(pBoot, "DOS", 3) != 0) return false;
@@ -77,7 +75,7 @@ bool XSOS::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         const qint64 nOffset = (qint64)nSector * SOS_SECTOR_SIZE;
         if (!sosRangeWithin(context.nInputSize, nOffset, SOS_RECORD_SIZE)) break;
         const QByteArray baRecord = read_array_process(nOffset, SOS_RECORD_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baRecord.size() != SOS_RECORD_SIZE)) return false;
+        if (!guardedSource || (baRecord.size() != SOS_RECORD_SIZE)) return false;
         if (sosRecordName((const uchar *)baRecord.constData(), nullptr) == QLatin1String(SOS_ANCHOR_NAME)) {
             nDirectoryOffset = nOffset;
             break;
@@ -92,7 +90,7 @@ bool XSOS::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (!isPdStructNotCanceled(pPdStruct)) return false;
         if (!sosRangeWithin(context.nInputSize, nOffset, SOS_RECORD_SIZE)) return false;
         const QByteArray baRecord = read_array_process(nOffset, SOS_RECORD_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baRecord.size() != SOS_RECORD_SIZE)) return false;
+        if (!guardedSource || (baRecord.size() != SOS_RECORD_SIZE)) return false;
         const uchar *pRecord = (const uchar *)baRecord.constData();
 
         const qint64 nDataOffset = (qint64)(qint32)qFromBigEndian<quint32>(pRecord);
@@ -121,7 +119,7 @@ bool XSOS::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.listMembers.isEmpty()) return false;
     context.nDirectorySize = (nOffset + SOS_RECORD_SIZE) - context.nDirectoryOffset;
     context.nArchiveSize = qMax(nArchiveEnd, context.nDirectoryOffset + context.nDirectorySize);
-    if (!guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     *pContext = context;
     return true;
@@ -129,7 +127,7 @@ bool XSOS::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XSOS::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -276,15 +274,14 @@ QMap<XBinary::UNPACK_PROP, QVariant> XSOS::getDefaultUnpackProperties()
 
 bool XSOS::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSOS> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) {
         return false;
     }
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -298,8 +295,8 @@ bool XSOS::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -313,15 +310,10 @@ bool XSOS::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

@@ -5,7 +5,6 @@
 
 #include "xpackit.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <cstring>
@@ -49,16 +48,15 @@ bool XPACKIT::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XPACKIT> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
     if (context.nInputSize < PACKIT_SIGNATURE_SIZE + PACKIT_FIXED_HEADER_SIZE + 2) return false;
 
     const QByteArray baSignature = read_array_process(0, PACKIT_SIGNATURE_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baSignature.size() != PACKIT_SIGNATURE_SIZE)) return false;
+    if (baSignature.size() != PACKIT_SIGNATURE_SIZE) return false;
     {
         static const char pSignature[PACKIT_SIGNATURE_SIZE] = {'P', 'A', 'C', 'K', 'I', 'T', ' ', 'b', 'y', ' ', 'M', 'J', 'P', '\r', '\n', '\x1a'};
         if (memcmp(baSignature.constData(), pSignature, PACKIT_SIGNATURE_SIZE) != 0) return false;
@@ -71,7 +69,7 @@ bool XPACKIT::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (nOffset + 2 > context.nInputSize) break;
 
         const QByteArray baTag = read_array_process(nOffset, 2, pPdStruct);
-        if (!guardedThis || !guardedSource || (baTag.size() != 2)) return false;
+        if (baTag.size() != 2) return false;
         const quint16 nTag = qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(baTag.constData()));
         if (nTag == PACKIT_TAG_END) {
             nOffset += 2;
@@ -83,7 +81,7 @@ bool XPACKIT::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
         if (nOffset + PACKIT_FIXED_HEADER_SIZE > context.nInputSize) break;
         const QByteArray baHeader = read_array_process(nOffset, PACKIT_FIXED_HEADER_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baHeader.size() != PACKIT_FIXED_HEADER_SIZE)) return false;
+        if (baHeader.size() != PACKIT_FIXED_HEADER_SIZE) return false;
         const uchar *pHeader = reinterpret_cast<const uchar *>(baHeader.constData());
 
         const qint32 nSize = qFromLittleEndian<qint32>(pHeader + 2);
@@ -103,7 +101,7 @@ bool XPACKIT::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         const qint64 nNameOffset = nOffset + PACKIT_FIXED_HEADER_SIZE;
         if (nNameOffset + nNameLength + 1 > context.nInputSize) break;
         const QByteArray baName = read_array_process(nNameOffset, nNameLength + 1, pPdStruct);
-        if (!guardedThis || !guardedSource || (baName.size() != nNameLength + 1)) return false;
+        if (baName.size() != nNameLength + 1) return false;
         // The name field is followed by an explicit NUL; the reference reader
         // refuses the archive when it is anything else.
         if (baName.at(nNameLength) != '\0') return false;
@@ -137,12 +135,12 @@ bool XPACKIT::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nArchiveSize > context.nInputSize) context.nArchiveSize = context.nInputSize;
 
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return isPdStructNotCanceled(pPdStruct);
 }
 
 bool XPACKIT::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -300,11 +298,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XPACKIT::getDefaultUnpackProperties()
 
 bool XPACKIT::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XPACKIT> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -314,8 +311,8 @@ bool XPACKIT::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant>
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -329,15 +326,9 @@ bool XPACKIT::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant>
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
-        pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

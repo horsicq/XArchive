@@ -20,7 +20,6 @@
  */
 #include "xwintersoftarchive.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -49,8 +48,7 @@ bool XWintersoftArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XWintersoftArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -58,7 +56,7 @@ bool XWintersoftArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nInputSize < (WINTERSOFT_HEADER_SIZE + WINTERSOFT_RECORD_SIZE)) return false;
 
     const QByteArray baHeader = read_array_process(0, WINTERSOFT_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != WINTERSOFT_HEADER_SIZE)) return false;
+    if (!guardedSource || (baHeader.size() != WINTERSOFT_HEADER_SIZE)) return false;
     if (baHeader.left(4) != QByteArray("**++", 4)) return false;
 
     const QByteArray baMethod = baHeader.mid(4, 4);
@@ -73,7 +71,7 @@ bool XWintersoftArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (context.listMembers.size() >= WINTERSOFT_MAX_MEMBERS) return false;
 
         const QByteArray baRecord = read_array_process(nOffset, WINTERSOFT_RECORD_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baRecord.size() != WINTERSOFT_RECORD_SIZE)) return false;
+        if (!guardedSource || (baRecord.size() != WINTERSOFT_RECORD_SIZE)) return false;
         const uchar *pRecord = (const uchar *)baRecord.constData();
 
         const qint64 nUncompressedSize = (qint32)qFromLittleEndian<quint32>(pRecord);
@@ -111,7 +109,7 @@ bool XWintersoftArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XWintersoftArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -288,11 +286,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XWintersoftArchive::getDefaultUnpackPropert
 
 bool XWintersoftArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XWintersoftArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -302,8 +299,8 @@ bool XWintersoftArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -316,15 +313,10 @@ bool XWintersoftArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

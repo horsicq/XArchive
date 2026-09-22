@@ -23,7 +23,6 @@
 
 #include <QIODevice>
 #include <QList>
-#include <QPointer>
 #include <QString>
 
 // One read-only, random-access view over an ordered list of byte ranges taken
@@ -81,7 +80,7 @@ protected:
 
 private:
     struct SEGMENT {
-        QPointer<QIODevice> pDevice;
+        QIODevice *pDevice = nullptr;
         qint64 nOffset;
         qint64 nLength;
         qint64 nStart;

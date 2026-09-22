@@ -20,7 +20,6 @@
  */
 #include "xchieflzmultiarchive.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -57,16 +56,15 @@ bool XChiefLZMultiArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XChiefLZMultiArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
     if (context.nInputSize < CHIEFLZM_DIRECTORY_OFFSET) return false;
 
     const QByteArray baHeader = read_array_process(0, CHIEFLZM_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != CHIEFLZM_HEADER_SIZE)) return false;
+    if ((baHeader.size() != CHIEFLZM_HEADER_SIZE)) return false;
     const uchar *pHeader = (const uchar *)baHeader.constData();
     if (pHeader[0] != 0x0c) return false;
     if (baHeader.mid(1, 12) != QByteArray("\x04\x0d" "ChfLZ_2" "\x05\x06\x04", 12)) return false;
@@ -81,7 +79,7 @@ bool XChiefLZMultiArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (!chieflzmRangeWithin(context.nInputSize, CHIEFLZM_DIRECTORY_OFFSET, nDirectorySize)) return false;
 
     const QByteArray baDirectory = read_array_process(CHIEFLZM_DIRECTORY_OFFSET, nDirectorySize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baDirectory.size() != nDirectorySize)) return false;
+    if ((baDirectory.size() != nDirectorySize)) return false;
     const uchar *pDirectory = (const uchar *)baDirectory.constData();
 
     QList<qint32> listParents;
@@ -152,7 +150,7 @@ bool XChiefLZMultiArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XChiefLZMultiArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -332,11 +330,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XChiefLZMultiArchive::getDefaultUnpackPrope
 
 bool XChiefLZMultiArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XChiefLZMultiArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -346,8 +343,8 @@ bool XChiefLZMultiArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PR
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -360,15 +357,10 @@ bool XChiefLZMultiArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PR
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

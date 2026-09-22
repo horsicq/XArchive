@@ -5,7 +5,6 @@
 
 #include "xhfe.h"
 
-#include <QPointer>
 
 #include <new>
 
@@ -28,8 +27,7 @@ bool XHFE::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XHFE> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -41,7 +39,7 @@ bool XHFE::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const QByteArray baFile =
         read_array_process(0, qint32(context.nInputSize), pPdStruct);
-    if (!guardedThis || !guardedSource ||
+    if (!guardedSource ||
         (baFile.size() != qint32(context.nInputSize))) {
         return false;
     }
@@ -52,9 +50,9 @@ bool XHFE::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (!XHFEDecoder::probeGeometry(baFile, &context.geometry, pPdStruct)) {
         return false;
     }
-    if (!guardedThis || !guardedSource) return false;
+    if (!guardedSource) return false;
 
-    QString sBaseName = XBinary::getDeviceFileBaseName(guardedSource.data());
+    QString sBaseName = XBinary::getDeviceFileBaseName(guardedSource);
     if (sBaseName.isEmpty()) sBaseName = QStringLiteral("hfe_disk");
     context.sImageName = sBaseName + QStringLiteral(".img");
 
@@ -64,7 +62,7 @@ bool XHFE::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XHFE::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -222,8 +220,7 @@ bool XHFE::initUnpack(UNPACK_STATE *pState,
                       const QMap<UNPACK_PROP, QVariant> &mapProperties,
                       PDSTRUCT *pPdStruct)
 {
-    QPointer<XHFE> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
@@ -232,7 +229,7 @@ bool XHFE::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) || !guardedSource ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -247,8 +244,8 @@ bool XHFE::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -264,16 +261,11 @@ bool XHFE::initUnpack(UNPACK_STATE *pState,
     pState->nNumberOfRecords = 1;
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(
+    const bool bFinalized = validateAndFinalizeUnpackSource(
         pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

@@ -127,15 +127,14 @@ XBinary *XGodotPCK::createInstance(QIODevice *pDevice, bool bIsImage,
 bool XGodotPCK::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
                            PDSTRUCT *pPdStruct)
 {
-    QPointer<XGodotPCK> guardedThis(this);
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || (nTotalSize < 8) ||
+    if ((nTotalSize < 8) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     const QByteArray baPrefix = read_array_process(0, 8, pPdStruct);
-    if (!guardedThis || (baPrefix.size() != 8) ||
+    if ((baPrefix.size() != 8) ||
         (std::memcmp(baPrefix.constData(), "GDPC", 4) != 0)) {
         return false;
     }
@@ -152,7 +151,7 @@ bool XGodotPCK::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
 
     const QByteArray baHeader = read_array_process(
         0, nDirectoryStart, pPdStruct);
-    if (!guardedThis || (baHeader.size() != nDirectoryStart) ||
+    if ((baHeader.size() != nDirectoryStart) ||
         (std::memcmp(baHeader.constData(), "GDPC", 4) != 0)) {
         return false;
     }
@@ -207,7 +206,7 @@ bool XGodotPCK::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
 
         const QByteArray baNameLength = read_array_process(
             nDirectoryOffset, 4, pPdStruct);
-        if (!guardedThis || (baNameLength.size() != 4)) return false;
+        if ((baNameLength.size() != 4)) return false;
         const quint32 nNameLengthValue = readLE32(
             reinterpret_cast<const uchar *>(baNameLength.constData()));
         if ((nNameLengthValue == 0) ||
@@ -222,7 +221,7 @@ bool XGodotPCK::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
 
         const QByteArray baEntry = read_array_process(
             nDirectoryOffset + 4, nEntrySize - 4, pPdStruct);
-        if (!guardedThis || (baEntry.size() != (nEntrySize - 4))) {
+        if ((baEntry.size() != (nEntrySize - 4))) {
             return false;
         }
         const uchar *pEntry = reinterpret_cast<const uchar *>(

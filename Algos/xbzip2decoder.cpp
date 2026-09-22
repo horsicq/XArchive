@@ -1897,8 +1897,8 @@ XBZIP2Decoder::XBZIP2Decoder(QObject *parent) : QObject(parent)
 static bool decompressBzip2Streams(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct, bool bAllowTrailingData)
 {
     bool bResult = false;
-    QPointer<QIODevice> guardedInput(pDecompressState ? pDecompressState->pDeviceInput : nullptr);
-    QPointer<QIODevice> guardedOutput(pDecompressState ? pDecompressState->pDeviceOutput : nullptr);
+    QIODevice *guardedInput = pDecompressState ? pDecompressState->pDeviceInput : nullptr;
+    QIODevice *guardedOutput = pDecompressState ? pDecompressState->pDeviceOutput : nullptr;
 
     if (pDecompressState && pDecompressState->pDeviceInput && pDecompressState->pDeviceOutput && (pDecompressState->nInputOffset >= 0) &&
         (pDecompressState->nInputLimit >= -1) && XBinary::isPdStructNotCanceled(pPdStruct)) {
@@ -1976,7 +1976,7 @@ static bool decompressBzip2Streams(XBinary::DATAPROCESS_STATE *pDecompressState,
                                 // Prefix mode is reserved for envelope parsers.
                                 // Restore the actual consumed extent; generic
                                 // archive-member decoding remains exact-input.
-                                QPointer<QIODevice> input(guardedInput);
+                                QIODevice *input = guardedInput;
                                 if (!input || nStreamEnd <= 0 || nStreamEnd > pDecompressState->nCountInput ||
                                     pDecompressState->nInputOffset > (std::numeric_limits<qint64>::max)() - nStreamEnd ||
                                     !input->seek(pDecompressState->nInputOffset + nStreamEnd) || !input) {

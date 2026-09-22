@@ -5,7 +5,6 @@
 
 #include "xfiz.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <cstring>
@@ -51,9 +50,8 @@ bool XFiz::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XFiz> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -66,7 +64,7 @@ bool XFiz::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (!fizRangeWithin(context.nInputSize, nOffset, FIZ_HEADER_SIZE)) return false;
 
         const QByteArray baHeader = read_array_process(nOffset, FIZ_HEADER_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baHeader.size() != FIZ_HEADER_SIZE)) return false;
+        if ((baHeader.size() != FIZ_HEADER_SIZE)) return false;
 
         const uchar *pHeader = reinterpret_cast<const uchar *>(baHeader.constData());
 
@@ -101,7 +99,7 @@ bool XFiz::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         // The name field is exactly nameLen bytes and is NOT NUL-terminated;
         // read the field, never scan for a terminator.
         const QByteArray baName = read_array_process(nOffset + FIZ_HEADER_SIZE, nNameSize, pPdStruct);
-        if (!guardedThis || !guardedSource || (baName.size() != nNameSize)) return false;
+        if ((baName.size() != nNameSize)) return false;
         if (!fizIsValidName(baName)) return false;
         member.sFileName = QString::fromLatin1(baName);
 
@@ -130,7 +128,7 @@ bool XFiz::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
             context.nArchiveSize = nOffset;
             context.nFirstMemberOffset = context.listMembers.first().nHeaderOffset;
             *pContext = context;
-            return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+            return guardedSource && isPdStructNotCanceled(pPdStruct);
         }
     }
 
@@ -139,7 +137,7 @@ bool XFiz::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XFiz::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -342,15 +340,14 @@ QMap<XBinary::UNPACK_PROP, QVariant> XFiz::getDefaultUnpackProperties()
 
 bool XFiz::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XFiz> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) {
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) {
         return false;
     }
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -364,8 +361,8 @@ bool XFiz::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -379,15 +376,10 @@ bool XFiz::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

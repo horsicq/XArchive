@@ -44,13 +44,12 @@ XBinary *XPAK::createInstance(QIODevice *pDevice, bool bIsImage,
 bool XPAK::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
                       PDSTRUCT *pPdStruct)
 {
-    QPointer<XPAK> guardedThis(this);
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || (nTotalSize < 12) ||
+    if ((nTotalSize < 12) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
     const QByteArray baHeader = read_array_process(0, 12, pPdStruct);
-    if (!guardedThis || (baHeader.size() != 12) ||
+    if ((baHeader.size() != 12) ||
         (memcmp(baHeader.constData(), "PACK", 4) != 0)) return false;
 
     const uchar *pHeader =
@@ -77,7 +76,7 @@ bool XPAK::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
     if (nDirectorySize > 0) {
         baDirectory = read_array_process(nDirectoryOffset, nDirectorySize,
                                          pPdStruct);
-        if (!guardedThis || (baDirectory.size() != nDirectorySize))
+        if ((baDirectory.size() != nDirectorySize))
             return false;
     }
 

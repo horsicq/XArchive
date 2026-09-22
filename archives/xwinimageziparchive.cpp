@@ -5,7 +5,6 @@
 #include "xwinimageziparchive.h"
 
 #include <QHash>
-#include <QPointer>
 #include <QSet>
 #include <QtEndian>
 
@@ -58,7 +57,6 @@ bool XWinImageZipArchive::readCentralDirectory(qint64 nCentralOffset,
                                                QList<CENTRALRECORD> *pRecords,
                                                PDSTRUCT *pPdStruct)
 {
-    QPointer<XWinImageZipArchive> guardedThis(this);
     if (!pRecords || (nCentralOffset < 0) || (nCentralSize <= 0) ||
         (nCentralSize > WINIMAGE_ZIP_MAX_CENTRAL_SIZE) ||
         (nCentralSize < (qint64)nRecords * WINIMAGE_ZIP_CFD_SIZE)) {
@@ -67,7 +65,7 @@ bool XWinImageZipArchive::readCentralDirectory(qint64 nCentralOffset,
 
     const QByteArray baCentral =
         read_array_process(nCentralOffset, nCentralSize, pPdStruct);
-    if (!guardedThis || (baCentral.size() != nCentralSize) ||
+    if ((baCentral.size() != nCentralSize) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -135,7 +133,6 @@ bool XWinImageZipArchive::walkLocalHeaders(const QList<CENTRALRECORD> &listRecor
                                            QList<ENTRY> *pEntries,
                                            PDSTRUCT *pPdStruct)
 {
-    QPointer<XWinImageZipArchive> guardedThis(this);
     QSet<QString> usedFiles;
     QSet<QString> usedDirs;
     QHash<QString, qint32> nextSuffixes;
@@ -163,7 +160,7 @@ bool XWinImageZipArchive::walkLocalHeaders(const QList<CENTRALRECORD> &listRecor
 
         const QByteArray baLocal =
             read_array_process(nPosition, WINIMAGE_ZIP_LFD_SIZE, pPdStruct);
-        if (!guardedThis || (baLocal.size() != WINIMAGE_ZIP_LFD_SIZE)) return false;
+        if (baLocal.size() != WINIMAGE_ZIP_LFD_SIZE) return false;
         const uchar *p = reinterpret_cast<const uchar *>(baLocal.constData());
         if (qFromLittleEndian<quint32>(p) != WINIMAGE_ZIP_SIGNATURE_LFD) return false;
 
@@ -188,7 +185,7 @@ bool XWinImageZipArchive::walkLocalHeaders(const QList<CENTRALRECORD> &listRecor
 
         const QByteArray baName = read_array_process(
             nPosition + WINIMAGE_ZIP_LFD_SIZE, nNameLength, pPdStruct);
-        if (!guardedThis || (baName.size() != nNameLength) ||
+        if ((baName.size() != nNameLength) ||
             (baName != record.baName)) {
             return false;
         }
@@ -247,9 +244,8 @@ bool XWinImageZipArchive::scanFormat(QList<ENTRY> *pEntries,
         localPdStruct = XBinary::createPdStruct();
         pPdStruct = &localPdStruct;
     }
-    QPointer<XWinImageZipArchive> guardedThis(this);
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || (nTotalSize < WINIMAGE_ZIP_MIN_SIZE) ||
+    if ((nTotalSize < WINIMAGE_ZIP_MIN_SIZE) ||
         (nTotalSize > WINIMAGE_ZIP_MAX_SIZE) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
@@ -260,7 +256,7 @@ bool XWinImageZipArchive::scanFormat(QList<ENTRY> *pEntries,
     const qint64 nSearchSize = nTotalSize - nSearchOffset;
     if (nSearchSize > (std::numeric_limits<qint32>::max)()) return false;
     const QByteArray baTail = read_array_process(nSearchOffset, nSearchSize, pPdStruct);
-    if (!guardedThis || (baTail.size() != nSearchSize) ||
+    if ((baTail.size() != nSearchSize) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -308,18 +304,16 @@ bool XWinImageZipArchive::scanFormat(QList<ENTRY> *pEntries,
                     (nArchiveOffset < nCentralOffset) &&
                     (read_array_process(nArchiveOffset - WINIMAGE_ZIP_TAG_SIZE,
                                         WINIMAGE_ZIP_TAG_SIZE,
-                                        pPdStruct) == baWinImageTag) &&
-                    guardedThis) {
+                                        pPdStruct) == baWinImageTag)) {
                     QList<CENTRALRECORD> listRecords;
                     QList<ENTRY> listEntries;
                     if (readCentralDirectory(nCentralOffset, nCentralSize,
                                              nTotalRecords, &listRecords,
                                              pPdStruct) &&
-                        guardedThis &&
                         walkLocalHeaders(listRecords, nArchiveOffset,
                                          nCentralOffset, &listEntries,
                                          pPdStruct) &&
-                        guardedThis && !listEntries.isEmpty()) {
+                        !listEntries.isEmpty()) {
                         if (pEntries) *pEntries = listEntries;
                         if (pArchiveEnd) *pArchiveEnd = nArchiveEnd;
                         return true;

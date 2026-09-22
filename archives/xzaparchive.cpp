@@ -22,7 +22,6 @@
 
 #include "Algos/xdcldecoder.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -57,13 +56,12 @@ bool XZAPArchive::scanMemberSize(MEMBER *pMember, PDSTRUCT *pPdStruct)
 {
     if (!pMember) return false;
 
-    QPointer<XZAPArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     if ((pMember->nCompressedSize <= 0) || (pMember->nCompressedSize > ZAP_MAX_UNCOMPRESSED_SIZE)) return false;
 
     const QByteArray baPacked = read_array_process(pMember->nDataOffset, pMember->nCompressedSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baPacked.size() != pMember->nCompressedSize)) return false;
+    if (!guardedSource || (baPacked.size() != pMember->nCompressedSize)) return false;
 
     qint64 nConsumed = 0;
     qint64 nRawSize = 0;
@@ -82,8 +80,7 @@ bool XZAPArchive::parseContext(CONTEXT *pContext, bool bScanSizes, PDSTRUCT *pPd
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XZAPArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -91,7 +88,7 @@ bool XZAPArchive::parseContext(CONTEXT *pContext, bool bScanSizes, PDSTRUCT *pPd
     if (context.nInputSize < (ZAP_HEADER_SIZE + 2)) return false;
 
     const QByteArray baProbe = read_array_process(0, ZAP_HEADER_SIZE + 2, pPdStruct);
-    if (!guardedThis || !guardedSource || (baProbe.size() != (ZAP_HEADER_SIZE + 2))) return false;
+    if (!guardedSource || (baProbe.size() != (ZAP_HEADER_SIZE + 2))) return false;
     const quint8 nFirstNameLength = (quint8)baProbe.at(0);
     if ((nFirstNameLength < 1) || (nFirstNameLength > ZAP_NAME_FIELD_SIZE)) return false;
     if (!zapIsDclPrologue((quint8)baProbe.at(0x15), (quint8)baProbe.at(0x16))) return false;
@@ -103,7 +100,7 @@ bool XZAPArchive::parseContext(CONTEXT *pContext, bool bScanSizes, PDSTRUCT *pPd
         if (context.listMembers.size() >= ZAP_MAX_MEMBERS) break;
 
         const QByteArray baHeader = read_array_process(nOffset, ZAP_HEADER_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baHeader.size() != ZAP_HEADER_SIZE)) return false;
+        if (!guardedSource || (baHeader.size() != ZAP_HEADER_SIZE)) return false;
         const uchar *pHeader = (const uchar *)baHeader.constData();
 
         const qint32 nNameLength = (qint32)pHeader[0];
@@ -128,7 +125,7 @@ bool XZAPArchive::parseContext(CONTEXT *pContext, bool bScanSizes, PDSTRUCT *pPd
             // A member whose length cannot be recovered stays flagged unknown
             // rather than failing the whole archive.
             scanMemberSize(&member, pPdStruct);
-            if (!guardedThis || !guardedSource) return false;
+            if (!guardedSource) return false;
         }
 
         context.listMembers.append(member);
@@ -145,7 +142,7 @@ bool XZAPArchive::parseContext(CONTEXT *pContext, bool bScanSizes, PDSTRUCT *pPd
 
 bool XZAPArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -310,11 +307,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XZAPArchive::getDefaultUnpackProperties()
 
 bool XZAPArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XZAPArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -326,8 +322,8 @@ bool XZAPArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVari
     }
     // bScanSizes = true: the extraction path needs the plaintext length of
     // every member, and it is not in the container.
-    if (!parseContext(pContext, true, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, true, pPdStruct) || !guardedSource || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -340,15 +336,10 @@ bool XZAPArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVari
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

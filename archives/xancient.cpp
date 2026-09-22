@@ -6,7 +6,6 @@
 
 #include "Algos/xancientdecoder.h"
 
-#include <QPointer>
 
 #include <limits>
 #include <memory>
@@ -130,14 +129,13 @@ bool XAncient::readPackedData(QByteArray *pData, PDSTRUCT *pPdStruct)
 {
     if (!pData || !isPdStructNotCanceled(pPdStruct)) return false;
     pData->clear();
-    QPointer<XAncient> guardedThis(this);
     const qint64 nSize = getSize();
-    if (!guardedThis || (nSize < 2) ||
+    if ((nSize < 2) ||
         (nSize > XAncientDecoder::MAX_PACKED_SIZE) ||
         (nSize > (std::numeric_limits<int>::max)()))
         return false;
     *pData = read_array_process(0, nSize, pPdStruct);
-    return guardedThis && (pData->size() == nSize) &&
+    return (pData->size() == nSize) &&
            isPdStructNotCanceled(pPdStruct);
 }
 
@@ -287,7 +285,6 @@ bool XAncient::initUnpack(UNPACK_STATE *pState,
                           const QMap<UNPACK_PROP, QVariant> &mapProperties,
                           PDSTRUCT *pPdStruct)
 {
-    QPointer<XAncient> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
@@ -299,16 +296,16 @@ bool XAncient::initUnpack(UNPACK_STATE *pState,
     pState->pContext = nullptr;
     *pState = UNPACK_STATE();
     delete pOldContext;
-    if (!guardedThis || !isPdStructNotCanceled(pPdStruct) ||
+    if (!isPdStructNotCanceled(pPdStruct) ||
         !bindUnpackSource(pState, pPdStruct))
         return false;
 
     QByteArray baPacked;
     STREAM_INFO info;
-    if (!readPackedData(&baPacked, pPdStruct) || !guardedThis ||
+    if (!readPackedData(&baPacked, pPdStruct) ||
         !describe(baPacked, m_fileTypeHint, &info) ||
         !isPdStructNotCanceled(pPdStruct)) {
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
         return false;
     }
@@ -329,7 +326,6 @@ bool XAncient::initUnpack(UNPACK_STATE *pState,
     pState->mapUnpackProperties = mapProperties;
 
     if (!validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
-        if (!guardedThis) return false;
         pState->pContext = nullptr;
         releaseUnpackSource(pState);
         delete pContext;
@@ -342,11 +338,10 @@ bool XAncient::initUnpack(UNPACK_STATE *pState,
 XBinary::ARCHIVERECORD XAncient::infoCurrent(UNPACK_STATE *pState,
                                              PDSTRUCT *pPdStruct)
 {
-    QPointer<XAncient> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress,
                                           &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed() || !pState || !pState->pContext ||
-        !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis ||
+        !isUnpackSourceCurrent(pState, pPdStruct) ||
         !isPdStructNotCanceled(pPdStruct) || (pState->nCurrentIndex != 0) ||
         (pState->nNumberOfRecords != 1))
         return ARCHIVERECORD();
@@ -371,7 +366,6 @@ XBinary::ARCHIVERECORD XAncient::infoCurrent(UNPACK_STATE *pState,
 bool XAncient::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
                              PDSTRUCT *pPdStruct)
 {
-    QPointer<XAncient> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState || !pState->pContext ||
         !pDevice || (pState->nCurrentIndex != 0) ||
@@ -379,19 +373,17 @@ bool XAncient::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
         !isPdStructNotCanceled(pPdStruct))
         return false;
 
-    QPointer<QIODevice> guardedOutput(pDevice);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedThis || !guardedOutput || !guardedSource ||
-        !isUnpackOutputSupported(guardedOutput.data()) ||
-        XBinary::devicesAlias(guardedSource.data(), guardedOutput.data()) ||
+    QIODevice *guardedOutput = pDevice;
+    QIODevice *guardedSource = getDevice();
+    if (!isUnpackOutputSupported(guardedOutput) ||
+        XBinary::devicesAlias(guardedSource, guardedOutput) ||
         !isUnpackSourceCurrent(pState, pPdStruct))
         return false;
 
     const UNPACK_CONTEXT *pContext =
         static_cast<const UNPACK_CONTEXT *>(pState->pContext);
     QByteArray baPacked;
-    if (!readPackedData(&baPacked, pPdStruct) || !guardedThis ||
-        !guardedOutput || !guardedSource ||
+    if (!readPackedData(&baPacked, pPdStruct) ||
         (baPacked.size() != pState->nTotalSize) ||
         !isUnpackSourceCurrent(pState, pPdStruct))
         return false;
@@ -460,30 +452,28 @@ bool XAncient::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
 
     std::unique_ptr<QIODevice> pStage(
         XBinary::createFileBuffer(nImageSize, pPdStruct));
-    if (!pStage || !guardedThis || !guardedOutput || !guardedSource ||
+    if (!pStage ||
         !pStage->seek(nImageOffset))
         return false;
     if ((nRawSize > 0) &&
         (pStage->write(raw) != nRawSize))
         return false;
-    if (!pStage->seek(0) || !guardedThis ||
-        !guardedOutput || !guardedSource ||
+    if (!pStage->seek(0) ||
         !isUnpackSourceCurrent(pState, pPdStruct) ||
         !isPdStructNotCanceled(pPdStruct))
         return false;
 
     const bool bResult = publishUnpackOutput(
-        pStage.get(), guardedOutput.data(), pState, pPdStruct);
-    if (bResult && guardedThis) pState->nCurrentOffset = nImageSize;
-    return bResult && guardedThis;
+        pStage.get(), guardedOutput, pState, pPdStruct);
+    if (bResult) pState->nCurrentOffset = nImageSize;
+    return bResult;
 }
 
 bool XAncient::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XAncient> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState || !pState->pContext ||
-        !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis ||
+        !isUnpackSourceCurrent(pState, pPdStruct) ||
         !isPdStructNotCanceled(pPdStruct) || (pState->nCurrentIndex != 0) ||
         (pState->nNumberOfRecords != 1))
         return false;

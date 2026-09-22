@@ -43,7 +43,7 @@ public:
 
     struct UNPACK_CONTEXT {
         INTERNAL_INFO info;
-        QPointer<QIODevice> pOuterSourceDevice;
+        QIODevice *pOuterSourceDevice = nullptr;
         quint64 nOwnerDeviceGeneration = 0;
         UNPACK_STATE *pOwnerState = nullptr;
         SubDevice *pSubDevice = nullptr;
@@ -76,12 +76,6 @@ public:
     bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
 
-protected:
-    bool isDeviceReplacementAllowed() const override
-    {
-        return (!m_pUnpackOperationState || !*m_pUnpackOperationState) && m_setUnpackContexts.isEmpty();
-    }
-
 private:
     bool discover(INTERNAL_INFO *pInfo, PDSTRUCT *pPdStruct);
     bool discoverInstallUs(INTERNAL_INFO *pInfo, qint64 nSearchStart, PDSTRUCT *pPdStruct);
@@ -93,9 +87,6 @@ private:
 
 private:
     INTERNAL_INFO m_internalInfo;
-    QSharedPointer<bool> m_pUnpackOperationState;
-    QSharedPointer<UNPACK_DEFERRED_CLEANUP> m_pUnpackDeferredCleanup;
-    QSet<UNPACK_CONTEXT *> m_setUnpackContexts;
 };
 
 #endif  // XSPISSFX_H

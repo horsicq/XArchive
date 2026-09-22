@@ -21,7 +21,6 @@
 #include "xecmimage.h"
 
 #include <QFileInfo>
-#include <QPointer>
 #include <QtEndian>
 
 #include <cstring>
@@ -153,7 +152,7 @@ qint64 outputItemSize(qint32 nType)
 
 // Buffered forward reader over the archive device.
 struct XEcmImage::STREAM {
-    QPointer<XEcmImage> guardedImage;
+    XEcmImage *guardedImage;
     PDSTRUCT *pPdStruct;
     qint64 nFileSize;
     qint64 nPosition;
@@ -220,25 +219,24 @@ XEcmImage::~XEcmImage()
 
 bool XEcmImage::parseImage(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
-    QPointer<XEcmImage> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pContext || !guardedThis || !guardedSource || !guardedSource->isOpen() || !guardedSource->isReadable() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pContext || !guardedSource || !guardedSource->isOpen() || !guardedSource->isReadable() ||
         guardedSource->isSequential() || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     CONTEXT context = {};
     context.nFileSize = getSize();
-    if (!guardedThis || !guardedSource || (context.nFileSize < ECM_MAGIC_SIZE + 5 + ECM_CHECK_SIZE)) return false;
+    if (!guardedSource || (context.nFileSize < ECM_MAGIC_SIZE + 5 + ECM_CHECK_SIZE)) return false;
 
     STREAM stream(this, context.nFileSize, pPdStruct);
     const quint8 *pMagic = stream.view(ECM_MAGIC_SIZE);
-    if (!pMagic || !guardedThis || (memcmp(pMagic, "ECM\0", 4) != 0)) return false;
+    if (!pMagic || (memcmp(pMagic, "ECM\0", 4) != 0)) return false;
     stream.nPosition = ECM_MAGIC_SIZE;
 
     bool bEnd = false;
     while (!bEnd) {
-        if (!guardedThis || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
         qint32 nType = 0;
         quint32 nStored = 0;
         if (!stream.readRecordHeader(&nType, &nStored)) return false;
@@ -267,11 +265,11 @@ bool XEcmImage::parseImage(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     // The check value must be the last four bytes of the file, exactly.
     if (stream.nPosition + ECM_CHECK_SIZE != context.nFileSize) return false;
     const quint8 *pCheck = stream.view(ECM_CHECK_SIZE);
-    if (!pCheck || !guardedThis) return false;
+    if (!pCheck) return false;
     context.nStoredCheck = qFromLittleEndian<quint32>(pCheck);
 
-    QString sName = QFileInfo(getDeviceFileName(guardedSource.data())).fileName();
-    if (!guardedThis || !guardedSource) return false;
+    QString sName = QFileInfo(getDeviceFileName(guardedSource)).fileName();
+    if (!guardedSource) return false;
     if (sName.endsWith(QLatin1String(".ecm"), Qt::CaseInsensitive) && (sName.size() > 4)) {
         sName.chop(4);
     } else if (sName.isEmpty()) {
@@ -287,7 +285,7 @@ bool XEcmImage::parseImage(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XEcmImage::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -366,18 +364,17 @@ QMap<XBinary::UNPACK_PROP, QVariant> XEcmImage::getDefaultUnpackProperties()
 
 bool XEcmImage::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XEcmImage> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedThis || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
 
     CONTEXT *pContext = new (std::nothrow) CONTEXT;
     if (!pContext) goto failed;
-    if (!parseImage(pContext, pPdStruct) || !guardedThis || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) goto failed;
+    if (!parseImage(pContext, pPdStruct) || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) goto failed;
 
     pState->mapUnpackProperties = mapProperties;
     pState->nCurrentIndex = 0;
@@ -389,7 +386,7 @@ bool XEcmImage::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
     return true;
 
 failed:
-    if (guardedThis) releaseUnpackSource(pState);
+    releaseUnpackSource(pState);
     delete pContext;
     *pState = UNPACK_STATE();
     return false;
@@ -397,9 +394,8 @@ failed:
 
 XBinary::ARCHIVERECORD XEcmImage::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XEcmImage> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
-    if (!operationGuard.isAllowed() || !pState || !pState->pContext || !guardedThis || !isUnpackSourceCurrent(pState, pPdStruct) ||
+    if (!operationGuard.isAllowed() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) ||
         !XBinary::isPdStructNotCanceled(pPdStruct) || (pState->nNumberOfRecords != 1) || (pState->nCurrentIndex != 0)) {
         return ARCHIVERECORD();
     }
@@ -425,12 +421,11 @@ XBinary::ARCHIVERECORD XEcmImage::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pP
 
 bool XEcmImage::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    QPointer<XEcmImage> guardedThis(this);
-    QPointer<QIODevice> guardedOutput(pDevice);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedOutput = pDevice;
+    QIODevice *guardedSource = getDevice();
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !guardedThis || !guardedOutput || !guardedSource ||
-        !isUnpackOutputSupported(guardedOutput.data()) || devicesAlias(guardedSource.data(), guardedOutput.data()) ||
+    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !guardedOutput || !guardedSource ||
+        !isUnpackOutputSupported(guardedOutput) || devicesAlias(guardedSource, guardedOutput) ||
         !isUnpackSourceCurrent(pState, pPdStruct) || !XBinary::isPdStructNotCanceled(pPdStruct) || (pState->nNumberOfRecords != 1) ||
         (pState->nCurrentIndex != 0)) {
         return false;
@@ -461,7 +456,7 @@ bool XEcmImage::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT
     }
 
     std::unique_ptr<QIODevice> pStage(createFileBuffer(pContext->nOutputSize, pPdStruct));
-    if (!pStage || !pStage->seek(0) || !guardedThis || !guardedOutput || !guardedSource) return false;
+    if (!pStage || !pStage->seek(0) || !guardedOutput || !guardedSource) return false;
 
     const ECC_TABLES &ecc = tables();
     STREAM stream(this, pContext->nFileSize, pPdStruct);
@@ -472,7 +467,7 @@ bool XEcmImage::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT
     bool bEnd = false;
 
     while (!bEnd) {
-        if (!guardedThis || !guardedOutput || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct) || !isUnpackSourceCurrent(pState, pPdStruct)) {
+        if (!guardedOutput || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct) || !isUnpackSourceCurrent(pState, pPdStruct)) {
             return false;
         }
         qint32 nType = 0;
@@ -487,7 +482,7 @@ bool XEcmImage::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT
             while (nCount > 0) {
                 const qint64 nChunk = qMin<qint64>(nCount, ECM_WINDOW_SIZE);
                 const quint8 *pData = stream.view(nChunk);
-                if (!pData || !guardedThis) return false;
+                if (!pData) return false;
                 if (pStage->write(reinterpret_cast<const char *>(pData), nChunk) != nChunk) return false;
                 nRunningCheck = ecc.edcUpdate(nRunningCheck, pData, nChunk);
                 nWritten += nChunk;
@@ -499,9 +494,9 @@ bool XEcmImage::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT
         const qint64 nItemInput = storedItemSize(nType);
         const qint64 nItemOutput = outputItemSize(nType);
         for (qint64 i = 0; i < nCount; ++i) {
-            if (((i & 0xff) == 0) && (!guardedThis || !XBinary::isPdStructNotCanceled(pPdStruct))) return false;
+            if (((i & 0xff) == 0) && (!XBinary::isPdStructNotCanceled(pPdStruct))) return false;
             const quint8 *pIn = stream.view(nItemInput);
-            if (!pIn || !guardedThis) return false;
+            if (!pIn) return false;
             memset(nSector, 0, sizeof(nSector));
             const quint8 *pOut = nSector;
             if (nType == 1) {
@@ -541,14 +536,14 @@ bool XEcmImage::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT
         XBinary::setPdStructErrorString(pPdStruct, tr("ECM check value mismatch"));
         return false;
     }
-    if (!pStage->seek(0) || !guardedThis || !guardedOutput || !guardedSource || !isUnpackSourceCurrent(pState, pPdStruct) ||
+    if (!pStage->seek(0) || !guardedOutput || !guardedSource || !isUnpackSourceCurrent(pState, pPdStruct) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
-    const bool bResult = publishUnpackOutput(pStage.get(), guardedOutput.data(), pState, pPdStruct);
-    if (bResult && guardedThis) pState->nCurrentOffset = pContext->nFileSize;
-    return bResult && guardedThis;
+    const bool bResult = publishUnpackOutput(pStage.get(), guardedOutput, pState, pPdStruct);
+    if (bResult) pState->nCurrentOffset = pContext->nFileSize;
+    return bResult;
 }
 
 bool XEcmImage::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)

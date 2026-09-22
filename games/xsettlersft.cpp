@@ -7,7 +7,6 @@
 
 #include "Algos/xsettlersftdecoder.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -70,8 +69,7 @@ bool XSettlersFT::parseContext(CONTEXT *pContext, bool bClassify,
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XSettlersFT> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -83,7 +81,7 @@ bool XSettlersFT::parseContext(CONTEXT *pContext, bool bClassify,
 
     const QByteArray baHead =
         read_array_process(0, SETTLERS_TABLE_OFFSET, pPdStruct);
-    if (!guardedThis || !guardedSource ||
+    if (!guardedSource ||
         (baHead.size() != SETTLERS_TABLE_OFFSET)) {
         return false;
     }
@@ -106,7 +104,7 @@ bool XSettlersFT::parseContext(CONTEXT *pContext, bool bClassify,
 
     const QByteArray baTable = read_array_process(
         SETTLERS_TABLE_OFFSET, context.nTableSize, pPdStruct);
-    if (!guardedThis || !guardedSource ||
+    if (!guardedSource ||
         (baTable.size() != context.nTableSize)) {
         return false;
     }
@@ -169,7 +167,7 @@ bool XSettlersFT::parseContext(CONTEXT *pContext, bool bClassify,
     }
     context.baPalette = read_array_process(
         nPaletteOffset, XSettlersFTDecoder::PALETTE_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource ||
+    if (!guardedSource ||
         (context.baPalette.size() != XSettlersFTDecoder::PALETTE_SIZE)) {
         return false;
     }
@@ -180,7 +178,7 @@ bool XSettlersFT::parseContext(CONTEXT *pContext, bool bClassify,
         if (bClassify) {
             const QByteArray baEntry = read_array_process(
                 member.nDataOffset, member.nDataSize, pPdStruct);
-            if (!guardedThis || !guardedSource ||
+            if (!guardedSource ||
                 (baEntry.size() != member.nDataSize)) {
                 return false;
             }
@@ -220,7 +218,7 @@ void XSettlersFT::fillMemberProperties(const CONTEXT &context,
 
 bool XSettlersFT::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, false, pPdStruct);
@@ -380,8 +378,7 @@ bool XSettlersFT::initUnpack(UNPACK_STATE *pState,
                              const QMap<UNPACK_PROP, QVariant> &mapProperties,
                              PDSTRUCT *pPdStruct)
 {
-    QPointer<XSettlersFT> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
@@ -390,7 +387,7 @@ bool XSettlersFT::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) || !guardedSource ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -406,9 +403,9 @@ bool XSettlersFT::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, true, pPdStruct) || !guardedThis ||
+    if (!parseContext(pContext, true, pPdStruct) ||
         !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -424,16 +421,11 @@ bool XSettlersFT::initUnpack(UNPACK_STATE *pState,
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(
+    const bool bFinalized = validateAndFinalizeUnpackSource(
         pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

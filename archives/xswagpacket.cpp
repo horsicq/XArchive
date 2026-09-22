@@ -5,8 +5,6 @@
 
 #include "xswagpacket.h"
 
-#include <QPointer>
-
 #include <cstring>
 #include <memory>
 #include <new>
@@ -172,8 +170,7 @@ bool XSwagPacket::parseContext(CONTEXT *pContext, bool bComputeText,
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XSwagPacket> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -183,7 +180,7 @@ bool XSwagPacket::parseContext(CONTEXT *pContext, bool bComputeText,
 
     const QByteArray baFileHeader =
         read_array_process(0, SWAG_BLOCK_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource ||
+    if (!guardedSource ||
         (baFileHeader.size() != SWAG_BLOCK_SIZE)) {
         return false;
     }
@@ -214,7 +211,7 @@ bool XSwagPacket::parseContext(CONTEXT *pContext, bool bComputeText,
         }
         const QByteArray baHeader =
             read_array_process(nOffset, SWAG_BLOCK_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource ||
+        if (!guardedSource ||
             (baHeader.size() != SWAG_BLOCK_SIZE)) {
             return false;
         }
@@ -279,7 +276,7 @@ bool XSwagPacket::parseContext(CONTEXT *pContext, bool bComputeText,
         if (bComputeText) {
             const QByteArray baRegion = read_array_process(
                 member.nDataOffset, member.nRegionSize, pPdStruct);
-            if (!guardedThis || !guardedSource ||
+            if (!guardedSource ||
                 (baRegion.size() != member.nRegionSize)) {
                 return false;
             }
@@ -302,18 +299,17 @@ bool XSwagPacket::parseContext(CONTEXT *pContext, bool bComputeText,
     context.nArchiveSize = nOffset;
     context.nFirstMemberOffset = context.listMembers.first().nHeaderOffset;
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 QByteArray XSwagPacket::decodeMember(const MEMBER &member,
                                      PDSTRUCT *pPdStruct)
 {
-    QPointer<XSwagPacket> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || (member.nRegionSize <= 0)) return QByteArray();
     QByteArray baRegion =
         read_array_process(member.nDataOffset, member.nRegionSize, pPdStruct);
-    if (!guardedThis || !guardedSource ||
+    if (!guardedSource ||
         (baRegion.size() != member.nRegionSize)) {
         return QByteArray();
     }
@@ -343,7 +339,7 @@ QDateTime XSwagPacket::memberDateTime(const MEMBER &member)
 
 bool XSwagPacket::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, false, pPdStruct);
@@ -544,8 +540,7 @@ bool XSwagPacket::initUnpack(UNPACK_STATE *pState,
                              const QMap<UNPACK_PROP, QVariant> &mapProperties,
                              PDSTRUCT *pPdStruct)
 {
-    QPointer<XSwagPacket> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
@@ -554,7 +549,7 @@ bool XSwagPacket::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) || !guardedSource ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -570,9 +565,9 @@ bool XSwagPacket::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, true, pPdStruct) || !guardedThis ||
+    if (!parseContext(pContext, true, pPdStruct) ||
         !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -593,16 +588,11 @@ bool XSwagPacket::initUnpack(UNPACK_STATE *pState,
     pState->pContext = pContext;
 
     const bool bFinalized =
-        guardedThis->validateAndFinalizeUnpackSource(pState, pContext,
-                                                     pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+        validateAndFinalizeUnpackSource(pState, pContext,
+                                        pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -684,14 +674,13 @@ bool XSwagPacket::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
                                 PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    QPointer<XSwagPacket> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    QPointer<QIODevice> guardedOutput(pDevice);
+    QIODevice *guardedSource = getDevice();
+    QIODevice *guardedOutput = pDevice;
     if (!operationGuard.isAcquired() || !pState || !pState->pContext ||
         !guardedSource || !guardedOutput ||
-        !isUnpackOutputSupported(guardedOutput.data()) ||
-        devicesAlias(guardedSource.data(), guardedOutput.data()) ||
-        !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis ||
+        !isUnpackOutputSupported(guardedOutput) ||
+        devicesAlias(guardedSource, guardedOutput) ||
+        !isUnpackSourceCurrent(pState, pPdStruct) ||
         (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords) ||
         !isPdStructNotCanceled(pPdStruct)) {
@@ -736,7 +725,7 @@ bool XSwagPacket::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
     }
 
     const QByteArray baDecoded = decodeMember(member, pPdStruct);
-    if (!guardedThis || !guardedSource || !guardedOutput ||
+    if (!guardedSource || !guardedOutput ||
         (baDecoded.size() != member.nTextSize) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
@@ -744,17 +733,16 @@ bool XSwagPacket::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
 
     std::unique_ptr<QIODevice> pStage(createFileBuffer(member.nTextSize,
                                                        pPdStruct));
-    if (!pStage || !guardedThis || !guardedOutput) return false;
+    if (!pStage || !guardedOutput) return false;
     if (member.nTextSize > 0) {
         if (pStage->write(baDecoded) != member.nTextSize) return false;
     }
-    if (!pStage->seek(0) || !isUnpackSourceCurrent(pState, pPdStruct) ||
-        !guardedThis) {
+    if (!pStage->seek(0) || !isUnpackSourceCurrent(pState, pPdStruct)) {
         return false;
     }
-    return guardedThis->publishUnpackOutput(pStage.get(),
-                                            guardedOutput.data(), pState,
-                                            pPdStruct);
+    return publishUnpackOutput(pStage.get(),
+                               guardedOutput, pState,
+                               pPdStruct);
 }
 
 bool XSwagPacket::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)

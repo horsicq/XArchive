@@ -4,7 +4,6 @@
  */
 #include "xlibdskarchive.h"
 
-#include <QPointer>
 
 #include <limits>
 #include <memory>
@@ -98,15 +97,14 @@ bool XLibDskArchive::initUnpack(UNPACK_STATE *pState,
                                 const QMap<UNPACK_PROP, QVariant> &mapProperties,
                                 PDSTRUCT *pPdStruct)
 {
-    QPointer<XLibDskArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress)
         return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
         !ownsUnpackSource(pState))
         return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) || !guardedSource ||
         !isPdStructNotCanceled(pPdStruct))
         return false;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
@@ -116,7 +114,7 @@ bool XLibDskArchive::initUnpack(UNPACK_STATE *pState,
     CONTEXT *context = new (std::nothrow) CONTEXT;
     bool result = false;
     if (!context) goto failed;
-    context->sDriver = identifyDriver(guardedSource.data());
+    context->sDriver = identifyDriver(guardedSource);
     if (context->sDriver.isEmpty()) goto failed;
 
     {
@@ -134,7 +132,7 @@ bool XLibDskArchive::initUnpack(UNPACK_STATE *pState,
         if (sourceSize < 1 || sourceSize > (std::numeric_limits<int>::max)())
             goto failed;
         const QByteArray source = read_array_process(0, sourceSize, pPdStruct);
-        if (source.size() != sourceSize || !guardedThis || !guardedSource)
+        if (source.size() != sourceSize || !guardedSource)
             goto failed;
 
         XLegacyDiskDecoder::RESULT decodeResult;
@@ -172,7 +170,7 @@ bool XLibDskArchive::initUnpack(UNPACK_STATE *pState,
         if (decodeResult.recoveredSectors > 0)
             context->sInfo += QStringLiteral("; %1 damaged or missing sectors recovered")
                                   .arg(decodeResult.recoveredSectors);
-        QString base = fixFileName(getDeviceFileBaseName(guardedSource.data()));
+        QString base = fixFileName(getDeviceFileBaseName(guardedSource));
         if (base.isEmpty()) base = QStringLiteral("disk-image");
         for (qint32 memberIndex = 0;
              memberIndex < context->listMembers.size(); ++memberIndex) {
@@ -195,7 +193,7 @@ bool XLibDskArchive::initUnpack(UNPACK_STATE *pState,
     return true;
 
 failed:
-    if (guardedThis) releaseUnpackSource(pState);
+    releaseUnpackSource(pState);
     delete context;
     *pState = UNPACK_STATE();
     return false;
@@ -234,13 +232,12 @@ bool XLibDskArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
                                    PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    QPointer<XLibDskArchive> guardedThis(this);
-    QPointer<QIODevice> guardedOutput(pDevice);
+    QIODevice *guardedOutput = pDevice;
     if (!operationGuard.isAcquired() || !pState || !guardedOutput ||
         pState->nCurrentIndex < 0 ||
         pState->nCurrentIndex >= pState->nNumberOfRecords ||
         !isUnpackSourceCurrent(pState, pPdStruct) ||
-        devicesAlias(getDevice(), guardedOutput.data()))
+        devicesAlias(getDevice(), guardedOutput))
         return false;
     CONTEXT *context = static_cast<CONTEXT *>(pState->pContext);
     if (!context || pState->nNumberOfRecords != context->listMembers.size() ||
@@ -264,12 +261,12 @@ bool XLibDskArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
     std::unique_ptr<QIODevice> stage(createFileBuffer(member.nRawSize,
                                                        pPdStruct));
     if (!stage || stage->write(member.rawImage) != member.nRawSize ||
-        !stage->seek(0) || !guardedThis || !guardedOutput ||
+        !stage->seek(0) || !guardedOutput ||
         !isUnpackSourceCurrent(pState, pPdStruct))
         return false;
-    const bool result = publishUnpackOutput(stage.get(), guardedOutput.data(),
+    const bool result = publishUnpackOutput(stage.get(), guardedOutput,
                                             pState, pPdStruct);
-    return result && guardedThis;
+    return result;
 }
 
 bool XLibDskArchive::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)

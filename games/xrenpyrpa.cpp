@@ -67,11 +67,11 @@ bool isMemberNameSafe(const QString &sName)
 }
 
 struct RPA_CANCELED {
-    const QPointer<XRenpyRpa> &owner;
-    const QPointer<QIODevice> &source;
-    const QPointer<QIODevice> &output;
+    XRenpyRpa *owner;
+    QIODevice *source;
+    QIODevice *output;
     XBinary::PDSTRUCT *pPdStruct;
-    RPA_CANCELED(const QPointer<XRenpyRpa> &ownerRef, const QPointer<QIODevice> &sourceRef, const QPointer<QIODevice> &outputRef, XBinary::PDSTRUCT *pPd)
+    RPA_CANCELED(XRenpyRpa *ownerRef, QIODevice *sourceRef, QIODevice *outputRef, XBinary::PDSTRUCT *pPd)
         : owner(ownerRef), source(sourceRef), output(outputRef), pPdStruct(pPd)
     {
     }
@@ -483,8 +483,7 @@ bool XRenpyRpa::buildMembers(const PVALUE &index, const HEADER &header, qint64 n
 
 bool XRenpyRpa::inflateIndex(const HEADER &header, qint64 nTotalSize, QByteArray *pIndex, PDSTRUCT *pPdStruct)
 {
-    QPointer<XRenpyRpa> owner(this);
-    QPointer<QIODevice> source(getDevice());
+    QIODevice *source = getDevice();
     const qint64 nCompressed = nTotalSize - header.nIndexOffset;
     if (!source || (nCompressed < 2) || (nCompressed > MaxCompressedIndex)) return false;
     QByteArray baIndex;
@@ -493,7 +492,7 @@ bool XRenpyRpa::inflateIndex(const HEADER &header, qint64 nTotalSize, QByteArray
     // output, so the buffer must be readable as well as writable.
     if (!bufferOut.open(QIODevice::ReadWrite)) return false;
     XBinary::DATAPROCESS_STATE state = {};
-    state.pDeviceInput = source.data();
+    state.pDeviceInput = source;
     state.pDeviceOutput = &bufferOut;
     state.nInputOffset = header.nIndexOffset;
     state.nInputLimit = nCompressed;
@@ -501,34 +500,33 @@ bool XRenpyRpa::inflateIndex(const HEADER &header, qint64 nTotalSize, QByteArray
     state.nProcessedLimit = MaxIndexSize;
     const bool bDecoded = XDeflateDecoder::decompress_zlib(&state, pPdStruct);
     bufferOut.close();
-    if (!owner || !bDecoded || state.bReadError || state.bWriteError || baIndex.isEmpty() || (baIndex.size() >= MaxIndexSize)) return false;
+    if (!bDecoded || state.bReadError || state.bWriteError || baIndex.isEmpty() || (baIndex.size() >= MaxIndexSize)) return false;
     *pIndex = baIndex;
     return true;
 }
 
 bool XRenpyRpa::readContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
-    QPointer<XRenpyRpa> owner(this);
-    QPointer<QIODevice> source(getDevice());
+    QIODevice *source = getDevice();
     if (!pContext || !source || !source->isOpen() || !source->isReadable() || source->isSequential() || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
     const qint64 nTotalSize = getSize();
-    if (!owner || !source || (nTotalSize < 32)) return false;
+    if (!source || (nTotalSize < 32)) return false;
     const QByteArray baHead = read_array_process(0, qMin<qint64>(MaxHeaderLine, nTotalSize), pPdStruct);
-    if (!owner || baHead.isEmpty()) return false;
+    if (baHead.isEmpty()) return false;
     CONTEXT parsed;
     if (!parseHeader(baHead, nTotalSize, &parsed.header)) return false;
     QByteArray baIndex;
     try {
-        if (!inflateIndex(parsed.header, nTotalSize, &baIndex, pPdStruct) || !owner) return false;
+        if (!inflateIndex(parsed.header, nTotalSize, &baIndex, pPdStruct)) return false;
         PVALUE index;
         if (!unpickle(baIndex, &index)) return false;
         if (!buildMembers(index, parsed.header, nTotalSize, &parsed.listMembers)) return false;
     } catch (const std::bad_alloc &) {
         return false;
     }
-    if (!owner || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!isPdStructNotCanceled(pPdStruct)) return false;
     parsed.nArchiveEnd = nTotalSize;
     *pContext = parsed;
     return true;
@@ -538,7 +536,6 @@ bool XRenpyRpa::readContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 bool XRenpyRpa::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);
-    QPointer<XRenpyRpa> owner(this);
     if (!guard.isAcquired() || !pState || ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState))) return false;
     CONTEXT *pOld = static_cast<CONTEXT *>(pState->pContext);
     releaseUnpackSource(pState);
@@ -546,9 +543,10 @@ bool XRenpyRpa::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
     *pState = UNPACK_STATE();
     if (!isPdStructNotCanceled(pPdStruct)) return false;
     const bool bBound = bindUnpackSource(pState, pPdStruct);
-    if (!owner || !bBound) return false;
+    if (!bBound) return false;
     CONTEXT *pContext = new (std::nothrow) CONTEXT;
     OUTPUT_POLICY policy = {};
+    XRenpyRpa *owner = this;
     const bool bValid = pContext && resolveUnpackOutputPolicy(mapProperties, &policy) && readContext(pContext, pPdStruct);
     if (!owner) {
         delete pContext;
@@ -566,7 +564,6 @@ bool XRenpyRpa::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
     pState->nTotalSize = pContext->nArchiveEnd;
     pState->mapUnpackProperties = mapProperties;
     const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!owner) return false;
     if (!bFinalized) {
         pState->pContext = nullptr;
         releaseUnpackSource(pState);
@@ -580,9 +577,8 @@ bool XRenpyRpa::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
 XBinary::ARCHIVERECORD XRenpyRpa::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
-    QPointer<XRenpyRpa> owner(this);
     ARCHIVERECORD record = {};
-    if (!guard.isAllowed() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || !owner) return record;
+    if (!guard.isAllowed() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct)) return record;
     const CONTEXT *pContext = static_cast<const CONTEXT *>(pState->pContext);
     const qint32 nCount = pContext->listMembers.size();
     if ((pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= nCount) || (pState->nNumberOfRecords != nCount)) return record;
@@ -599,17 +595,17 @@ XBinary::ARCHIVERECORD XRenpyRpa::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pP
 bool XRenpyRpa::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);
-    QPointer<XRenpyRpa> owner(this);
-    QPointer<QIODevice> source(getDevice());
-    QPointer<QIODevice> output(pDevice);
-    if (!guard.isAcquired() || !pState || !pState->pContext || !source || !output || !isUnpackSourceCurrent(pState, pPdStruct) || !owner || !source ||
+    QIODevice *source = getDevice();
+    QIODevice *output = pDevice;
+    XRenpyRpa *owner = this;
+    if (!guard.isAcquired() || !pState || !pState->pContext || !source || !output || !isUnpackSourceCurrent(pState, pPdStruct) || !source ||
         !output) {
         return false;
     }
-    const bool bSupported = isUnpackOutputSupported(output.data());
-    if (!owner || !source || !output || !bSupported) return false;
-    const bool bAliases = devicesAlias(source.data(), output.data());
-    if (!owner || !source || !output || bAliases) return false;
+    const bool bSupported = isUnpackOutputSupported(output);
+    if (!source || !output || !bSupported) return false;
+    const bool bAliases = devicesAlias(source, output);
+    if (!source || !output || bAliases) return false;
     const CONTEXT *pContext = static_cast<const CONTEXT *>(pState->pContext);
     const qint32 nCount = pContext->listMembers.size();
     if ((pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= nCount) || (pState->nNumberOfRecords != nCount)) return false;
@@ -660,15 +656,14 @@ bool XRenpyRpa::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT
     if (canceled() || (stage.size() != member.nSize) || !stage.flush() || !stage.seek(0) || !isUnpackSourceCurrent(pState, pPdStruct) || canceled()) {
         return false;
     }
-    const bool bPublished = publishUnpackOutput(&stage, output.data(), pState, pPdStruct);
-    return owner && output && bPublished;
+    const bool bPublished = publishUnpackOutput(&stage, output, pState, pPdStruct);
+    return output && bPublished;
 }
 
 bool XRenpyRpa::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);
-    QPointer<XRenpyRpa> owner(this);
-    if (!guard.isAcquired() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || !owner) return false;
+    if (!guard.isAcquired() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct)) return false;
     const qint64 nCount = static_cast<CONTEXT *>(pState->pContext)->listMembers.size();
     if ((pState->nNumberOfRecords != nCount) || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= nCount)) return false;
     ++pState->nCurrentIndex;

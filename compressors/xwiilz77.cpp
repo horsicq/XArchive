@@ -23,7 +23,6 @@
 #include "Algos/xnintendolzdecoder.h"
 
 #include <QFileInfo>
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -119,9 +118,7 @@ QString XWiiLZ77::restoreFileName(const QString &sContainerName)
 bool XWiiLZ77::parseContext(CONTEXT *pContext, bool bVerifyPayload, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
-
-    QPointer<XWiiLZ77> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -130,7 +127,7 @@ bool XWiiLZ77::parseContext(CONTEXT *pContext, bool bVerifyPayload, PDSTRUCT *pP
 
     const qint64 nProbeSize = qMin(context.nInputSize, LZ77_IMD5_SIZE + LZ77_PROBE_SIZE);
     const QByteArray baProbe = read_array_process(0, nProbeSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baProbe.size() != nProbeSize)) return false;
+    if (!guardedSource || (baProbe.size() != nProbeSize)) return false;
     const uchar *pProbe = reinterpret_cast<const uchar *>(baProbe.constData());
 
     // The IMD5 wrapper only ever carries the tagged form; the bare form is not
@@ -179,8 +176,8 @@ bool XWiiLZ77::parseContext(CONTEXT *pContext, bool bVerifyPayload, PDSTRUCT *pP
     const qint64 nMaxRatio = (context.nType == LZ77_TYPE_LZ11) ? LZ77_MAX_RATIO_LZ11 : LZ77_MAX_RATIO_LZ10;
     if (context.nUncompressedSize > (context.nCompressedSize * nMaxRatio) + LZ77_RATIO_SLACK) return false;
 
-    const QString sDeviceName = XBinary::getDeviceFileName(guardedSource.data());
-    if (!guardedThis || !guardedSource) return false;
+    const QString sDeviceName = XBinary::getDeviceFileName(guardedSource);
+    if (!guardedSource) return false;
     QString sContainerName;
     if (!sDeviceName.isEmpty()) {
         sContainerName = QFileInfo(sDeviceName).fileName();
@@ -189,7 +186,7 @@ bool XWiiLZ77::parseContext(CONTEXT *pContext, bool bVerifyPayload, PDSTRUCT *pP
 
     if (bVerifyPayload) {
         const QByteArray baPacked = read_array_process(context.nDataOffset, context.nCompressedSize, pPdStruct);
-        if (!guardedThis || !guardedSource || (baPacked.size() != context.nCompressedSize)) return false;
+        if (!guardedSource || (baPacked.size() != context.nCompressedSize)) return false;
 
         // The whole gate: the stream has to reproduce the declared length
         // exactly, with no truncation, no reference before the start and no
@@ -199,7 +196,7 @@ bool XWiiLZ77::parseContext(CONTEXT *pContext, bool bVerifyPayload, PDSTRUCT *pP
                                       &nConsumed, pPdStruct)) {
             return false;
         }
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
         if ((nConsumed < LZ77_MIN_STREAM_SIZE) || (nConsumed > context.nCompressedSize)) return false;
 
         const qint64 nTrailing = context.nCompressedSize - nConsumed;
@@ -217,12 +214,12 @@ bool XWiiLZ77::parseContext(CONTEXT *pContext, bool bVerifyPayload, PDSTRUCT *pP
     context.nArchiveSize = context.nInputSize;
     *pContext = context;
 
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XWiiLZ77::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     // One to five bytes of magic and no checksum: only the trial decode that
@@ -405,11 +402,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XWiiLZ77::getDefaultUnpackProperties()
 
 bool XWiiLZ77::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XWiiLZ77> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -421,8 +417,8 @@ bool XWiiLZ77::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
     }
     // bVerifyPayload = true: the decoder takes the plaintext length as an
     // INPUT, so a length it cannot reproduce would fail late or truncate.
-    if (!parseContext(pContext, true, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, true, pPdStruct) || !guardedSource) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -441,15 +437,10 @@ bool XWiiLZ77::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
     pState->nNumberOfRecords = 1;
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

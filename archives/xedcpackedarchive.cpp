@@ -23,7 +23,6 @@
 #include "Algos/xnetwarepackdecoder.h"
 
 #include <QFileInfo>
-#include <QPointer>
 #include <QtEndian>
 
 #include <cstring>
@@ -94,10 +93,9 @@ bool XEDCPackedArchive::isUsableMemberName(const QByteArray &baName)
 
 QString XEDCPackedArchive::deriveContainerName()
 {
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource) return EDC_FALLBACK_NAME;
+    QIODevice *guardedSource = getDevice();
 
-    const QString sDeviceName = XBinary::getDeviceFileName(guardedSource.data());
+    const QString sDeviceName = XBinary::getDeviceFileName(guardedSource);
     if (sDeviceName.isEmpty()) return EDC_FALLBACK_NAME;
 
     const QString sFileName = QFileInfo(sDeviceName).fileName();
@@ -150,13 +148,11 @@ bool XEDCPackedArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XEDCPackedArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = getSize();
-    if (!guardedThis || !guardedSource) return false;
     if ((context.nInputSize <= EDC_HEADER_SIZE) || (context.nInputSize > EDC_MAX_FILE_SIZE)) return false;
 
     qint64 nOffset = 0;
@@ -166,7 +162,6 @@ bool XEDCPackedArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (context.listMembers.size() >= EDC_MAX_MEMBERS) return false;
 
         const QByteArray baHeader = read_array_process(nOffset, EDC_HEADER_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource) return false;
         if (baHeader.size() != EDC_HEADER_SIZE) break;
 
         qint64 nUncompressedSize = 0;
@@ -189,7 +184,6 @@ bool XEDCPackedArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         member.nDosTime = nDosTime;
         member.nDosDate = nDosDate;
         member.sFileName = isUsableMemberName(baName) ? QString::fromLatin1(baName) : deriveContainerName();
-        if (!guardedThis || !guardedSource) return false;
 
         context.listMembers.append(member);
 
@@ -205,7 +199,7 @@ bool XEDCPackedArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     const MEMBER &first = context.listMembers.at(0);
     const qint64 nSampleSize = (first.nStreamSize < EDC_PROBE_INPUT) ? first.nStreamSize : EDC_PROBE_INPUT;
     const QByteArray baSample = read_array_process(first.nStreamOffset, nSampleSize, pPdStruct);
-    if (!guardedThis || !guardedSource || ((qint64)baSample.size() != nSampleSize)) return false;
+    if (((qint64)baSample.size() != nSampleSize)) return false;
 
     if (!XNetWarePackDecoder::probe(baSample, first.nUncompressedSize, nSampleSize == first.nStreamSize, EDC_PROBE_OUTPUT)) return false;
 
@@ -219,15 +213,13 @@ bool XEDCPackedArchive::isValid(PDSTRUCT *pPdStruct)
 {
     // Detection runs on a device the caller still owns: snapshot the cursor and
     // put it back whatever the outcome.
-    QPointer<QIODevice> guardedSource(getDevice());
-    const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
+    QIODevice *guardedSource = getDevice();
+    const qint64 nSavedPosition = guardedSource->pos();
 
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
 
-    if (guardedSource && (nSavedPosition >= 0)) {
-        guardedSource->seek(nSavedPosition);
-    }
+    guardedSource->seek(nSavedPosition);
 
     return bResult;
 }
@@ -398,12 +390,11 @@ QMap<XBinary::UNPACK_PROP, QVariant> XEDCPackedArchive::getDefaultUnpackProperti
 
 bool XEDCPackedArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XEDCPackedArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
 
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -414,8 +405,8 @@ bool XEDCPackedArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP,
         return false;
     }
 
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) guardedThis->releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -431,15 +422,10 @@ bool XEDCPackedArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP,
 
     // Binding only stages the source.  Without this finalize the listing works
     // and every extraction silently writes nothing.
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

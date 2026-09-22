@@ -115,11 +115,11 @@ struct BIT_READER {
 // Captured state for the unpack path, held by reference the way the other
 // standalone readers in this tree carry their per-call scratch.
 struct NSCRIPTER_CANCELED {
-    const QPointer<XNScripterArchive> &owner;
-    const QPointer<QIODevice> &source;
-    const QPointer<QIODevice> &output;
+    XNScripterArchive *owner;
+    QIODevice *source;
+    QIODevice *output;
     XBinary::PDSTRUCT *pPdStruct;
-    NSCRIPTER_CANCELED(const QPointer<XNScripterArchive> &ownerRef, const QPointer<QIODevice> &sourceRef, const QPointer<QIODevice> &outputRef,
+    NSCRIPTER_CANCELED(XNScripterArchive *ownerRef, QIODevice *sourceRef, QIODevice *outputRef,
                        XBinary::PDSTRUCT *pPd)
         : owner(ownerRef), source(sourceRef), output(outputRef), pPdStruct(pPd)
     {
@@ -232,16 +232,16 @@ XBinary::FT XNScripterArchive::detectFileType(QIODevice *pDevice, PDSTRUCT *pPdS
 
 bool XNScripterArchive::readContext(FT fileType, CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
-    QPointer<XNScripterArchive> owner(this);
-    QPointer<QIODevice> source(getDevice());
+    QIODevice *source = getDevice();
     if (!pContext || !source || !source->isOpen() || !source->isReadable() || source->isSequential() || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
     const qint64 nTotalSize = getSize();
-    if (!owner || !source || (nTotalSize < 12)) return false;
+    if (!source || (nTotalSize < 12)) return false;
 
     CONTEXT parsed;
     parsed.fileType = fileType;
+    XNScripterArchive *owner = this;
     bool bResult = false;
     try {
         if (fileType == FT_NSCRIPTER_NS2) {
@@ -253,7 +253,7 @@ bool XNScripterArchive::readContext(FT fileType, CONTEXT *pContext, PDSTRUCT *pP
     } catch (const std::bad_alloc &) {
         return false;
     }
-    if (!owner || !bResult || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!bResult || !isPdStructNotCanceled(pPdStruct)) return false;
 
     *pContext = parsed;
     return true;
@@ -261,9 +261,8 @@ bool XNScripterArchive::readContext(FT fileType, CONTEXT *pContext, PDSTRUCT *pP
 
 bool XNScripterArchive::readTableArchive(bool bNsa, qint64 nTotalSize, CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
-    QPointer<XNScripterArchive> owner(this);
     const QByteArray baHeader = read_array_process(0, 6, pPdStruct);
-    if (!owner || (baHeader.size() != 6)) return false;
+    if ((baHeader.size() != 6)) return false;
     const uchar *pHeader = reinterpret_cast<const uchar *>(baHeader.constData());
     const qint32 nCount = be16(pHeader);
     const qint64 nBase = be32(pHeader + 2);
@@ -278,12 +277,12 @@ bool XNScripterArchive::readTableArchive(bool bNsa, qint64 nTotalSize, CONTEXT *
 
     qint64 nWindow = qMin(nIndexSize, ProbeWindow);
     QByteArray baIndex = read_array_process(6, nWindow, pPdStruct);
-    if (!owner || (baIndex.size() != nWindow)) return false;
+    if ((baIndex.size() != nWindow)) return false;
     PARSE_RESULT result = parseTable(reinterpret_cast<const uchar *>(baIndex.constData()), nWindow, nIndexSize, bNsa, nCount, nBase, nDataSize, pContext);
     if ((result == PARSE_NEED_MORE) && (nWindow < nIndexSize)) {
         if (!isPdStructNotCanceled(pPdStruct)) return false;
         baIndex = read_array_process(6, nIndexSize, pPdStruct);
-        if (!owner || (baIndex.size() != nIndexSize)) return false;
+        if ((baIndex.size() != nIndexSize)) return false;
         pContext->listMembers.clear();
         result = parseTable(reinterpret_cast<const uchar *>(baIndex.constData()), nIndexSize, nIndexSize, bNsa, nCount, nBase, nDataSize, pContext);
     }
@@ -357,9 +356,8 @@ XNScripterArchive::PARSE_RESULT XNScripterArchive::parseTable(const uchar *pInde
 
 bool XNScripterArchive::readNs2Archive(qint64 nTotalSize, CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
-    QPointer<XNScripterArchive> owner(this);
     const QByteArray baHeader = read_array_process(0, 4, pPdStruct);
-    if (!owner || (baHeader.size() != 4)) return false;
+    if ((baHeader.size() != 4)) return false;
     const qint64 nBase = le32(reinterpret_cast<const uchar *>(baHeader.constData()));
     // Smallest index: '"' name '"' size 'e' = 8 bytes after the base field.
     if ((nBase < 4 + 8) || (nBase > nTotalSize) || (nBase - 4 > MaxIndexSize)) return false;
@@ -368,12 +366,12 @@ bool XNScripterArchive::readNs2Archive(qint64 nTotalSize, CONTEXT *pContext, PDS
 
     qint64 nWindow = qMin(nIndexSize, ProbeWindow);
     QByteArray baIndex = read_array_process(4, nWindow, pPdStruct);
-    if (!owner || (baIndex.size() != nWindow)) return false;
+    if ((baIndex.size() != nWindow)) return false;
     PARSE_RESULT result = parseNs2Index(reinterpret_cast<const uchar *>(baIndex.constData()), nWindow, nIndexSize, nBase, nDataSize, pContext);
     if ((result == PARSE_NEED_MORE) && (nWindow < nIndexSize)) {
         if (!isPdStructNotCanceled(pPdStruct)) return false;
         baIndex = read_array_process(4, nIndexSize, pPdStruct);
-        if (!owner || (baIndex.size() != nIndexSize)) return false;
+        if ((baIndex.size() != nIndexSize)) return false;
         pContext->listMembers.clear();
         result = parseNs2Index(reinterpret_cast<const uchar *>(baIndex.constData()), nIndexSize, nIndexSize, nBase, nDataSize, pContext);
     }
@@ -431,7 +429,6 @@ XNScripterArchive::PARSE_RESULT XNScripterArchive::parseNs2Index(const uchar *pI
 // both table fields).  Read the four-byte prefixes so the listing is exact.
 bool XNScripterArchive::resolveCodecSizes(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
-    QPointer<XNScripterArchive> owner(this);
     const qint32 nCount = pContext->listMembers.size();
     for (qint32 i = 0; i < nCount; i++) {
         if (!isPdStructNotCanceled(pPdStruct)) return false;
@@ -440,7 +437,6 @@ bool XNScripterArchive::resolveCodecSizes(CONTEXT *pContext, PDSTRUCT *pPdStruct
         member.nUnpackedSize = -1;
         if (member.nPackedSize < 4) continue;
         const QByteArray baPrefix = read_array_process(member.nDataOffset, 4, pPdStruct);
-        if (!owner) return false;
         if (baPrefix.size() != 4) continue;
         const uchar *pPrefix = reinterpret_cast<const uchar *>(baPrefix.constData());
         if (member.nCodec == CODEC_NBZ) {
@@ -619,7 +615,6 @@ bool XNScripterArchive::decodeNbz(const QByteArray &baPacked, QByteArray *pResul
 bool XNScripterArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);
-    QPointer<XNScripterArchive> owner(this);
     if (!guard.isAcquired() || !pState || ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState))) return false;
     CONTEXT *pOld = static_cast<CONTEXT *>(pState->pContext);
     releaseUnpackSource(pState);
@@ -627,9 +622,10 @@ bool XNScripterArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP,
     *pState = UNPACK_STATE();
     if (!isPdStructNotCanceled(pPdStruct)) return false;
     const bool bBound = bindUnpackSource(pState, pPdStruct);
-    if (!owner || !bBound) return false;
+    if (!bBound) return false;
     CONTEXT *pContext = new (std::nothrow) CONTEXT;
     OUTPUT_POLICY policy = {};
+    XNScripterArchive *owner = this;
     const bool bValid = pContext && resolveUnpackOutputPolicy(mapProperties, &policy) && readContext(m_fileType, pContext, pPdStruct);
     if (!owner) {
         delete pContext;
@@ -647,7 +643,6 @@ bool XNScripterArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP,
     pState->nTotalSize = pContext->nArchiveEnd;
     pState->mapUnpackProperties = mapProperties;
     const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!owner) return false;
     if (!bFinalized) {
         pState->pContext = nullptr;
         releaseUnpackSource(pState);
@@ -661,9 +656,8 @@ bool XNScripterArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP,
 XBinary::ARCHIVERECORD XNScripterArchive::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
-    QPointer<XNScripterArchive> owner(this);
     ARCHIVERECORD record = {};
-    if (!guard.isAllowed() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || !owner) return record;
+    if (!guard.isAllowed() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct)) return record;
     const CONTEXT *pContext = static_cast<const CONTEXT *>(pState->pContext);
     const qint32 nCount = pContext->listMembers.size();
     if ((pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= nCount) || (pState->nNumberOfRecords != nCount)) return record;
@@ -684,17 +678,17 @@ XBinary::ARCHIVERECORD XNScripterArchive::infoCurrent(UNPACK_STATE *pState, PDST
 bool XNScripterArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);
-    QPointer<XNScripterArchive> owner(this);
-    QPointer<QIODevice> source(getDevice());
-    QPointer<QIODevice> output(pDevice);
-    if (!guard.isAcquired() || !pState || !pState->pContext || !source || !output || !isUnpackSourceCurrent(pState, pPdStruct) || !owner || !source ||
+    QIODevice *source = getDevice();
+    QIODevice *output = pDevice;
+    XNScripterArchive *owner = this;
+    if (!guard.isAcquired() || !pState || !pState->pContext || !source || !output || !isUnpackSourceCurrent(pState, pPdStruct) || !source ||
         !output) {
         return false;
     }
-    const bool bSupported = isUnpackOutputSupported(output.data());
-    if (!owner || !source || !output || !bSupported) return false;
-    const bool bAliases = devicesAlias(source.data(), output.data());
-    if (!owner || !source || !output || bAliases) return false;
+    const bool bSupported = isUnpackOutputSupported(output);
+    if (!source || !output || !bSupported) return false;
+    const bool bAliases = devicesAlias(source, output);
+    if (!source || !output || bAliases) return false;
     const CONTEXT *pContext = static_cast<const CONTEXT *>(pState->pContext);
     const qint32 nCount = pContext->listMembers.size();
     if ((pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= nCount) || (pState->nNumberOfRecords != nCount)) return false;
@@ -754,15 +748,14 @@ bool XNScripterArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, 
     if (canceled() || (stage.size() != member.nUnpackedSize) || !stage.flush() || !stage.seek(0) || !isUnpackSourceCurrent(pState, pPdStruct) || canceled()) {
         return false;
     }
-    const bool bPublished = publishUnpackOutput(&stage, output.data(), pState, pPdStruct);
-    return owner && output && bPublished;
+    const bool bPublished = publishUnpackOutput(&stage, output, pState, pPdStruct);
+    return output && bPublished;
 }
 
 bool XNScripterArchive::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);
-    QPointer<XNScripterArchive> owner(this);
-    if (!guard.isAcquired() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || !owner) return false;
+    if (!guard.isAcquired() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct)) return false;
     const qint64 nCount = static_cast<CONTEXT *>(pState->pContext)->listMembers.size();
     if ((pState->nNumberOfRecords != nCount) || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= nCount)) return false;
     ++pState->nCurrentIndex;

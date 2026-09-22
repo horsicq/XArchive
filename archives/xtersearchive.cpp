@@ -23,7 +23,6 @@
 #include "Algos/xtersedecoder.h"
 
 #include <QFileInfo>
-#include <QPointer>
 
 #include <new>
 
@@ -46,8 +45,7 @@ bool XTERSEArchive::parseContext(CONTEXT *pContext, bool bMeasure, PDSTRUCT *pPd
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XTERSEArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -56,7 +54,7 @@ bool XTERSEArchive::parseContext(CONTEXT *pContext, bool bMeasure, PDSTRUCT *pPd
 
     const qint64 nProbeSize = qMin<qint64>(context.nInputSize, TERSE_PROBE_SIZE);
     const QByteArray baHeader = read_array_process(0, nProbeSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != nProbeSize)) return false;
+    if (!guardedSource || (baHeader.size() != nProbeSize)) return false;
 
     const qint32 nHeaderSize = XTERSEDecoder::detect(baHeader);
     if (nHeaderSize < 0) return false;
@@ -72,7 +70,7 @@ bool XTERSEArchive::parseContext(CONTEXT *pContext, bool bMeasure, PDSTRUCT *pPd
 
     if (bMeasure) {
         const QByteArray baFile = read_array_process(0, context.nInputSize, pPdStruct);
-        if (!guardedThis || !guardedSource || (baFile.size() != context.nInputSize)) return false;
+        if (!guardedSource || (baFile.size() != context.nInputSize)) return false;
         qint64 nUncompressedSize = 0;
         if (XTERSEDecoder::measure(baFile, &nUncompressedSize, pPdStruct)) {
             context.nUncompressedSize = nUncompressedSize;
@@ -80,8 +78,7 @@ bool XTERSEArchive::parseContext(CONTEXT *pContext, bool bMeasure, PDSTRUCT *pPd
         }
     }
 
-    QString sName = QFileInfo(getDeviceFileName(guardedSource.data())).fileName();
-    if (!guardedThis || !guardedSource) return false;
+    QString sName = QFileInfo(getDeviceFileName(guardedSource)).fileName();
     if (sName.isEmpty()) sName = QStringLiteral("terse");
     context.sFileName = sName;
 
@@ -92,7 +89,7 @@ bool XTERSEArchive::parseContext(CONTEXT *pContext, bool bMeasure, PDSTRUCT *pPd
 
 bool XTERSEArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -237,11 +234,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XTERSEArchive::getDefaultUnpackProperties()
 
 bool XTERSEArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XTERSEArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -251,8 +247,8 @@ bool XTERSEArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVa
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, true, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, true, pPdStruct) || !guardedSource) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -265,15 +261,10 @@ bool XTERSEArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVa
     pState->nNumberOfRecords = 1;
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

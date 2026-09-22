@@ -7,7 +7,6 @@
  */
 #include "xyenc.h"
 
-#include <QPointer>
 
 #include <limits>
 #include <memory>
@@ -296,14 +295,13 @@ bool XYEnc::decode(const QByteArray &baSource, QList<ITEM> *pItems, PDSTRUCT *pP
 bool XYEnc::readSource(QByteArray *pData, PDSTRUCT *pPdStruct)
 {
     if (!pData || !isPdStructNotCanceled(pPdStruct)) return false;
-    QPointer<XYEnc> guardedThis(this);
     const qint64 nSize = getSize();
-    if (!guardedThis || (nSize < 16) || (nSize > YENC_MAX_SOURCE) || (nSize > (std::numeric_limits<int>::max)())) return false;
+    if ((nSize < 16) || (nSize > YENC_MAX_SOURCE) || (nSize > (std::numeric_limits<int>::max)())) return false;
     // Reject unrelated inputs from a bounded probe before materialising the source.
     const QByteArray baProbe = read_array_process(0, qMin<qint64>(nSize, YENC_MAX_PREAMBLE + 16), pPdStruct);
-    if (!guardedThis || !hasBeginLine(baProbe) || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!hasBeginLine(baProbe) || !isPdStructNotCanceled(pPdStruct)) return false;
     *pData = read_array_process(0, nSize, pPdStruct);
-    return guardedThis && (pData->size() == nSize) && isPdStructNotCanceled(pPdStruct);
+    return (pData->size() == nSize) && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XYEnc::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
@@ -372,7 +370,6 @@ XBinary *XYEnc::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleA
 
 bool XYEnc::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XYEnc> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
@@ -381,13 +378,13 @@ bool XYEnc::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     pState->pContext = nullptr;
     *pState = UNPACK_STATE();
     delete pOldContext;
-    if (!guardedThis || !bindUnpackSource(pState, pPdStruct)) return false;
+    if (!bindUnpackSource(pState, pPdStruct)) return false;
 
     QByteArray baSource;
     UNPACK_CONTEXT *pContext = new (std::nothrow) UNPACK_CONTEXT;
-    if (!pContext || !readSource(&baSource, pPdStruct) || !guardedThis || !decode(baSource, &pContext->listItems, pPdStruct) || pContext->listItems.isEmpty()) {
+    if (!pContext || !readSource(&baSource, pPdStruct) || !decode(baSource, &pContext->listItems, pPdStruct) || pContext->listItems.isEmpty()) {
         delete pContext;
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
         return false;
     }
@@ -399,7 +396,6 @@ bool XYEnc::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     pState->nTotalSize = baSource.size();
     pState->mapUnpackProperties = mapProperties;
     if (!validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
-        if (!guardedThis) return false;
         pState->pContext = nullptr;
         releaseUnpackSource(pState);
         delete pContext;
@@ -411,9 +407,8 @@ bool XYEnc::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
 
 XBinary::ARCHIVERECORD XYEnc::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XYEnc> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
-    if (!operationGuard.isAllowed() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis || (pState->nCurrentIndex < 0) ||
+    if (!operationGuard.isAllowed() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords))
         return ARCHIVERECORD();
 
@@ -436,13 +431,12 @@ XBinary::ARCHIVERECORD XYEnc::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
 
 bool XYEnc::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    QPointer<XYEnc> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState || !pState->pContext || !pDevice || !isUnpackSourceCurrent(pState, pPdStruct) || (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords) || devicesAlias(getDevice(), pDevice))
         return false;
 
-    QPointer<QIODevice> guardedOutput(pDevice);
+    QIODevice *guardedOutput = pDevice;
     const UNPACK_CONTEXT *pContext = static_cast<const UNPACK_CONTEXT *>(pState->pContext);
     if (pContext->listItems.size() != pState->nNumberOfRecords) return false;
     const ITEM &item = pContext->listItems.at(pState->nCurrentIndex);
@@ -455,19 +449,18 @@ bool XYEnc::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     }
 
     std::unique_ptr<QIODevice> pStage(createFileBuffer(nSize, pPdStruct));
-    if (!pStage || !guardedThis || !guardedOutput || ((nSize > 0) && (pStage->write(item.baData) != nSize)) || !pStage->seek(0) ||
+    if (!pStage || !guardedOutput || ((nSize > 0) && (pStage->write(item.baData) != nSize)) || !pStage->seek(0) ||
         !isUnpackSourceCurrent(pState, pPdStruct))
         return false;
-    const bool bResult = publishUnpackOutput(pStage.get(), guardedOutput.data(), pState, pPdStruct);
-    if (bResult && guardedThis) pState->nCurrentOffset = nSize;
-    return bResult && guardedThis;
+    const bool bResult = publishUnpackOutput(pStage.get(), guardedOutput, pState, pPdStruct);
+    if (bResult) pState->nCurrentOffset = nSize;
+    return bResult;
 }
 
 bool XYEnc::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XYEnc> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis || (pState->nCurrentIndex < 0) ||
+    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords))
         return false;
     ++pState->nCurrentIndex;

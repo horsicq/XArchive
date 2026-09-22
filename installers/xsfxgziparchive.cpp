@@ -23,7 +23,6 @@
 #include "Algos/include/zlib.h"
 
 #include <QFileInfo>
-#include <QPointer>
 #include <QtEndian>
 
 #include <cstring>
@@ -102,15 +101,12 @@ XSFXGzipArchive::~XSFXGzipArchive()
 bool XSFXGzipArchive::tryMemberAt(qint64 nOffset, qint64 nInputSize, CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext) return false;
-
-    QPointer<XSFXGzipArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource) return false;
+    QIODevice *guardedSource = getDevice();
     if (!sfxGzipRangeWithin(nInputSize, nOffset, SFXGZIP_MIN_MEMBER_SIZE)) return false;
 
     const qint64 nHeaderSize = qMin(SFXGZIP_MAX_HEADER_SIZE, nInputSize - nOffset);
     const QByteArray baHeader = read_array_process(nOffset, nHeaderSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != nHeaderSize)) return false;
+    if ((baHeader.size() != nHeaderSize)) return false;
 
     qint64 nDataRelative = 0;
     QString sFileName;
@@ -148,7 +144,7 @@ bool XSFXGzipArchive::tryMemberAt(qint64 nOffset, qint64 nInputSize, CONTEXT *pC
             break;
         }
         const QByteArray baInput = read_array_process(nInputPosition, nAvailable, pPdStruct);
-        if (!guardedThis || !guardedSource || (baInput.size() != nAvailable)) {
+        if ((baInput.size() != nAvailable)) {
             bFailed = true;
             break;
         }
@@ -188,10 +184,8 @@ bool XSFXGzipArchive::tryMemberAt(qint64 nOffset, qint64 nInputSize, CONTEXT *pC
 bool XSFXGzipArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
-
-    QPointer<XSFXGzipArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -208,7 +202,6 @@ bool XSFXGzipArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if ((nSearchOffset + SFXGZIP_MIN_MEMBER_SIZE) > context.nInputSize) break;
 
         const qint64 nHit = find_array(nSearchOffset, context.nInputSize - nSearchOffset, "\x1f\x8b\x08", 3, pPdStruct);
-        if (!guardedThis || !guardedSource) return false;
         if (nHit < 0) break;
         ++nCandidates;
         nSearchOffset = nHit + 1;
@@ -218,7 +211,6 @@ bool XSFXGzipArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
             bFound = true;
             break;
         }
-        if (!guardedThis || !guardedSource) return false;
     }
 
     if (!bFound) return false;
@@ -226,8 +218,7 @@ bool XSFXGzipArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.sFileName.isEmpty()) {
         // No FNAME field: the reference falls back to the archive's own name
         // with the extension dropped.
-        context.sFileName = QFileInfo(getDeviceFileName(guardedSource.data())).completeBaseName();
-        if (!guardedThis || !guardedSource) return false;
+        context.sFileName = QFileInfo(getDeviceFileName(guardedSource)).completeBaseName();
     }
     if (context.sFileName.isEmpty()) context.sFileName = QStringLiteral("sfxgzip");
 
@@ -238,8 +229,7 @@ bool XSFXGzipArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XSFXGzipArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource) return false;
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -386,11 +376,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XSFXGzipArchive::getDefaultUnpackProperties
 
 bool XSFXGzipArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSFXGzipArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -400,8 +389,8 @@ bool XSFXGzipArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, Q
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct)) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -414,15 +403,13 @@ bool XSFXGzipArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, Q
     pState->nNumberOfRecords = 1;
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
             delete pContext;
             *pState = UNPACK_STATE();
             return false;
-        }
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

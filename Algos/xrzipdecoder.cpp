@@ -138,7 +138,7 @@ bool XRzipDecoder::decode(const QByteArray &data, XBinary::DATAPROCESS_STATE *wr
     if (!writer || !result || data.size() > MaxInput || !parseHeader(data, &header) || !writer->pDeviceOutput ||
         writer->nProcessedOffset != 0 || writer->nProcessedLimit != -1 || !XBinary::isPdStructNotCanceled(progress)) return false;
     *result = RESULT();
-    QPointer<QIODevice> history(writer->pDeviceOutput);
+    QIODevice *history = writer->pDeviceOutput;
     if (!history->isOpen() || !history->isReadable() || !history->isWritable() || history->isSequential() || history->pos() != 0 || history->size() != 0)
         return false;
     XBinary::OUTPUT_POLICY policy = {};

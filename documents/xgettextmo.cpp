@@ -9,7 +9,6 @@
 #include "xgettextmo.h"
 
 #include <QFileInfo>
-#include <QPointer>
 #include <QtEndian>
 
 #include <limits>
@@ -327,15 +326,14 @@ QByteArray XGettextMO::renderPO(const CATALOG &catalog)
 bool XGettextMO::readSource(QByteArray *pData, PDSTRUCT *pPdStruct)
 {
     if (!pData || !isPdStructNotCanceled(pPdStruct)) return false;
-    QPointer<XGettextMO> guardedThis(this);
     const qint64 nSize = getSize();
-    if (!guardedThis || (nSize < 28) || (nSize > MO_MAX_SOURCE) || (nSize > (std::numeric_limits<int>::max)())) return false;
+    if ((nSize < 28) || (nSize > MO_MAX_SOURCE) || (nSize > (std::numeric_limits<int>::max)())) return false;
     const QByteArray baMagic = read_array_process(0, 4, pPdStruct);
-    if (!guardedThis || (baMagic.size() != 4)) return false;
+    if ((baMagic.size() != 4)) return false;
     const quint32 nMagic = readU32(baMagic, 0, false);
     if ((nMagic != MO_MAGIC) && (nMagic != MO_MAGIC_SWAPPED)) return false;
     *pData = read_array_process(0, nSize, pPdStruct);
-    return guardedThis && (pData->size() == nSize) && isPdStructNotCanceled(pPdStruct);
+    return (pData->size() == nSize) && isPdStructNotCanceled(pPdStruct);
 }
 
 QString XGettextMO::memberName()
@@ -419,7 +417,6 @@ XBinary *XGettextMO::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nMo
 
 bool XGettextMO::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XGettextMO> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
@@ -428,21 +425,21 @@ bool XGettextMO::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVaria
     pState->pContext = nullptr;
     *pState = UNPACK_STATE();
     delete pOldContext;
-    if (!guardedThis || !bindUnpackSource(pState, pPdStruct)) return false;
+    if (!bindUnpackSource(pState, pPdStruct)) return false;
 
     QByteArray baSource;
     CATALOG catalog;
     UNPACK_CONTEXT *pContext = new (std::nothrow) UNPACK_CONTEXT;
-    bool bResult = pContext && readSource(&baSource, pPdStruct) && guardedThis && parseCatalog(baSource, &catalog, pPdStruct);
+    bool bResult = pContext && readSource(&baSource, pPdStruct) && parseCatalog(baSource, &catalog, pPdStruct);
     if (bResult) {
         pContext->sName = memberName();
         pContext->baText = renderPO(catalog);
         pContext->nEntries = catalog.listEntries.size();
-        bResult = guardedThis && (pContext->baText.size() <= MO_MAX_TEXT);
+        bResult = (pContext->baText.size() <= MO_MAX_TEXT);
     }
     if (!bResult) {
         delete pContext;
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
         return false;
     }
@@ -455,7 +452,6 @@ bool XGettextMO::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVaria
     pState->nTotalSize = baSource.size();
     pState->mapUnpackProperties = mapProperties;
     if (!validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
-        if (!guardedThis) return false;
         pState->pContext = nullptr;
         releaseUnpackSource(pState);
         delete pContext;
@@ -467,9 +463,8 @@ bool XGettextMO::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVaria
 
 XBinary::ARCHIVERECORD XGettextMO::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XGettextMO> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
-    if (!operationGuard.isAllowed() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis || (pState->nCurrentIndex != 0) ||
+    if (!operationGuard.isAllowed() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || (pState->nCurrentIndex != 0) ||
         (pState->nNumberOfRecords != 1))
         return ARCHIVERECORD();
     const UNPACK_CONTEXT *pContext = static_cast<const UNPACK_CONTEXT *>(pState->pContext);
@@ -487,13 +482,12 @@ XBinary::ARCHIVERECORD XGettextMO::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *p
 
 bool XGettextMO::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    QPointer<XGettextMO> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState || !pState->pContext || !pDevice || !isUnpackSourceCurrent(pState, pPdStruct) || (pState->nCurrentIndex != 0) ||
         (pState->nNumberOfRecords != 1) || devicesAlias(getDevice(), pDevice))
         return false;
 
-    QPointer<QIODevice> guardedOutput(pDevice);
+    QIODevice *guardedOutput = pDevice;
     const UNPACK_CONTEXT *pContext = static_cast<const UNPACK_CONTEXT *>(pState->pContext);
     const qint64 nSize = pContext->baText.size();
     if (!isUnpackOutputSizeAllowed(pState->mapUnpackProperties, nSize)) return false;
@@ -504,19 +498,18 @@ bool XGettextMO::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUC
     }
 
     std::unique_ptr<QIODevice> pStage(createFileBuffer(nSize, pPdStruct));
-    if (!pStage || !guardedThis || !guardedOutput || ((nSize > 0) && (pStage->write(pContext->baText) != nSize)) || !pStage->seek(0) ||
+    if (!pStage || !guardedOutput || ((nSize > 0) && (pStage->write(pContext->baText) != nSize)) || !pStage->seek(0) ||
         !isUnpackSourceCurrent(pState, pPdStruct))
         return false;
-    const bool bResult = publishUnpackOutput(pStage.get(), guardedOutput.data(), pState, pPdStruct);
-    if (bResult && guardedThis) pState->nCurrentOffset = nSize;
-    return bResult && guardedThis;
+    const bool bResult = publishUnpackOutput(pStage.get(), guardedOutput, pState, pPdStruct);
+    if (bResult) pState->nCurrentOffset = nSize;
+    return bResult;
 }
 
 bool XGettextMO::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XGettextMO> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis || (pState->nCurrentIndex < 0) ||
+    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords))
         return false;
     ++pState->nCurrentIndex;

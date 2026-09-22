@@ -21,7 +21,6 @@
 #include "xlarcpfx.h"
 
 #include <QFileInfo>
-#include <QPointer>
 #include <QtEndian>
 
 #include <limits>
@@ -96,17 +95,16 @@ bool XLArcPfx::decodeStoredName(const QByteArray &baField, QString *pName)
 
 bool XLArcPfx::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd, PDSTRUCT *pPdStruct)
 {
-    QPointer<XLArcPfx> guardedThis(this);
     const qint64 nMaxSize = static_cast<qint64>((std::numeric_limits<qint32>::max)());
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || (nTotalSize < 60) || (nTotalSize > nMaxSize) ||
+    if ((nTotalSize < 60) || (nTotalSize > nMaxSize) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     const QByteArray baProgramHeader =
         read_array_process(0, N_PFX_PROGRAM_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || (baProgramHeader.size() != N_PFX_PROGRAM_HEADER_SIZE)) return false;
+    if ((baProgramHeader.size() != N_PFX_PROGRAM_HEADER_SIZE)) return false;
     const uchar *pProgramHeader =
         reinterpret_cast<const uchar *>(baProgramHeader.constData());
     if (qFromBigEndian<quint16>(pProgramHeader) != 0x601a) return false;
@@ -129,7 +127,7 @@ bool XLArcPfx::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd, PDSTRUCT 
     const qint64 nMarkerOffset = N_PFX_PROGRAM_HEADER_SIZE + nTextSize - 4;
     if (nMarkerOffset < N_PFX_PROGRAM_HEADER_SIZE) return false;
     const QByteArray baMarker = read_array_process(nMarkerOffset, 4, pPdStruct);
-    if (!guardedThis || (baMarker.size() != 4) ||
+    if ((baMarker.size() != 4) ||
         (baMarker != QByteArray("\xde\xad\xfa\xce", 4))) {
         return false;
     }
@@ -137,14 +135,14 @@ bool XLArcPfx::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd, PDSTRUCT 
     const qint64 nHeaderOffset = N_PFX_PROGRAM_HEADER_SIZE + nTextSize;
     if ((nHeaderOffset + N_PFX_LHA_MIN_TOTAL) > nDataEnd) return false;
     const QByteArray baPrefix = read_array_process(nHeaderOffset, 2, pPdStruct);
-    if (!guardedThis || (baPrefix.size() != 2)) return false;
+    if ((baPrefix.size() != 2)) return false;
     const qint32 nDeclaredHeaderSize = static_cast<quint8>(baPrefix.at(0));
     if (nDeclaredHeaderSize < N_PFX_LHA_FIXED_SIZE) return false;
     const qint64 nHeaderSize = 2 + static_cast<qint64>(nDeclaredHeaderSize);
     if ((nHeaderOffset + nHeaderSize) > nDataEnd) return false;
 
     const QByteArray baHeader = read_array_process(nHeaderOffset, nHeaderSize, pPdStruct);
-    if (!guardedThis || (static_cast<qint64>(baHeader.size()) != nHeaderSize)) return false;
+    if ((static_cast<qint64>(baHeader.size()) != nHeaderSize)) return false;
     quint32 nSum = 0;
     for (qint32 i = 2; i < baHeader.size(); i++) {
         nSum += static_cast<quint8>(baHeader.at(i));
@@ -177,7 +175,6 @@ bool XLArcPfx::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd, PDSTRUCT 
         // carrier's own name is the member's name whenever the field is empty
         // or holds something that is not one.
         sFileName = QFileInfo(getDeviceFileName(getDevice())).fileName();
-        if (!guardedThis) return false;
         if (sFileName.isEmpty()) sFileName = QString("data");
     }
 

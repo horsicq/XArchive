@@ -725,16 +725,15 @@ XBinary *XRTPatch::createInstance(QIODevice *pDevice, bool bIsImage,
 bool XRTPatch::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
                           PDSTRUCT *pPdStruct)
 {
-    QPointer<XRTPatch> guardedThis(this);
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || (nTotalSize < RTPATCH_HEADER_SIZE) ||
+    if ((nTotalSize < RTPATCH_HEADER_SIZE) ||
         (nTotalSize > (std::numeric_limits<qint32>::max)()) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     const QByteArray baData = read_array_process(0, nTotalSize, pPdStruct);
-    if (!guardedThis || (baData.size() != nTotalSize)) return false;
+    if (baData.size() != nTotalSize) return false;
     const uchar *pData =
         reinterpret_cast<const uchar *>(baData.constData());
     const quint16 nVersion = qFromLittleEndian<quint16>(pData + 2);

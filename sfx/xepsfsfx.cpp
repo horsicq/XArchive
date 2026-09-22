@@ -5,7 +5,6 @@
 
 #include "xepsfsfx.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -47,21 +46,20 @@ XEPSFSFX::~XEPSFSFX()
 // fires on the 17 Eschalon carriers and on nothing else.
 bool XEPSFSFX::readHeader(HEADER *pHeader, PDSTRUCT *pPdStruct)
 {
-    QPointer<XEPSFSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pHeader || !guardedSource || guardedSource->isSequential()) return false;
 
     const qint64 nInputSize = guardedSource->size();
     if (nInputSize < EPSF_HEADER_SIZE) return false;
 
     XPE pe(getDevice());
-    if (!pe.isValid(pPdStruct) || !guardedThis || !guardedSource) return false;
+    if (!pe.isValid(pPdStruct) || !guardedSource) return false;
     const qint64 nOverlayOffset = pe.getOverlayOffset(pPdStruct);
-    if (!guardedThis || !guardedSource) return false;
+    if (!guardedSource) return false;
     if ((nOverlayOffset <= 0) || (nOverlayOffset + EPSF_HEADER_SIZE > nInputSize)) return false;
 
     const QByteArray baHeader = read_array_process(nOverlayOffset, EPSF_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != EPSF_HEADER_SIZE)) return false;
+    if (!guardedSource || (baHeader.size() != EPSF_HEADER_SIZE)) return false;
 
     const uchar *pData = reinterpret_cast<const uchar *>(baHeader.constData());
     if (memcmp(pData, "EPSF", 4) != 0) return false;
@@ -94,8 +92,7 @@ bool XEPSFSFX::readHeader(HEADER *pHeader, PDSTRUCT *pPdStruct)
 // with an offset that means something else.
 bool XEPSFSFX::collectArchiveRecords(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
-    QPointer<XEPSFSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pContext || !guardedSource) return false;
 
     qint64 nSearchOffset = pContext->nScriptOffset;
@@ -103,14 +100,14 @@ bool XEPSFSFX::collectArchiveRecords(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     while ((nAttempt < EPSF_MAX_ARCHIVE_CANDIDATES) && (nSearchOffset + EPSF_ARCV4_TAG_SIZE <= pContext->nInputSize) && isPdStructNotCanceled(pPdStruct)) {
         const qint64 nFound = find_array(nSearchOffset, pContext->nInputSize - nSearchOffset, EPSF_ARCV4_TAG, EPSF_ARCV4_TAG_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
         if (nFound < 0) return false;
 
         nAttempt++;
         nSearchOffset = nFound + 1;
         pContext->bArchiveRejected = true;
 
-        SubDevice subDevice(guardedSource.data(), nFound, pContext->nInputSize - nFound);
+        SubDevice subDevice(guardedSource, nFound, pContext->nInputSize - nFound);
         if (!subDevice.open(QIODevice::ReadOnly)) continue;
 
         XARCV4 archive(&subDevice);
@@ -160,7 +157,7 @@ bool XEPSFSFX::collectArchiveRecords(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
         archive.finishUnpack(&innerState, pPdStruct);
         subDevice.close();
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
 
         if (bOK && !listRecords.isEmpty()) {
             pContext->nArchiveOffset = nFound;
@@ -179,14 +176,13 @@ bool XEPSFSFX::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XEPSFSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
     context.nArchiveOffset = -1;
-    if (!readHeader(&context.header, pPdStruct) || !guardedThis || !guardedSource) return false;
+    if (!readHeader(&context.header, pPdStruct) || !guardedSource) return false;
 
     context.nRuntimeOffset = context.header.nHeaderOffset + EPSF_HEADER_SIZE;
     context.nScriptOffset = context.nRuntimeOffset + context.header.nRuntimePackedSize;
@@ -196,7 +192,7 @@ bool XEPSFSFX::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     context.nScriptSize = context.nInputSize - context.nScriptOffset;
 
     collectArchiveRecords(&context, pPdStruct);
-    if (!guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     context.nTotalSize = (context.nArchiveOffset >= 0) ? (context.nArchiveOffset + context.nArchiveSize) : context.nInputSize;
 
@@ -248,7 +244,7 @@ qint32 XEPSFSFX::recordCount(const CONTEXT &context)
 
 bool XEPSFSFX::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     HEADER header = {};
     const bool bResult = readHeader(&header, pPdStruct);
@@ -420,11 +416,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XEPSFSFX::getDefaultUnpackProperties()
 
 bool XEPSFSFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XEPSFSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -434,8 +429,8 @@ bool XEPSFSFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -457,15 +452,10 @@ bool XEPSFSFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
     pState->nNumberOfRecords = recordCount(*pContext);
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

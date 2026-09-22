@@ -20,7 +20,6 @@
  */
 #include "xarcfs.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -69,16 +68,15 @@ bool XArcFS::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XArcFS> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
     if (context.nInputSize < ARCFS_HEADER_SIZE) return false;
 
     const QByteArray baHeader = read_array_process(0, ARCFS_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != ARCFS_HEADER_SIZE)) return false;
+    if ((baHeader.size() != ARCFS_HEADER_SIZE)) return false;
     if (baHeader.left(8) != QByteArray("Archive\0", 8)) return false;
 
     const uchar *pHeader = (const uchar *)baHeader.constData();
@@ -99,7 +97,7 @@ bool XArcFS::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
         const qint64 nEntryOffset = ARCFS_HEADER_SIZE + (i * ARCFS_ENTRY_SIZE);
         const QByteArray baEntry = read_array_process(nEntryOffset, ARCFS_ENTRY_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baEntry.size() != ARCFS_ENTRY_SIZE)) return false;
+        if ((baEntry.size() != ARCFS_ENTRY_SIZE)) return false;
         const uchar *pEntry = (const uchar *)baEntry.constData();
 
         const quint8 nStatus = pEntry[0];
@@ -171,7 +169,7 @@ bool XArcFS::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XArcFS::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -352,11 +350,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XArcFS::getDefaultUnpackProperties()
 
 bool XArcFS::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XArcFS> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -366,8 +363,8 @@ bool XArcFS::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> 
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -380,15 +377,10 @@ bool XArcFS::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> 
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

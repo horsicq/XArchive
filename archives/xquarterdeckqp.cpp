@@ -5,7 +5,6 @@
 
 #include "xquarterdeckqp.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <cstring>
@@ -101,9 +100,8 @@ bool XQuarterdeckQP::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XQuarterdeckQP> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -114,7 +112,7 @@ bool XQuarterdeckQP::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     }
 
     const QByteArray baHeader = read_array_process(0, QP_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || baHeader.size() != QP_HEADER_SIZE) {
+    if (baHeader.size() != QP_HEADER_SIZE) {
         return false;
     }
     const uchar *pHeader = reinterpret_cast<const uchar *>(baHeader.constData());
@@ -145,7 +143,7 @@ bool XQuarterdeckQP::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const QByteArray baIndex =
         read_array_process(QP_HEADER_SIZE, nIndexSize, pPdStruct);
-    if (!guardedThis || !guardedSource || baIndex.size() != nIndexSize) {
+    if (baIndex.size() != nIndexSize) {
         return false;
     }
 
@@ -159,8 +157,7 @@ bool XQuarterdeckQP::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         }
         const QByteArray baKind =
             read_array_process(nOffset, QP_RECORD_MAGIC_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            baKind.size() != QP_RECORD_MAGIC_SIZE) {
+        if (baKind.size() != QP_RECORD_MAGIC_SIZE) {
             return false;
         }
         if (std::memcmp(baKind.constData(), "QD", 2) != 0) return false;
@@ -174,8 +171,7 @@ bool XQuarterdeckQP::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
             }
             const QByteArray baPathHeader =
                 read_array_process(nOffset, QP_PATH_HEADER_SIZE, pPdStruct);
-            if (!guardedThis || !guardedSource ||
-                baPathHeader.size() != QP_PATH_HEADER_SIZE) {
+            if (baPathHeader.size() != QP_PATH_HEADER_SIZE) {
                 return false;
             }
             const qint64 nNameSize = static_cast<qint64>(qFromLittleEndian<quint32>(
@@ -187,7 +183,7 @@ bool XQuarterdeckQP::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
             }
             const QByteArray baPath = read_array_process(
                 nOffset + QP_PATH_HEADER_SIZE, nNameSize, pPdStruct);
-            if (!guardedThis || !guardedSource || baPath.size() != nNameSize) {
+            if (baPath.size() != nNameSize) {
                 return false;
             }
             const QByteArray baPathName = qpFixedName(baPath);
@@ -206,8 +202,7 @@ bool XQuarterdeckQP::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         }
         const QByteArray baRecord =
             read_array_process(nOffset, QP_FILE_HEADER_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            baRecord.size() != QP_FILE_HEADER_SIZE) {
+        if (baRecord.size() != QP_FILE_HEADER_SIZE) {
             return false;
         }
         const uchar *pRecord =
@@ -245,7 +240,7 @@ bool XQuarterdeckQP::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         // field, so this is the only place the payload encoding is asserted.
         const QByteArray baPrelude =
             read_array_process(member.nDataOffset, 2, pPdStruct);
-        if (!guardedThis || !guardedSource || baPrelude.size() != 2) {
+        if (baPrelude.size() != 2) {
             return false;
         }
         if (static_cast<quint8>(baPrelude.at(0)) > QP_DCL_MAX_LITERAL_MODE) {
@@ -283,12 +278,12 @@ bool XQuarterdeckQP::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     context.nArchiveSize = context.nInputSize;
     *pContext = context;
-    return guardedThis && guardedSource;
+    return true;
 }
 
 bool XQuarterdeckQP::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -501,9 +496,8 @@ bool XQuarterdeckQP::initUnpack(UNPACK_STATE *pState,
                                 const QMap<UNPACK_PROP, QVariant> &mapProperties,
                                 PDSTRUCT *pPdStruct)
 {
-    QPointer<XQuarterdeckQP> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
     }
@@ -511,7 +505,7 @@ bool XQuarterdeckQP::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -526,9 +520,9 @@ bool XQuarterdeckQP::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource ||
+    if (!parseContext(pContext, pPdStruct) ||
         pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -545,15 +539,10 @@ bool XQuarterdeckQP::initUnpack(UNPACK_STATE *pState,
     pState->pContext = pContext;
 
     const bool bFinalized =
-        guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+        validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

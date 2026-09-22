@@ -333,7 +333,6 @@ QMap<XBinary::UNPACK_PROP, QVariant> XKWAJ::getDefaultUnpackProperties()
 
 bool XKWAJ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XKWAJ> guardedThis(this);
     if (m_bUnpackOperationInProgress) {
         return false;
     }
@@ -344,44 +343,39 @@ bool XKWAJ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
         return false;
     }
 
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedThis->ownsUnpackSource(pState)) {
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) {
         return false;
     }
     KWAJ_UNPACK_CONTEXT *pOldContext = static_cast<KWAJ_UNPACK_CONTEXT *>(pState->pContext);
-    guardedThis->releaseUnpackSource(pState);
+    releaseUnpackSource(pState);
     pState->pContext = nullptr;
     delete pOldContext;
     *pState = UNPACK_STATE();
     if (!isPdStructNotCanceled(pPdStruct)) return false;
-    const bool bBound = guardedThis->bindUnpackSource(pState, pPdStruct);
-    if (!guardedThis || !bBound) {
+    const bool bBound = bindUnpackSource(pState, pPdStruct);
+    if (!bBound) {
         return false;
     }
 
-    const bool bValid = guardedThis->isValid(pPdStruct);
-    if (!guardedThis) return false;
+    const bool bValid = isValid(pPdStruct);
     if (!bValid) {
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
         return false;
     }
 
-    const qint64 nFileSize = guardedThis->getSize();
-    if (!guardedThis || (nFileSize < (qint64)sizeof(KWAJ_HEADER))) {
-        return failUnpackInitialization(guardedThis.data(), pState);
+    const qint64 nFileSize = getSize();
+    if ((nFileSize < (qint64)sizeof(KWAJ_HEADER))) {
+        return failUnpackInitialization(this, pState);
     }
 
-    const quint16 nCompType = guardedThis->read_uint16(offsetof(KWAJ_HEADER, comp_type));
-    if (!guardedThis) return failUnpackInitialization(guardedThis.data(), pState);
-    const qint64 nDataOffset = guardedThis->read_uint16(offsetof(KWAJ_HEADER, data_offset));
-    if (!guardedThis) return failUnpackInitialization(guardedThis.data(), pState);
-    const quint16 nHeaderFlags = guardedThis->read_uint16(offsetof(KWAJ_HEADER, header_flags));
-    if (!guardedThis) return failUnpackInitialization(guardedThis.data(), pState);
-
+    const quint16 nCompType = read_uint16(offsetof(KWAJ_HEADER, comp_type));
+    const qint64 nDataOffset = read_uint16(offsetof(KWAJ_HEADER, data_offset));
+    const quint16 nHeaderFlags = read_uint16(offsetof(KWAJ_HEADER, header_flags));
     const quint16 nKnownHeaderFlags =
         HDR_FLAG_HASLENGTH | HDR_FLAG_HASUNKNOWN1 | HDR_FLAG_HASUNKNOWN2 | HDR_FLAG_HASFILENAME | HDR_FLAG_HASFILEEXT | HDR_FLAG_HASEXTRATEXT;
     if ((nCompType > COMP_TYPE_MSZIP) || (nDataOffset < (qint64)sizeof(KWAJ_HEADER)) || (nDataOffset > nFileSize) || ((nHeaderFlags & ~nKnownHeaderFlags) != 0)) {
-        return failUnpackInitialization(guardedThis.data(), pState);
+        return failUnpackInitialization(this, pState);
     }
 
     qint64 nUncompressedSize = 0;
@@ -393,49 +387,48 @@ bool XKWAJ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     qint64 nExtOffset = sizeof(KWAJ_HEADER);
 
     if (bHasUncompressedSize) {
-        if (!hasExtensionBytes(nExtOffset, nDataOffset, 4)) return failUnpackInitialization(guardedThis.data(), pState);
-        nUncompressedSize = guardedThis->read_uint32(nExtOffset);
-        if (!guardedThis || !skipExtensionBytes(nDataOffset, 4, &nExtOffset)) return failUnpackInitialization(guardedThis.data(), pState);
+        if (!hasExtensionBytes(nExtOffset, nDataOffset, 4)) return failUnpackInitialization(this, pState);
+        nUncompressedSize = read_uint32(nExtOffset);
+        if (!skipExtensionBytes(nDataOffset, 4, &nExtOffset)) return failUnpackInitialization(this, pState);
     }
     if ((nHeaderFlags & HDR_FLAG_HASUNKNOWN1) && !skipExtensionBytes(nDataOffset, 2, &nExtOffset)) {
-        return failUnpackInitialization(guardedThis.data(), pState);
+        return failUnpackInitialization(this, pState);
     }
     if (nHeaderFlags & HDR_FLAG_HASUNKNOWN2) {
-        if (!hasExtensionBytes(nExtOffset, nDataOffset, 2)) return failUnpackInitialization(guardedThis.data(), pState);
-        const quint16 nLength = guardedThis->read_uint16(nExtOffset);
-        if (!guardedThis || !skipExtensionBytes(nDataOffset, 2, &nExtOffset) ||
+        if (!hasExtensionBytes(nExtOffset, nDataOffset, 2)) return failUnpackInitialization(this, pState);
+        const quint16 nLength = read_uint16(nExtOffset);
+        if (!skipExtensionBytes(nDataOffset, 2, &nExtOffset) ||
             !skipExtensionBytes(nDataOffset, nLength, &nExtOffset)) {
-            return failUnpackInitialization(guardedThis.data(), pState);
+            return failUnpackInitialization(this, pState);
         }
     }
 
     QString sName;
     if ((nHeaderFlags & HDR_FLAG_HASFILENAME) &&
-        !guardedThis->readBoundedExtensionString(nDataOffset, &nExtOffset, 9, &sName)) {
-        return failUnpackInitialization(guardedThis.data(), pState);
+        !readBoundedExtensionString(nDataOffset, &nExtOffset, 9, &sName)) {
+        return failUnpackInitialization(this, pState);
     }
     if (nHeaderFlags & HDR_FLAG_HASFILEEXT) {
         QString sExt;
-        if (!guardedThis->readBoundedExtensionString(nDataOffset, &nExtOffset, 4, &sExt))
-            return failUnpackInitialization(guardedThis.data(), pState);
+        if (!readBoundedExtensionString(nDataOffset, &nExtOffset, 4, &sExt))
+            return failUnpackInitialization(this, pState);
         if (!sExt.isEmpty()) sName += QString(".") + sExt;
     }
     if (nHeaderFlags & HDR_FLAG_HASEXTRATEXT) {
-        if (!hasExtensionBytes(nExtOffset, nDataOffset, 2)) return failUnpackInitialization(guardedThis.data(), pState);
-        const quint16 nLength = guardedThis->read_uint16(nExtOffset);
-        if (!guardedThis || !skipExtensionBytes(nDataOffset, 2, &nExtOffset) ||
+        if (!hasExtensionBytes(nExtOffset, nDataOffset, 2)) return failUnpackInitialization(this, pState);
+        const quint16 nLength = read_uint16(nExtOffset);
+        if (!skipExtensionBytes(nDataOffset, 2, &nExtOffset) ||
             !skipExtensionBytes(nDataOffset, nLength, &nExtOffset)) {
-            return failUnpackInitialization(guardedThis.data(), pState);
+            return failUnpackInitialization(this, pState);
         }
     }
 
     if (nExtOffset > nDataOffset) {
-        return failUnpackInitialization(guardedThis.data(), pState);
+        return failUnpackInitialization(this, pState);
     }
 
     if (sName.isEmpty()) {
-        sName = XBinary::getDeviceFileBaseName(guardedThis->getDevice());
-        if (!guardedThis) return failUnpackInitialization(guardedThis.data(), pState);
+        sName = XBinary::getDeviceFileBaseName(getDevice());
         if (sName.isEmpty()) sName = "kwaj_data";
     }
 
@@ -448,13 +441,13 @@ bool XKWAJ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
 
     KWAJ_UNPACK_CONTEXT *pContext = new (std::nothrow) KWAJ_UNPACK_CONTEXT;
     if (!pContext) {
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
         return false;
     }
     pContext->nDataOffset = nDataOffset;
     pContext->nDataSize = nDataSize;
-    pContext->compressMethod = guardedThis->_compTypeToMethod(nCompType);
+    pContext->compressMethod = _compTypeToMethod(nCompType);
     pContext->nUncompressedSize = nUncompressedSize;
     pContext->bUncompressedSizeDefined = bUncompressedSizeDefined;
     pContext->sFileName = sName;
@@ -466,10 +459,9 @@ bool XKWAJ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     pState->nTotalSize = getSize();
     pState->mapUnpackProperties = mapProperties;
 
-    if (!guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
-        if (!guardedThis) return false;
+    if (!validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -480,15 +472,14 @@ bool XKWAJ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
 
 XBinary::ARCHIVERECORD XKWAJ::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XKWAJ> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
 
     ARCHIVERECORD result = {};
 
     if (!pState || !pState->pContext) return result;
-    const bool bSourceCurrent = guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
+    const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
+    if (!bSourceCurrent || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return result;
     }
 
@@ -508,13 +499,12 @@ XBinary::ARCHIVERECORD XKWAJ::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
 
 bool XKWAJ::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XKWAJ> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
 
     if (!pState || !pState->pContext) return false;
-    const bool bSourceCurrent = guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
+    const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
+    if (!bSourceCurrent || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }
 
@@ -525,7 +515,6 @@ bool XKWAJ::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 bool XKWAJ::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XKWAJ> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
 
@@ -535,14 +524,11 @@ bool XKWAJ::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         return false;
     }
 
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedThis->ownsUnpackSource(pState)) return false;
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
     KWAJ_UNPACK_CONTEXT *pContext = static_cast<KWAJ_UNPACK_CONTEXT *>(pState->pContext);
     pState->pContext = nullptr;
-    guardedThis->releaseUnpackSource(pState);
-    if (!guardedThis) return false;
+    releaseUnpackSource(pState);
     delete pContext;
-    if (!guardedThis) return false;
-
     pState->nCurrentOffset = 0;
     pState->nTotalSize = 0;
     pState->nCurrentIndex = 0;
@@ -555,27 +541,25 @@ bool XKWAJ::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 bool XKWAJ::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XKWAJ> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
-        if (!guardedThis || !bResult) return false;
-        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(guardedThis->XArchive::getInternalInfo(pPdStruct));
-        if (!guardedThis || !pInfo) return false;
-        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        if (!bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        if (!pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) = *pInfo;
     }
 
-    return guardedThis && bResult;
+    return bResult;
 }
 
 void *XKWAJ::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XKWAJ> guardedThis(this);
-    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
-    if (!guardedThis || !bHandled) return nullptr;
+    const bool bHandled = handleInternalInfo(pPdStruct);
+    if (!bHandled) return nullptr;
 
-    return &guardedThis->m_internalInfo;
+    return &m_internalInfo;
 }
 
 void XKWAJ::setInternalInfo(void *pInternalInfo)

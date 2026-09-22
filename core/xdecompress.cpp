@@ -143,7 +143,6 @@
 #include "Algos/xnintendolzdecoder.h"
 #include "Algos/xash0decoder.h"
 #include <QCoreApplication>
-#include <QPointer>
 #include <QVector>
 #include <QtEndian>
 #include <algorithm>
@@ -207,7 +206,7 @@ protected:
     }
 
 private:
-    QPointer<QIODevice> m_pSource;
+    QIODevice *m_pSource;
     qint64 m_nLimit;
     qint64 m_nConsumed;
     bool m_bError;
@@ -391,7 +390,7 @@ private:
 
 class DecDeviceProgressAlivePredicate {
 public:
-    DecDeviceProgressAlivePredicate(const QPointer<QIODevice> &guardedDevice, XBinary::PDSTRUCT *pPdStruct, const XBinary::PDSTRUCTLIFETIME &lifetime)
+    DecDeviceProgressAlivePredicate(QIODevice *guardedDevice, XBinary::PDSTRUCT *pPdStruct, const XBinary::PDSTRUCTLIFETIME &lifetime)
         : m_guardedDevice(guardedDevice), m_pPdStruct(pPdStruct), m_lifetime(lifetime)
     {
     }
@@ -402,14 +401,14 @@ public:
     }
 
 private:
-    const QPointer<QIODevice> &m_guardedDevice;
+    QIODevice *m_guardedDevice;
     XBinary::PDSTRUCT *m_pPdStruct;
     const XBinary::PDSTRUCTLIFETIME &m_lifetime;
 };
 
 class DecOwnerProgressAlivePredicate {
 public:
-    DecOwnerProgressAlivePredicate(const QPointer<XDecompress> &guardedOwner, XBinary::PDSTRUCT *pPdStruct, const XBinary::PDSTRUCTLIFETIME &lifetime)
+    DecOwnerProgressAlivePredicate(XDecompress *guardedOwner, XBinary::PDSTRUCT *pPdStruct, const XBinary::PDSTRUCTLIFETIME &lifetime)
         : m_guardedOwner(guardedOwner), m_pPdStruct(pPdStruct), m_lifetime(lifetime)
     {
     }
@@ -420,7 +419,7 @@ public:
     }
 
 private:
-    const QPointer<XDecompress> &m_guardedOwner;
+    XDecompress *m_guardedOwner;
     XBinary::PDSTRUCT *m_pPdStruct;
     const XBinary::PDSTRUCTLIFETIME &m_lifetime;
 };
@@ -443,7 +442,7 @@ static DecCRCResult decCheckCRCValue(XBinary::CRC_TYPE crcType, const QVariant &
         baAESKeyProperties = pState->mapProperties.value(XBinary::FPART_PROP_AESKEY).toByteArray();
     }
 
-    QPointer<QIODevice> guardedDevice(pDevice);
+    QIODevice *guardedDevice = pDevice;
     const XBinary::PDSTRUCTLIFETIME progressLifetime = pPdStruct ? XBinary::retainPdStructLifetime(pPdStruct) : XBinary::PDSTRUCTLIFETIME();
     const DecDeviceProgressAlivePredicate contextAlive(guardedDevice, pPdStruct, progressLifetime);
 
@@ -459,7 +458,7 @@ static DecCRCResult decCheckCRCValue(XBinary::CRC_TYPE crcType, const QVariant &
     bool bResult = false;
     if (bRar5HashMac) {
         if ((crcType == XBinary::CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF) && bHasResultCRC && !sPassword.isEmpty() && (baAESKeyProperties.size() >= 33)) {
-            const quint32 nCRC32 = XBinary::_getCRC32(guardedDevice.data(), 0xFFFFFFFF, XBinary::_getCRC32Table_EDB88320(), pPdStruct) ^ 0xFFFFFFFF;
+            const quint32 nCRC32 = XBinary::_getCRC32(guardedDevice, 0xFFFFFFFF, XBinary::_getCRC32Table_EDB88320(), pPdStruct) ^ 0xFFFFFFFF;
             if (!contextAlive() || !XBinary::isPdStructNotCanceled(pPdStruct)) {
                 return DecCRCResult::Aborted;
             }
@@ -472,7 +471,7 @@ static DecCRCResult decCheckCRCValue(XBinary::CRC_TYPE crcType, const QVariant &
             bResult = bMACCalculated && (nMAC == value.toUInt());
         }
     } else {
-        bResult = XBinary::checkCRC(guardedDevice.data(), crcType, value, pPdStruct);
+        bResult = XBinary::checkCRC(guardedDevice, crcType, value, pPdStruct);
         if (!contextAlive() || !XBinary::isPdStructNotCanceled(pPdStruct)) {
             return DecCRCResult::Aborted;
         }
@@ -570,7 +569,7 @@ public:
 
 private:
     Q_DISABLE_COPY(DecProcessStateTransaction)
-    QPointer<XDecompress> m_pOwner;
+    XDecompress *m_pOwner;
     XBinary::DATAPROCESS_STATE *m_pCallerState;
     XBinary::DATAPROCESS_STATE m_state;
     XBinary::PDSTRUCT *m_pPdStruct;
@@ -579,7 +578,7 @@ private:
 
 class DecProcessContextAlivePredicate {
 public:
-    DecProcessContextAlivePredicate(const QPointer<XDecompress> &guardedOwner, const DecProcessStateTransaction &transaction)
+    DecProcessContextAlivePredicate(XDecompress *guardedOwner, const DecProcessStateTransaction &transaction)
         : m_guardedOwner(guardedOwner), m_transaction(transaction)
     {
     }
@@ -590,7 +589,7 @@ public:
     }
 
 private:
-    const QPointer<XDecompress> &m_guardedOwner;
+    XDecompress *m_guardedOwner;
     const DecProcessStateTransaction &m_transaction;
 };
 
@@ -652,7 +651,7 @@ static bool decPrepareBoundedInput(QIODevice *pDevice, qint64 nOffset, qint64 nL
         return false;
     }
 
-    QPointer<QIODevice> guardedDevice(pDevice);
+    QIODevice *guardedDevice = pDevice;
     const qint64 nDeviceSize = guardedDevice->size();
     if (!guardedDevice) return false;
     if (nLimit == -1) {
@@ -2083,7 +2082,7 @@ static bool decReadExactAt(QIODevice *pDevice, qint64 nOffset, char *pData, qint
         return false;
     }
 
-    QPointer<QIODevice> guardedDevice(pDevice);
+    QIODevice *guardedDevice = pDevice;
     const XBinary::PDSTRUCTLIFETIME progressLifetime = pPdStruct ? XBinary::retainPdStructLifetime(pPdStruct) : XBinary::PDSTRUCTLIFETIME();
     const DecProgressAlivePredicate isProgressAlive(pPdStruct, progressLifetime);
     const bool bSeeked = guardedDevice->seek(nOffset);
@@ -2285,7 +2284,7 @@ static bool decReadInputToByteArray(XBinary::DATAPROCESS_STATE *pState, QByteArr
     if (!pState || !pState->pDeviceInput || !pData || !pReservation) {
         return false;
     }
-    QPointer<QIODevice> guardedInput(pState->pDeviceInput);
+    QIODevice *guardedInput = pState->pDeviceInput;
     if (!guardedInput) return false;
 
     qint64 nSize = pState->nInputLimit;
@@ -2331,7 +2330,7 @@ static bool decReadInputToByteArray(XBinary::DATAPROCESS_STATE *pState, QByteArr
 // already been written to it.
 static bool decClearOutputDevice(QIODevice *pDevice)
 {
-    QPointer<QIODevice> guardedDevice(pDevice);
+    QIODevice *guardedDevice = pDevice;
     if (!guardedDevice) return false;
 
     const bool bSequential = guardedDevice->isSequential();
@@ -2346,7 +2345,7 @@ static bool decClearOutputDevice(QIODevice *pDevice)
 
     const qint64 nSize = guardedDevice->size();
     if (!guardedDevice) return false;
-    return (nSize == 0) || (XBinary::resize(guardedDevice.data(), 0) && guardedDevice);
+    return (nSize == 0) || (XBinary::resize(guardedDevice, 0) && guardedDevice);
 }
 
 // Copy a complete logical result through XBinary's processed-output window.
@@ -2360,8 +2359,8 @@ static bool decEmitDevice(QIODevice *pSource, qint64 nOffset, qint64 nSize, XBin
         return false;
     }
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
-    QPointer<QIODevice> guardedSource(pSource);
-    QPointer<QIODevice> guardedOutput(pState->pDeviceOutput);
+    QIODevice *guardedSource = pSource;
+    QIODevice *guardedOutput = pState->pDeviceOutput;
     const XBinary::PDSTRUCTLIFETIME progressLifetime = pPdStruct ? XBinary::retainPdStructLifetime(pPdStruct) : XBinary::PDSTRUCTLIFETIME();
     const DecProgressAlivePredicate isProgressAlive(pPdStruct, progressLifetime);
     if (!guardedSource || !guardedOutput || !isProgressAlive()) return false;
@@ -2370,7 +2369,7 @@ static bool decEmitDevice(QIODevice *pSource, qint64 nOffset, qint64 nSize, XBin
     pState->bWriteError = false;
     pState->nCountOutput = 0;
 
-    const bool bOutputCleared = decClearOutputDevice(guardedOutput.data());
+    const bool bOutputCleared = decClearOutputDevice(guardedOutput);
     if (!guardedOutput || !guardedSource || !isProgressAlive()) return false;
     if (!bOutputCleared) {
         pState->bWriteError = true;
@@ -2614,8 +2613,8 @@ bool XDecompress::decompressRarSolid(XBinary::DATAPROCESS_STATE *pState, XBinary
     }
 
     const XBinary::PDSTRUCTLIFETIME progressLifetime = pPdStruct ? XBinary::retainPdStructLifetime(pPdStruct) : XBinary::PDSTRUCTLIFETIME();
-    QPointer<QIODevice> guardedInput(pState->pDeviceInput);
-    QPointer<QIODevice> guardedOutput(pState->pDeviceOutput);
+    QIODevice *guardedInput = pState->pDeviceInput;
+    QIODevice *guardedOutput = pState->pDeviceOutput;
     if (!guardedInput || !guardedOutput || !stateTransaction.isAlive()) return false;
 
     qint64 nSolidFolderIndex = pState->mapProperties.value(XBinary::FPART_PROP_SOLIDFOLDERINDEX, (qint64)-1).toLongLong();
@@ -2848,14 +2847,13 @@ bool XDecompress::decompressRarSolid(XBinary::DATAPROCESS_STATE *pState, XBinary
 
 bool XDecompress::checkCRC(XBinary::CRC_TYPE crcType, QVariant value, QIODevice *pDevice, XBinary::PDSTRUCT *pPdStruct, const XBinary::DATAPROCESS_STATE *pState)
 {
-    QPointer<XDecompress> guardedThis(this);
     const XBinary::PDSTRUCTLIFETIME progressLifetime = pPdStruct ? XBinary::retainPdStructLifetime(pPdStruct) : XBinary::PDSTRUCTLIFETIME();
     const DecCRCResult result = decCheckCRCValue(crcType, value, pDevice, pPdStruct, pState);
 
     // checkCRC() can invoke the caller's progress callback.  It may destroy
     // any caller-owned argument (or this object), so validate the retained
     // identities before touching them again.
-    if (!guardedThis || !decProgressAlive(pPdStruct, progressLifetime)) {
+    if (!decProgressAlive(pPdStruct, progressLifetime)) {
         return false;
     }
     if (result == DecCRCResult::Ok) return true;
@@ -2863,17 +2861,16 @@ bool XDecompress::checkCRC(XBinary::CRC_TYPE crcType, QVariant value, QIODevice 
 
     const QString sMessage = decCRCResultMessage(result);
     XBinary::setPdStructErrorString(pPdStruct, sMessage);
-    if (!guardedThis || !decProgressAlive(pPdStruct, progressLifetime)) {
+    if (!decProgressAlive(pPdStruct, progressLifetime)) {
         return false;
     }
-    Q_EMIT guardedThis->warningMessage(sMessage);
+    Q_EMIT warningMessage(sMessage);
     return false;
 }
 
 bool XDecompress::multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
-    QPointer<XDecompress> guardedThis(this);
 
     if (!pState) {
         return false;
@@ -2906,7 +2903,7 @@ bool XDecompress::multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::P
     }
 
     const XBinary::PDSTRUCTLIFETIME progressLifetime = pPdStruct ? XBinary::retainPdStructLifetime(pPdStruct) : XBinary::PDSTRUCTLIFETIME();
-    const DecProcessContextAlivePredicate isContextAlive(guardedThis, stateTransaction);
+    const DecProcessContextAlivePredicate isContextAlive(this, stateTransaction);
 
     pState->bReadError = false;
     pState->bWriteError = false;
@@ -2921,10 +2918,10 @@ bool XDecompress::multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::P
     // source first (including nested SubDevices, shared QBuffer storage and
     // QFile aliases/hard links) so an in-place request leaves the archive
     // byte-for-byte intact.
-    QPointer<QIODevice> guardedOutput(pState->pDeviceOutput);
-    QPointer<QIODevice> guardedInput(pState->pDeviceInput);
+    QIODevice *guardedOutput = pState->pDeviceOutput;
+    QIODevice *guardedInput = pState->pDeviceInput;
     if (!guardedOutput || !isContextAlive()) return false;
-    const bool bDevicesAlias = guardedInput && XBinary::devicesAlias(guardedInput.data(), guardedOutput.data());
+    const bool bDevicesAlias = guardedInput && XBinary::devicesAlias(guardedInput, guardedOutput);
     if (!isContextAlive() || !guardedOutput || (pState->pDeviceInput && !guardedInput)) {
         return false;
     }
@@ -2935,7 +2932,7 @@ bool XDecompress::multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::P
     // Extraction has exact-replacement semantics.  Clearing up front also
     // guarantees that cancellation, CRC failure, or an unsupported method
     // cannot leave bytes from an earlier use of the destination behind.
-    const bool bOutputCleared = decClearOutputDevice(guardedOutput.data());
+    const bool bOutputCleared = decClearOutputDevice(guardedOutput);
     if (!isContextAlive() || !guardedOutput || (pState->pDeviceInput && !guardedInput)) {
         return false;
     }
@@ -2991,12 +2988,12 @@ bool XDecompress::multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::P
             DecNestedProgressBridge hashBridge = {};
             XBinary::PDSTRUCT hashProgress = XBinary::getPdStructSnapshot(pPdStruct);
             decPrepareNestedProgress(&hashProgress, pPdStruct, &hashBridge);
-            sArchiveIdentity = XBinary::getHash(XBinary::HASH_SHA256, guardedInput.data(), &hashProgress);
-            if (!guardedThis || !guardedInput || !decProgressAlive(pPdStruct, progressLifetime)) {
+            sArchiveIdentity = XBinary::getHash(XBinary::HASH_SHA256, guardedInput, &hashProgress);
+            if (!guardedInput || !decProgressAlive(pPdStruct, progressLifetime)) {
                 return false;
             }
             if (sArchiveIdentity.isEmpty() || !XBinary::isPdStructNotCanceled(pPdStruct)) {
-                guardedThis->clearSolidCache();
+                clearSolidCache();
                 return false;
             }
             sArchiveIdentity.prepend(QStringLiteral("sha256:"));
@@ -3306,7 +3303,7 @@ bool XDecompress::multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::P
     if (!bResult && guardedOutput && isContextAlive()) {
         const bool bSequential = guardedOutput->isSequential();
         if (guardedOutput && isContextAlive() && !bSequential) {
-            decClearOutputDevice(guardedOutput.data());
+            decClearOutputDevice(guardedOutput);
         }
     }
 
@@ -3359,9 +3356,8 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
 
     DecProcessStateTransaction stateTransaction(this, pState, pPdStruct);
     pState = stateTransaction.state();
-    QPointer<XDecompress> guardedThis(this);
     const XBinary::PDSTRUCTLIFETIME progressLifetime = pPdStruct ? XBinary::retainPdStructLifetime(pPdStruct) : XBinary::PDSTRUCTLIFETIME();
-    const DecOwnerProgressAlivePredicate isContextAlive(guardedThis, pPdStruct, progressLifetime);
+    const DecOwnerProgressAlivePredicate isContextAlive(this, pPdStruct, progressLifetime);
 
     DecInputStateGuard inputStateGuard(pState);
     bool bResult = false;
@@ -3377,17 +3373,17 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         pState->bWriteError = true;
         return false;
     }
-    QPointer<QIODevice> guardedOutput(pState->pDeviceOutput);
-    QPointer<QIODevice> guardedInput(pState->pDeviceInput);
+    QIODevice *guardedOutput = pState->pDeviceOutput;
+    QIODevice *guardedInput = pState->pDeviceInput;
     if (!guardedOutput || !isContextAlive()) return false;
-    const bool bDevicesAlias = guardedInput && XBinary::devicesAlias(guardedInput.data(), guardedOutput.data());
+    const bool bDevicesAlias = guardedInput && XBinary::devicesAlias(guardedInput, guardedOutput);
     if (!isContextAlive() || !guardedOutput || (pState->pDeviceInput && !guardedInput)) {
         return false;
     }
     if (bDevicesAlias) {
         return false;
     }
-    const bool bOutputCleared = decClearOutputDevice(guardedOutput.data());
+    const bool bOutputCleared = decClearOutputDevice(guardedOutput);
     if (!isContextAlive() || !guardedOutput || (pState->pDeviceInput && !guardedInput)) {
         return false;
     }
@@ -5322,8 +5318,8 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                                     XBinary::freeFileBuffer(&pBCJ2Output);
                                     return false;
                                 }
-                                QPointer<QIODevice> guardedBCJ2Output(pBCJ2Output);
-                                const bool bBCJ2OutputCleared = guardedBCJ2Output && decClearOutputDevice(guardedBCJ2Output.data());
+                                QIODevice *guardedBCJ2Output = pBCJ2Output;
+                                const bool bBCJ2OutputCleared = guardedBCJ2Output && decClearOutputDevice(guardedBCJ2Output);
                                 if (!isContextAlive() || !guardedInput || !guardedOutput || !guardedBCJ2Output) {
                                     if (!guardedBCJ2Output) pBCJ2Output = nullptr;
                                     XBinary::freeFileBuffer(&pBCJ2Output);
@@ -5331,7 +5327,7 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                                 }
                                 if (bBCJ2OutputCleared) {
                                     const bool bDecoded =
-                                        XBCJ2Decoder::decompress(&mainBuf, &callBuf, &jmpBuf, &rangeBuf, guardedBCJ2Output.data(), nOutputSize, pPdStruct);
+                                        XBCJ2Decoder::decompress(&mainBuf, &callBuf, &jmpBuf, &rangeBuf, guardedBCJ2Output, nOutputSize, pPdStruct);
                                     if (!isContextAlive() || !guardedInput || !guardedOutput || !guardedBCJ2Output) {
                                         if (!guardedBCJ2Output) pBCJ2Output = nullptr;
                                         XBinary::freeFileBuffer(&pBCJ2Output);
@@ -5929,7 +5925,7 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         const qint64 nInputOffset = pState->nInputOffset;
         const bool bLzipSequential = guardedInput->isSequential();
         if (!guardedInput || !guardedOutput || !isContextAlive()) return false;
-        bResult = !bLzipSequential && decPrepareBoundedInput(guardedInput.data(), nInputOffset, pState->nInputLimit, &nInputSize) && (nInputSize >= 36);
+        bResult = !bLzipSequential && decPrepareBoundedInput(guardedInput, nInputOffset, pState->nInputLimit, &nInputSize) && (nInputSize >= 36);
 
         QList<LzipMember> listMembers;
         qint64 nTotalUncompressedSize = 0;
@@ -6067,8 +6063,8 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         // signal; the public entry point returns immediately after reporting.
         if (g_nDecSignalSuppressionDepth == 0) {
             inputStateGuard.dismiss();
-            if (!guardedThis || !isContextAlive()) return false;
-            Q_EMIT guardedThis->errorMessage(sMessage);
+            if (!isContextAlive()) return false;
+            Q_EMIT errorMessage(sMessage);
             return false;
         }
         bResult = false;
@@ -6078,7 +6074,7 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
     if (!bResult && guardedOutput && isContextAlive()) {
         const bool bSequential = guardedOutput->isSequential();
         if (guardedOutput && isContextAlive() && !bSequential) {
-            decClearOutputDevice(guardedOutput.data());
+            decClearOutputDevice(guardedOutput);
         }
     }
 

@@ -7,7 +7,6 @@
 
 #include "Algos/xriddecoder.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -110,9 +109,8 @@ bool XRID::parseContext(CONTEXT *pContext, bool bDeepCheck,
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XRID> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -131,8 +129,7 @@ bool XRID::parseContext(CONTEXT *pContext, bool bDeepCheck,
         }
         const QByteArray baHeader =
             read_array_process(nOffset, RID_HEADER_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            baHeader.size() != RID_HEADER_SIZE) {
+        if (baHeader.size() != RID_HEADER_SIZE) {
             return false;
         }
         const uchar *pHeader =
@@ -190,8 +187,7 @@ bool XRID::parseContext(CONTEXT *pContext, bool bDeepCheck,
             }
             const QByteArray baFrame = read_array_process(
                 nChainOffset, XRidDecoder::BLOCK_FRAME_SIZE, pPdStruct);
-            if (!guardedThis || !guardedSource ||
-                baFrame.size() != XRidDecoder::BLOCK_FRAME_SIZE) {
+            if (baFrame.size() != XRidDecoder::BLOCK_FRAME_SIZE) {
                 return false;
             }
             const uchar *pFrame =
@@ -247,8 +243,7 @@ bool XRID::parseContext(CONTEXT *pContext, bool bDeepCheck,
                 if (first.nCompressedSize > 0) {
                     const QByteArray baChain = read_array_process(
                         first.nDataOffset, first.nCompressedSize, pPdStruct);
-                    if (!guardedThis || !guardedSource ||
-                        baChain.size() != first.nCompressedSize) {
+                    if (baChain.size() != first.nCompressedSize) {
                         return false;
                     }
                     bool bComplete = false;
@@ -264,8 +259,7 @@ bool XRID::parseContext(CONTEXT *pContext, bool bDeepCheck,
             }
 
             *pContext = context;
-            return guardedThis && guardedSource &&
-                   isPdStructNotCanceled(pPdStruct);
+            return isPdStructNotCanceled(pPdStruct);
         }
     }
 
@@ -274,7 +268,7 @@ bool XRID::parseContext(CONTEXT *pContext, bool bDeepCheck,
 
 bool XRID::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, true, pPdStruct);
@@ -474,9 +468,8 @@ bool XRID::initUnpack(UNPACK_STATE *pState,
                       const QMap<UNPACK_PROP, QVariant> &mapProperties,
                       PDSTRUCT *pPdStruct)
 {
-    QPointer<XRID> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
     }
@@ -484,7 +477,7 @@ bool XRID::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -499,9 +492,9 @@ bool XRID::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, false, pPdStruct) || !guardedThis ||
-        !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, false, pPdStruct) ||
+        pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -518,16 +511,11 @@ bool XRID::initUnpack(UNPACK_STATE *pState,
     pState->pContext = pContext;
 
     const bool bFinalized =
-        guardedThis->validateAndFinalizeUnpackSource(pState, pContext,
+        validateAndFinalizeUnpackSource(pState, pContext,
                                                      pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

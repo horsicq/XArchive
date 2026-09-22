@@ -5,7 +5,6 @@
 
 #include "xexeebookcreator.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -57,8 +56,7 @@ bool XEXEEBookCreator::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XEXEEBookCreator> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -68,13 +66,13 @@ bool XEXEEBookCreator::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     // The payload is always the PE overlay; there is no second copy of the
     // header anywhere else in the image, so the offset is not searched for.
     XPE pe(getDevice());
-    if (!pe.isValid(pPdStruct) || !guardedThis || !guardedSource) return false;
+    if (!pe.isValid(pPdStruct) || !guardedSource) return false;
     context.nOverlayOffset = pe.getOverlayOffset(pPdStruct);
-    if (!guardedThis || !guardedSource) return false;
+    if (!guardedSource) return false;
     if (!ebcRangeWithin(context.nInputSize, context.nOverlayOffset, EBC_HEADER_SIZE)) return false;
 
     const QByteArray baHeader = read_array_process(context.nOverlayOffset, EBC_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != EBC_HEADER_SIZE)) return false;
+    if (!guardedSource || (baHeader.size() != EBC_HEADER_SIZE)) return false;
     const uchar *pHeader = reinterpret_cast<const uchar *>(baHeader.constData());
 
     for (qint32 i = 0; i < static_cast<qint32>(sizeof(EBC_FIXED) / sizeof(EBC_FIXED[0])); i++) {
@@ -90,7 +88,7 @@ bool XEXEEBookCreator::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (!isPdStructNotCanceled(pPdStruct)) return false;
         if (!ebcRangeWithin(context.nInputSize, nPosition, EBC_RECORD_SIZE)) return false;
         const QByteArray baRecord = read_array_process(nPosition, EBC_RECORD_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baRecord.size() != EBC_RECORD_SIZE)) return false;
+        if (!guardedSource || (baRecord.size() != EBC_RECORD_SIZE)) return false;
         const uchar *pRecord = reinterpret_cast<const uchar *>(baRecord.constData());
         // Careful: this is the stride to the NEXT record, which is the zlib
         // stream length plus the four bytes of the following MFC CArchive
@@ -115,12 +113,12 @@ bool XEXEEBookCreator::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     context.nArchiveSize = nPosition;
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XEXEEBookCreator::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -280,11 +278,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XEXEEBookCreator::getDefaultUnpackPropertie
 
 bool XEXEEBookCreator::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XEXEEBookCreator> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -294,8 +291,8 @@ bool XEXEEBookCreator::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, 
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -309,15 +306,10 @@ bool XEXEEBookCreator::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, 
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

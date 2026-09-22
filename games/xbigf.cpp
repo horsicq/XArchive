@@ -22,7 +22,6 @@
 
 #include <QDateTime>
 #include <QDir>
-#include <QPointer>
 #include <QVector>
 #include <QtEndian>
 
@@ -73,7 +72,7 @@ public:
     }
 
 private:
-    QPointer<QIODevice> m_pDevice;
+    QIODevice *m_pDevice;
     qint64 m_nPosition;
     bool m_bRestored;
 };
@@ -185,9 +184,9 @@ bool bigfAccountOutput(XBinary::UNPACK_STATE *pState, qint64 nSize)
 
 struct XBIGF::LZW_CONTEXT
 {
-    QPointer<XBIGF> guardedArchive;
-    QPointer<QIODevice> guardedSource;
-    QPointer<QIODevice> guardedOutput;
+    XBIGF *guardedArchive;
+    QIODevice *guardedSource;
+    QIODevice *guardedOutput;
     const BIGF_BLOCK *pBlock;
     QByteArray *pInputBuffer;
     QByteArray *pPhrase;
@@ -242,7 +241,7 @@ bool XBIGF::readLzwByte(LZW_CONTEXT *pContext, quint8 *pValue)
             pContext->pInputBuffer->size(),
             pContext->pBlock->nCompressedSize - pContext->nInputLoaded);
         const qint64 nRead = safeReadData(
-            pContext->guardedSource.data(),
+            pContext->guardedSource,
             pContext->pBlock->nDataOffset + pContext->nInputLoaded,
             pContext->pInputBuffer->data(), nRequest, pContext->pPdStruct);
         if (!pContext->guardedArchive || !pContext->guardedSource ||
@@ -337,7 +336,6 @@ bool XBIGF::readZeroTerminatedName(qint64 nOffset, qint64 nLimit,
         return false;
     }
 
-    QPointer<XBIGF> guardedThis(this);
     qint64 nCurrent = nOffset;
     while ((nCurrent < nLimit) &&
            (pName->size() <= BIGF_MAX_NAME_SIZE) &&
@@ -348,7 +346,7 @@ bool XBIGF::readZeroTerminatedName(qint64 nOffset, qint64 nLimit,
         if (nRequest <= 0) return false;
         const QByteArray baChunk =
             read_array_process(nCurrent, nRequest, pPdStruct);
-        if (!guardedThis || (baChunk.size() != nRequest)) return false;
+        if ((baChunk.size() != nRequest)) return false;
         const qint32 nTerminator = baChunk.indexOf('\0');
         if (nTerminator >= 0) {
             pName->append(baChunk.constData(), nTerminator);
@@ -369,19 +367,18 @@ bool XBIGF::scanArchive(BIGF_HEADER *pHeader,
     if (pHeader) *pHeader = BIGF_HEADER();
     if (pEntries) pEntries->clear();
 
-    QPointer<XBIGF> guardedThis(this);
-    QPointer<QIODevice> guardedDevice(getDevice());
-    BIGF_DEVICE_POSITION_GUARD positionGuard(guardedDevice.data());
-    if (!guardedThis || !guardedDevice || !positionGuard.isValid() ||
+    QIODevice *guardedDevice = getDevice();
+    BIGF_DEVICE_POSITION_GUARD positionGuard(guardedDevice);
+    if (!guardedDevice || !positionGuard.isValid() ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     const qint64 nDeviceSize = getSize();
-    if (!guardedThis || (nDeviceSize < BIGF_HEADER_SIZE)) return false;
+    if ((nDeviceSize < BIGF_HEADER_SIZE)) return false;
     const QByteArray baHeader =
         read_array_process(0, BIGF_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedDevice ||
+    if (!guardedDevice ||
         (baHeader.size() != BIGF_HEADER_SIZE) ||
         (memcmp(baHeader.constData(), "BIGF", 4) != 0) ||
         (memcmp(baHeader.constData() + 5, "ZBL", 3) != 0)) {
@@ -426,7 +423,7 @@ bool XBIGF::scanArchive(BIGF_HEADER *pHeader,
         header.nDirectoryOffset + header.nDirectorySize;
 
     for (quint32 i = 0; i < header.nNumberOfRecords; ++i) {
-        if (!guardedThis || !guardedDevice ||
+        if (!guardedDevice ||
             !isPdStructNotCanceled(pPdStruct)) {
             return false;
         }
@@ -439,7 +436,7 @@ bool XBIGF::scanArchive(BIGF_HEADER *pHeader,
                 return false;
             const QByteArray baLength =
                 read_array_process(nDirectoryCursor, 2, pPdStruct);
-            if (!guardedThis || (baLength.size() != 2)) return false;
+            if ((baLength.size() != 2)) return false;
             const quint16 nRecordSize = bigfReadLE16(
                 reinterpret_cast<const uchar *>(baLength.constData()));
             if ((nRecordSize <= BIGF_DIRECTORY_RECORD_SIZE) ||
@@ -450,7 +447,7 @@ bool XBIGF::scanArchive(BIGF_HEADER *pHeader,
             }
             baRecord = read_array_process(nDirectoryCursor + 2,
                                           nRecordSize, pPdStruct);
-            if (!guardedThis || (baRecord.size() != nRecordSize))
+            if ((baRecord.size() != nRecordSize))
                 return false;
             bigfDecodeDirectoryRecord(&baRecord);
             const qint32 nNameEnd =
@@ -467,15 +464,13 @@ bool XBIGF::scanArchive(BIGF_HEADER *pHeader,
             baRecord = read_array_process(nDirectoryCursor,
                                           BIGF_DIRECTORY_RECORD_SIZE,
                                           pPdStruct);
-            if (!guardedThis ||
-                (baRecord.size() != BIGF_DIRECTORY_RECORD_SIZE)) {
+            if ((baRecord.size() != BIGF_DIRECTORY_RECORD_SIZE)) {
                 return false;
             }
             qint64 nNameBytes = 0;
             if (!readZeroTerminatedName(
                     nDirectoryCursor + BIGF_DIRECTORY_RECORD_SIZE,
-                    nDirectoryEnd, &baName, &nNameBytes, pPdStruct) ||
-                !guardedThis) {
+                    nDirectoryEnd, &baName, &nNameBytes, pPdStruct)) {
                 return false;
             }
             nDirectoryCursor += BIGF_DIRECTORY_RECORD_SIZE + nNameBytes;
@@ -516,7 +511,7 @@ bool XBIGF::scanArchive(BIGF_HEADER *pHeader,
                             entry.nDataOffset, 4)) {
             baMemberHeader = read_array_process(entry.nDataOffset, 4,
                                                 pPdStruct);
-            if (!guardedThis || (baMemberHeader.size() != 4))
+            if ((baMemberHeader.size() != 4))
                 return false;
             bCompressedSignature =
                 (baMemberHeader == QByteArrayLiteral("[..]"));
@@ -549,7 +544,7 @@ bool XBIGF::scanArchive(BIGF_HEADER *pHeader,
                 }
                 baMemberHeader = read_array_process(nBlockOffset, 12,
                                                     pPdStruct);
-                if (!guardedThis || (baMemberHeader.size() != 12) ||
+                if ((baMemberHeader.size() != 12) ||
                     (memcmp(baMemberHeader.constData(), "[..]", 4) != 0)) {
                     return false;
                 }
@@ -613,7 +608,7 @@ bool XBIGF::scanArchive(BIGF_HEADER *pHeader,
             nPreviousEnd = entry.nDataOffset + entry.nStoredSize;
     }
 
-    if (!guardedThis || !guardedDevice ||
+    if (!guardedDevice ||
         !isPdStructNotCanceled(pPdStruct) || !positionGuard.restore()) {
         return false;
     }
@@ -716,7 +711,6 @@ bool XBIGF::initUnpack(
     const QMap<UNPACK_PROP, QVariant> &mapProperties,
     PDSTRUCT *pPdStruct)
 {
-    QPointer<XBIGF> guardedThis(this);
     if (m_bUnpackOperationInProgress) return false;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState) return false;
@@ -732,15 +726,14 @@ bool XBIGF::initUnpack(
     pState->pContext = nullptr;
     *pState = UNPACK_STATE();
     delete pOldContext;
-    if (!guardedThis || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!isPdStructNotCanceled(pPdStruct)) return false;
 
     const bool bBound = bindUnpackSource(pState, pPdStruct);
-    if (!guardedThis || !bBound) return false;
+    if (!bBound) return false;
 
     BIGF_HEADER header = {};
     QList<BIGF_ENTRY> listEntries;
     const bool bScanned = scanArchive(&header, &listEntries, pPdStruct);
-    if (!guardedThis) return false;
     if (!bScanned || listEntries.isEmpty() ||
         !isPdStructNotCanceled(pPdStruct)) {
         releaseUnpackSource(pState);
@@ -749,7 +742,7 @@ bool XBIGF::initUnpack(
     }
 
     const qint64 nDeviceSize = getSize();
-    if (!guardedThis || (header.nArchiveSize > nDeviceSize)) {
+    if ((header.nArchiveSize > nDeviceSize)) {
         releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
         return false;
@@ -773,7 +766,6 @@ bool XBIGF::initUnpack(
     pState->mapUnpackProperties = mapProperties;
 
     if (!validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
-        if (!guardedThis) return false;
         pState->pContext = nullptr;
         releaseUnpackSource(pState);
         delete pContext;
@@ -786,14 +778,13 @@ bool XBIGF::initUnpack(
 XBinary::ARCHIVERECORD XBIGF::infoCurrent(
     UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XBIGF> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(
         &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed() || !pState || !pState->pContext)
         return ARCHIVERECORD();
 
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent ||
+    if (!bSourceCurrent ||
         !isPdStructNotCanceled(pPdStruct)) {
         return ARCHIVERECORD();
     }
@@ -801,7 +792,7 @@ XBinary::ARCHIVERECORD XBIGF::infoCurrent(
     BIGF_UNPACK_CONTEXT *pContext =
         static_cast<BIGF_UNPACK_CONTEXT *>(pState->pContext);
     if ((pState->nTotalSize != pContext->nDeviceSize) ||
-        (getSize() != pContext->nDeviceSize) || !guardedThis ||
+        (getSize() != pContext->nDeviceSize) ||
         (pState->nNumberOfRecords != pContext->listEntries.count()) ||
         (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pContext->listEntries.count())) {
@@ -854,10 +845,9 @@ bool XBIGF::unpackStoredRecord(const BIGF_ENTRY &entry,
                                UNPACK_STATE *pState,
                                PDSTRUCT *pPdStruct)
 {
-    QPointer<XBIGF> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    QPointer<QIODevice> guardedOutput(pOutput);
-    if (!guardedThis || !guardedSource || !guardedOutput ||
+    QIODevice *guardedSource = getDevice();
+    QIODevice *guardedOutput = pOutput;
+    if (!guardedSource || !guardedOutput ||
         (entry.nUncompressedSize < 0)) {
         return false;
     }
@@ -872,15 +862,14 @@ bool XBIGF::unpackStoredRecord(const BIGF_ENTRY &entry,
     quint8 nCrpKey = 234;
     qint64 nProcessed = 0;
 
-    while ((nProcessed < entry.nUncompressedSize) && guardedThis &&
-           guardedSource && guardedOutput &&
+    while ((nProcessed < entry.nUncompressedSize) && guardedSource && guardedOutput &&
            isPdStructNotCanceled(pPdStruct)) {
         const qint64 nChunkSize = qMin<qint64>(
             baBuffer.size(), entry.nUncompressedSize - nProcessed);
         const qint64 nRead = safeReadData(
-            guardedSource.data(), entry.nDataOffset + nProcessed,
+            guardedSource, entry.nDataOffset + nProcessed,
             baBuffer.data(), nChunkSize, pPdStruct);
-        if (!guardedThis || !guardedSource || !guardedOutput ||
+        if (!guardedSource || !guardedOutput ||
             (nRead != nChunkSize)) {
             return false;
         }
@@ -913,15 +902,15 @@ bool XBIGF::unpackStoredRecord(const BIGF_ENTRY &entry,
             return false;
         }
         const qint64 nWritten = safeWriteData(
-            guardedOutput.data(), nProcessed, baBuffer.constData(),
+            guardedOutput, nProcessed, baBuffer.constData(),
             nChunkSize, pPdStruct);
-        if (!guardedThis || !guardedSource || !guardedOutput ||
+        if (!guardedSource || !guardedOutput ||
             (nWritten != nChunkSize)) {
             return false;
         }
         nProcessed += nChunkSize;
     }
-    return guardedThis && guardedSource && guardedOutput &&
+    return guardedSource && guardedOutput &&
            isPdStructNotCanceled(pPdStruct) &&
            (nProcessed == entry.nUncompressedSize);
 }
@@ -931,10 +920,9 @@ bool XBIGF::unpackLzwBlock(const BIGF_BLOCK &block,
                            UNPACK_STATE *pState,
                            PDSTRUCT *pPdStruct)
 {
-    QPointer<XBIGF> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    QPointer<QIODevice> guardedOutput(pOutput);
-    if (!guardedThis || !guardedSource || !guardedOutput ||
+    QIODevice *guardedSource = getDevice();
+    QIODevice *guardedOutput = pOutput;
+    if (!guardedSource || !guardedOutput ||
         (nOutputBase < 0) || (block.nCompressedSize < 0) ||
         (block.nUncompressedSize < 0)) {
         return false;
@@ -957,7 +945,7 @@ bool XBIGF::unpackLzwBlock(const BIGF_BLOCK &block,
     } catch (const std::bad_alloc &) {
         return false;
     }
-    LZW_CONTEXT lzwContext = {guardedThis, guardedSource, guardedOutput,
+    LZW_CONTEXT lzwContext = {this, guardedSource, guardedOutput,
                               &block, &baInputBuffer, &baPhrase,
                               &listPrefixes, &baSuffixes, pPdStruct,
                               0, 0, 0, 0, 0, 0};
@@ -969,8 +957,7 @@ bool XBIGF::unpackLzwBlock(const BIGF_BLOCK &block,
     bool bHasPreviousCode = false;
     qint64 nOutputOffset = 0;
 
-    while ((nOutputOffset < block.nUncompressedSize) && guardedThis &&
-           guardedSource && guardedOutput &&
+    while ((nOutputOffset < block.nUncompressedSize) && guardedSource && guardedOutput &&
            isPdStructNotCanceled(pPdStruct)) {
         quint32 nCode = 0;
         if (!readLzwBits(&lzwContext, nCodeWidth, &nCode)) return false;
@@ -1036,9 +1023,9 @@ bool XBIGF::unpackLzwBlock(const BIGF_BLOCK &block,
                 return false;
             }
             const qint64 nWritten = safeWriteData(
-                guardedOutput.data(), nOutputBase + nOutputOffset,
+                guardedOutput, nOutputBase + nOutputOffset,
                 baOutputBuffer.constData(), nChunkSize, pPdStruct);
-            if (!guardedThis || !guardedSource || !guardedOutput ||
+            if (!guardedSource || !guardedOutput ||
                 (nWritten != nChunkSize)) {
                 return false;
             }
@@ -1051,7 +1038,7 @@ bool XBIGF::unpackLzwBlock(const BIGF_BLOCK &block,
         bHasPreviousCode = true;
     }
 
-    return guardedThis && guardedSource && guardedOutput &&
+    return guardedSource && guardedOutput &&
            isPdStructNotCanceled(pPdStruct) &&
            (nOutputOffset == block.nUncompressedSize);
 }
@@ -1061,9 +1048,8 @@ bool XBIGF::unpackLzwRecord(const BIGF_ENTRY &entry,
                             UNPACK_STATE *pState,
                             PDSTRUCT *pPdStruct)
 {
-    QPointer<XBIGF> guardedThis(this);
-    QPointer<QIODevice> guardedOutput(pOutput);
-    if (!guardedThis || !guardedOutput || !entry.bCompressed ||
+    QIODevice *guardedOutput = pOutput;
+    if (!guardedOutput || !entry.bCompressed ||
         entry.listBlocks.isEmpty()) {
         return false;
     }
@@ -1072,14 +1058,13 @@ bool XBIGF::unpackLzwRecord(const BIGF_ENTRY &entry,
     for (const BIGF_BLOCK &block : entry.listBlocks) {
         if ((block.nUncompressedSize >
              (entry.nUncompressedSize - nOutputBase)) ||
-            !unpackLzwBlock(block, nOutputBase, guardedOutput.data(),
-                            pState, pPdStruct) ||
-            !guardedThis || !guardedOutput) {
+            !unpackLzwBlock(block, nOutputBase, guardedOutput,
+                            pState, pPdStruct) || !guardedOutput) {
             return false;
         }
         nOutputBase += block.nUncompressedSize;
     }
-    return guardedThis && guardedOutput &&
+    return guardedOutput &&
            isPdStructNotCanceled(pPdStruct) &&
            (nOutputBase == entry.nUncompressedSize);
 }
@@ -1088,16 +1073,15 @@ bool XBIGF::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
                           PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    QPointer<XBIGF> guardedThis(this);
-    QPointer<QIODevice> guardedOutput(pDevice);
-    QPointer<QIODevice> guardedSource(getDevice());
-    BIGF_DEVICE_POSITION_GUARD positionGuard(guardedSource.data());
-    if (!operationGuard.isAcquired() || !pState || !guardedThis ||
+    QIODevice *guardedOutput = pDevice;
+    QIODevice *guardedSource = getDevice();
+    BIGF_DEVICE_POSITION_GUARD positionGuard(guardedSource);
+    if (!operationGuard.isAcquired() || !pState ||
         !guardedOutput || !guardedSource || !positionGuard.isValid() ||
-        !isUnpackOutputSupported(guardedOutput.data()) ||
-        XBinary::devicesAlias(guardedSource.data(), guardedOutput.data()) ||
+        !isUnpackOutputSupported(guardedOutput) ||
+        XBinary::devicesAlias(guardedSource, guardedOutput) ||
         !pState->pContext ||
-        !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis ||
+        !isUnpackSourceCurrent(pState, pPdStruct) ||
         (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
@@ -1123,7 +1107,7 @@ bool XBIGF::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
     QIODevice *pWorkDevice = createUnpackFileBuffer(
         entry.nUncompressedSize, pState->mapUnpackProperties, pPdStruct);
     if (!pWorkDevice) return false;
-    QPointer<QIODevice> guardedWork(pWorkDevice);
+    QIODevice *guardedWork = pWorkDevice;
     bool bResult = guardedWork &&
                    (guardedWork->size() == entry.nUncompressedSize) &&
                    guardedWork->seek(0);
@@ -1144,39 +1128,38 @@ bool XBIGF::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
     }
     if (bResult) {
         bResult = entry.bCompressed
-            ? unpackLzwRecord(entry, guardedWork.data(), pState,
+            ? unpackLzwRecord(entry, guardedWork, pState,
                               pPdStruct)
             : unpackStoredRecord(entry, pContext->header.nVersion,
-                                 guardedWork.data(), pState, pPdStruct);
+                                 guardedWork, pState, pPdStruct);
     }
     if (bResult) {
-        bResult = guardedThis && guardedSource && guardedOutput &&
+        bResult = guardedSource && guardedOutput &&
                   guardedWork && isPdStructNotCanceled(pPdStruct) &&
                   (guardedWork->size() == entry.nUncompressedSize) &&
                   isUnpackSourceCurrent(pState, pPdStruct) &&
-                  guardedThis && guardedSource && guardedOutput &&
+                  guardedSource && guardedOutput &&
                   guardedWork;
     }
     if (bResult) {
-        bResult = publishUnpackOutput(guardedWork.data(),
-                                      guardedOutput.data(), pState,
+        bResult = publishUnpackOutput(guardedWork,
+                                      guardedOutput, pState,
                                       pPdStruct);
     }
 
     freeFileBuffer(&pWorkDevice);
-    if (!guardedThis || !guardedSource || !guardedOutput) return false;
+    if (!guardedSource || !guardedOutput) return false;
     if (bResult) pState->nCurrentOffset = entry.nUncompressedSize;
     return bResult && positionGuard.restore();
 }
 
 bool XBIGF::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XBIGF> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState || !pState->pContext)
         return false;
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent ||
+    if (!bSourceCurrent ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -1236,25 +1219,23 @@ QList<XBinary::FPART_PROP> XBIGF::getAvailableFPARTProperties()
 
 bool XBIGF::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XBIGF> guardedThis(this);
     bool bResult = true;
     if (!isInternalInfoHandled()) {
-        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
-        if (!guardedThis || !bResult) return false;
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        if (!bResult) return false;
         XArchive::INTERNAL_INFO *pInfo =
             static_cast<XArchive::INTERNAL_INFO *>(
-                guardedThis->XArchive::getInternalInfo(pPdStruct));
-        if (!guardedThis || !pInfo) return false;
+                XArchive::getInternalInfo(pPdStruct));
+        if (!pInfo) return false;
         static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) = *pInfo;
     }
-    return guardedThis && bResult;
+    return bResult;
 }
 
 void *XBIGF::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XBIGF> guardedThis(this);
     const bool bHandled = handleInternalInfo(pPdStruct);
-    if (!guardedThis || !bHandled) return nullptr;
+    if (!bHandled) return nullptr;
     return &m_internalInfo;
 }
 

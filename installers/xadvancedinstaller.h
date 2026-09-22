@@ -35,10 +35,10 @@ public:
     };
 
     struct UNPACK_CONTEXT {
-        QPointer<QIODevice> pOuterSourceDevice;
+        QIODevice *pOuterSourceDevice = nullptr;
         quint64 nOwnerDeviceGeneration = 0;
         UNPACK_STATE *pOwnerState = nullptr;
-        QPointer<QIODevice> pOwnedDevice;
+        QIODevice *pOwnedDevice = nullptr;
         XMSI *pMSI = nullptr;
         UNPACK_STATE innerState = {};
         XArchive *pSourceValidator = nullptr;
@@ -68,12 +68,6 @@ public:
     virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
-
-protected:
-    bool isDeviceReplacementAllowed() const override
-    {
-        return (!m_pUnpackOperationState || !*m_pUnpackOperationState) && m_setUnpackContexts.isEmpty();
-    }
 
 private:
     struct EXE_FOOTER {
@@ -112,9 +106,6 @@ private:
     bool _initMSIDelegate(UNPACK_STATE *pState, QIODevice *pSourceDevice, QIODevice *pOwnedDevice, XArchive *pSourceValidator, UNPACK_STATE *pSourceValidationState,
                           const QMap<QString, QByteArray> &mapExternalCabinets, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct);
     static bool _deleteUnpackContext(UNPACK_CONTEXT *pContext, PDSTRUCT *pPdStruct);
-    QSharedPointer<bool> m_pUnpackOperationState;
-    QSharedPointer<UNPACK_DEFERRED_CLEANUP> m_pUnpackDeferredCleanup;
-    QSet<UNPACK_CONTEXT *> m_setUnpackContexts;
 };
 
 #endif  // XADVANCEDINSTALLER_H

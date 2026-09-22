@@ -57,7 +57,7 @@ quint8 sxByte(const char *pData)
 
 class SYDEX_PARSE_RESULT {
 public:
-    SYDEX_PARSE_RESULT(const QPointer<QIODevice> &pDevice, qint64 nSavedPosition) : m_pDevice(pDevice), m_nSavedPosition(nSavedPosition)
+    SYDEX_PARSE_RESULT(QIODevice *pDevice, qint64 nSavedPosition) : m_pDevice(pDevice), m_nSavedPosition(nSavedPosition)
     {
     }
 
@@ -68,7 +68,7 @@ public:
     }
 
 private:
-    QPointer<QIODevice> m_pDevice;
+    QIODevice *m_pDevice;
     qint64 m_nSavedPosition;
 };
 }  // namespace
@@ -85,21 +85,13 @@ XSydexSFXArchive::~XSydexSFXArchive()
     for (QSet<UNPACK_CONTEXT *>::const_iterator it = contexts.begin(); it != contexts.end(); ++it) delete *it;
 }
 
-bool XSydexSFXArchive::isDeviceReplacementAllowed() const
-{
-    // This reader owns its own contexts, and XArchive owns the unpack
-    // operation guard it shares with every other archive.  Both have to
-    // agree before the source device may be swapped underneath a session.
-    return m_setContexts.isEmpty() && XArchive::isDeviceReplacementAllowed();
-}
-
 bool XSydexSFXArchive::_parse(QList<FILE_ENTRY> *pEntries, qint64 *pnSourceSize, bool bDecode, PDSTRUCT *pPdStruct)
 {
     if (pEntries) pEntries->clear();
     if (pnSourceSize) *pnSourceSize = 0;
     if (!isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<QIODevice> pDevice(getDevice());
+    QIODevice *pDevice = getDevice();
     if (!pDevice || !pDevice->isOpen() || !pDevice->isReadable() || pDevice->isSequential()) return false;
     const qint64 nSourceSize = pDevice->size();
     const qint64 nSavedPosition = pDevice->pos();
@@ -179,7 +171,7 @@ bool XSydexSFXArchive::_parse(QList<FILE_ENTRY> *pEntries, qint64 *pnSourceSize,
     qint64 nPosition = nHeaderOffset + SYDEX_HEADER_SIZE + nCommentSize;
     if ((nPosition < 0) || (nPosition > nOverlaySize)) return restoreAndReturn(false);
 
-    QString sName = QFileInfo(getDeviceFileName(pDevice.data())).completeBaseName();
+    QString sName = QFileInfo(getDeviceFileName(pDevice)).completeBaseName();
     if (!pDevice) return false;
     if (sName.isEmpty()) sName = QStringLiteral("image");
     sName += QStringLiteral(".img");
@@ -329,7 +321,7 @@ bool XSydexSFXArchive::_isContextCurrent(const UNPACK_STATE *pState, const UNPAC
 {
     return pState && pContext && m_setContexts.contains(const_cast<UNPACK_CONTEXT *>(pContext)) && (pState->pContext == pContext) &&
            (pContext->pOwnerState == pState) && !pState->baUnpackSourceToken.isEmpty() && (pState->baUnpackSourceToken == pContext->baToken) &&
-           (pContext->pSourceDevice.data() == getDevice()) && (pContext->nDeviceGeneration == getDeviceGeneration()) &&
+           (pContext->pSourceDevice == getDevice()) && (pContext->nDeviceGeneration == getDeviceGeneration()) &&
            (pState->nTotalSize == pContext->nSourceSize) && (pState->nNumberOfRecords == pContext->listEntries.size()) &&
            (pState->nCurrentIndex == pContext->nCurrentIndex) && (pState->nCurrentOffset == pContext->nCurrentOffset);
 }
@@ -394,7 +386,7 @@ bool XSydexSFXArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, P
         return false;
     }
     UNPACK_CONTEXT *pContext = static_cast<UNPACK_CONTEXT *>(pState->pContext);
-    if (!_isContextCurrent(pState, pContext) || devicesAlias(pContext->pSourceDevice.data(), pDevice) || (pContext->nCurrentIndex < 0) ||
+    if (!_isContextCurrent(pState, pContext) || devicesAlias(pContext->pSourceDevice, pDevice) || (pContext->nCurrentIndex < 0) ||
         (pContext->nCurrentIndex >= pContext->listEntries.size())) {
         return false;
     }

@@ -66,7 +66,7 @@ public:
 
 class NsisContextValidator {
 public:
-    NsisContextValidator(const QPointer<XNSIS> &pOwner, const QPointer<QIODevice> &pOutput,
+    NsisContextValidator(XNSIS *pOwner, QIODevice *pOutput,
                          const QSharedPointer<XNSIS::UNPACK_LIFETIME_STATE> &pLifetime, XNSIS::UNPACK_CONTEXT *pContext,
                          XBinary::UNPACK_STATE *pState)
         : m_pOwner(pOwner), m_pOutput(pOutput), m_pLifetime(pLifetime), m_pContext(pContext), m_pState(pState)
@@ -75,13 +75,13 @@ public:
 
     bool isCurrent() const
     {
-        return m_pOwner && m_pOutput && m_pLifetime && m_pLifetime->bOwnerAlive && m_pLifetime->setContexts.contains(m_pContext) &&
+        return m_pLifetime && m_pLifetime->bOwnerAlive && m_pLifetime->setContexts.contains(m_pContext) &&
                (m_pContext->pOwnerState == m_pState) && (m_pState->pContext == m_pContext);
     }
 
 private:
-    QPointer<XNSIS> m_pOwner;
-    QPointer<QIODevice> m_pOutput;
+    XNSIS *m_pOwner;
+    QIODevice *m_pOutput;
     QSharedPointer<XNSIS::UNPACK_LIFETIME_STATE> m_pLifetime;
     XNSIS::UNPACK_CONTEXT *m_pContext;
     XBinary::UNPACK_STATE *m_pState;
@@ -408,9 +408,8 @@ XBinary::FT XNSIS::getFileType()
 
 bool XNSIS::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<XNSIS> guardedThis(this);
-    const INTERNAL_INFO *pInfo = static_cast<const INTERNAL_INFO *>(guardedThis->getInternalInfo(pPdStruct));
-    return guardedThis && pInfo && pInfo->bIsValid;
+    const INTERNAL_INFO *pInfo = static_cast<const INTERNAL_INFO *>(getInternalInfo(pPdStruct));
+    return pInfo && pInfo->bIsValid;
 }
 
 XNSIS::INTERNAL_INFO XNSIS::_getInternalInfo(PDSTRUCT *pPdStruct)
@@ -421,39 +420,34 @@ XNSIS::INTERNAL_INFO XNSIS::_getInternalInfo(PDSTRUCT *pPdStruct)
 // Cache format-specific parsing together with the XBinary memory map.
 bool XNSIS::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XNSIS> guardedThis(this);
-    const bool bAlreadyHandled = guardedThis->isInternalInfoHandled();
-    if (!guardedThis) return false;
-
+    const bool bAlreadyHandled = isInternalInfoHandled();
     if (!bAlreadyHandled) {
-        const quint64 nTransaction = guardedThis->beginInternalInfoTransaction();
+        const quint64 nTransaction = beginInternalInfoTransaction();
         if (!nTransaction) return false;
 
         // The transaction supplies the recursion sentinel. Keep every
         // source-derived value local until the same binding is revalidated.
-        guardedThis->m_internalInfo = INTERNAL_INFO();
-        INTERNAL_INFO info = guardedThis->_getInternalInfo(pPdStruct);
-        if (!guardedThis) return false;
-        if (!guardedThis->isInternalInfoTransactionCurrent(nTransaction) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
-            guardedThis->rollbackInternalInfoTransaction(nTransaction);
+        m_internalInfo = INTERNAL_INFO();
+        INTERNAL_INFO info = _getInternalInfo(pPdStruct);
+        if (!isInternalInfoTransactionCurrent(nTransaction) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+            rollbackInternalInfoTransaction(nTransaction);
             return false;
         }
 
-        const XBinary::_MEMORY_MAP memoryMap = guardedThis->getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
-        if (!guardedThis) return false;
-        if (!guardedThis->isInternalInfoTransactionCurrent(nTransaction) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
-            guardedThis->rollbackInternalInfoTransaction(nTransaction);
+        const XBinary::_MEMORY_MAP memoryMap = getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
+        if (!isInternalInfoTransactionCurrent(nTransaction) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+            rollbackInternalInfoTransaction(nTransaction);
             return false;
         }
         info.memoryMap = memoryMap;
 
-        if (!guardedThis->isInternalInfoTransactionCurrent(nTransaction)) {
-            guardedThis->rollbackInternalInfoTransaction(nTransaction);
+        if (!isInternalInfoTransactionCurrent(nTransaction)) {
+            rollbackInternalInfoTransaction(nTransaction);
             return false;
         }
-        guardedThis->m_internalInfo = info;
-        if (!guardedThis->commitInternalInfoTransaction(nTransaction, static_cast<XBinary::INTERNAL_INFO *>(&guardedThis->m_internalInfo))) {
-            guardedThis->rollbackInternalInfoTransaction(nTransaction);
+        m_internalInfo = info;
+        if (!commitInternalInfoTransaction(nTransaction, static_cast<XBinary::INTERNAL_INFO *>(&m_internalInfo))) {
+            rollbackInternalInfoTransaction(nTransaction);
             return false;
         }
     }
@@ -463,11 +457,10 @@ bool XNSIS::handleInternalInfo(PDSTRUCT *pPdStruct)
 
 void *XNSIS::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XNSIS> guardedThis(this);
-    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
-    if (!guardedThis || !bHandled) return nullptr;
+    const bool bHandled = handleInternalInfo(pPdStruct);
+    if (!bHandled) return nullptr;
 
-    return &guardedThis->m_internalInfo;
+    return &m_internalInfo;
 }
 
 void XNSIS::setInternalInfo(void *pInternalInfo)
@@ -1812,7 +1805,6 @@ bool XNSIS::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     QSharedPointer<UNPACK_LIFETIME_STATE> pLifetime = m_pUnpackLifetimeState;
     NsisOperationGuard operationGuard(pLifetime);
     if (!operationGuard.isAcquired()) return false;
-    QPointer<XNSIS> guardedThis(this);
     if (pState->pContext) {
         UNPACK_CONTEXT *pOldContext = static_cast<UNPACK_CONTEXT *>(pState->pContext);
         if (!pLifetime->setContexts.contains(pOldContext) || (pOldContext->pOwnerState != pState)) return false;
@@ -1820,27 +1812,25 @@ bool XNSIS::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
         pState->pContext = nullptr;
         deleteUnpackContext(pOldContext);
         *pState = UNPACK_STATE();
-        if (!guardedThis || !pLifetime->bOwnerAlive) return false;
+        if (!pLifetime->bOwnerAlive) return false;
     }
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
     *pState = UNPACK_STATE();
     pState->mapUnpackProperties = mapProperties;
 
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource) return false;
-    XArchive *pSourceValidator = new XArchive(guardedSource.data());
+    QIODevice *guardedSource = getDevice();
+    XArchive *pSourceValidator = new XArchive(guardedSource);
     UNPACK_STATE sourceValidationState = {};
-    if (!pSourceValidator->bindUnpackSource(&sourceValidationState, pPdStruct) || !guardedThis || !guardedSource) {
+    if (!pSourceValidator->bindUnpackSource(&sourceValidationState, pPdStruct)) {
         pSourceValidator->releaseUnpackSource(&sourceValidationState);
         delete pSourceValidator;
         return false;
     }
-    XNSIS detector(guardedSource.data(), isImage(), getModuleAddress());
+    XNSIS detector(guardedSource, isImage(), getModuleAddress());
     const qint64 nTotalSize = guardedSource->size();
     INTERNAL_INFO info = detector._analyse(pPdStruct);
-    if (!guardedThis || !guardedSource || (nTotalSize < 0) || !info.bIsValid || !pSourceValidator->isUnpackSourceCurrent(&sourceValidationState, pPdStruct) ||
-        !guardedThis || !guardedSource) {
+    if ((nTotalSize < 0) || !info.bIsValid || !pSourceValidator->isUnpackSourceCurrent(&sourceValidationState, pPdStruct)) {
         pSourceValidator->releaseUnpackSource(&sourceValidationState);
         delete pSourceValidator;
         return false;
@@ -1877,9 +1867,8 @@ bool XNSIS::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     pContext->nDataOffset = 0;
     pContext->nDataSize = 0;
 
-    if (!detector._findFirstHeader(info.nSignatureOffset, nTotalSize, pContext, pPdStruct) || detector._open(pContext, pPdStruct) == false || !guardedThis ||
-        !guardedSource || !isPdStructNotCanceled(pPdStruct) || pContext->listEntries.isEmpty() ||
-        !pContext->pSourceValidator->validateAndFinalizeUnpackSource(&pContext->sourceValidationState, pPdStruct) || !guardedThis || !guardedSource) {
+    if (!detector._findFirstHeader(info.nSignatureOffset, nTotalSize, pContext, pPdStruct) || detector._open(pContext, pPdStruct) == false || !isPdStructNotCanceled(pPdStruct) || pContext->listEntries.isEmpty() ||
+        !pContext->pSourceValidator->validateAndFinalizeUnpackSource(&pContext->sourceValidationState, pPdStruct)) {
         deleteUnpackContext(pContext);
         return false;
     }
@@ -1899,7 +1888,6 @@ XBinary::ARCHIVERECORD XNSIS::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
     QSharedPointer<UNPACK_LIFETIME_STATE> pLifetime = m_pUnpackLifetimeState;
     NsisOperationGuard operationGuard(pLifetime);
     if (!operationGuard.isAcquired()) return result;
-    QPointer<XNSIS> guardedThis(this);
     if (!pState || !pState->baUnpackSourceToken.isEmpty() || !pState->pContext || !isPdStructNotCanceled(pPdStruct)) return result;
 
     UNPACK_CONTEXT *pContext = static_cast<UNPACK_CONTEXT *>(pState->pContext);
@@ -1907,7 +1895,7 @@ XBinary::ARCHIVERECORD XNSIS::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
     if (!pLifetime->setContexts.contains(pContext) || (pContext->pOwnerState != pState) || !pContext->pOuterSourceDevice ||
         (pContext->pOuterSourceDevice != getDevice()) || (pContext->nOwnerDeviceGeneration != getDeviceGeneration()) || !pContext->pSourceValidator ||
         (pState->nNumberOfRecords != pContext->listEntries.size()) || (nIndex < 0) || (nIndex >= pContext->listEntries.size()) ||
-        !pContext->pSourceValidator->isUnpackSourceCurrent(&pContext->sourceValidationState, pPdStruct) || !guardedThis || !pLifetime->bOwnerAlive ||
+        !pContext->pSourceValidator->isUnpackSourceCurrent(&pContext->sourceValidationState, pPdStruct) || !pLifetime->bOwnerAlive ||
         !pLifetime->setContexts.contains(pContext) || (pState->pContext != pContext))
         return result;
 
@@ -1954,11 +1942,10 @@ bool XNSIS::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     QSharedPointer<UNPACK_LIFETIME_STATE> pLifetime = m_pUnpackLifetimeState;
     NsisOperationGuard operationGuard(pLifetime);
     if (!operationGuard.isAcquired()) return false;
-    QPointer<XNSIS> guardedThis(this);
-    QPointer<QIODevice> guardedOutput(pDevice);
+    QIODevice *guardedOutput = pDevice;
     if (!pState || !pState->baUnpackSourceToken.isEmpty() || !pState->pContext || !guardedOutput || !guardedOutput->isOpen() || !guardedOutput->isWritable() ||
-        guardedOutput->isSequential() || !guardedThis || !guardedOutput || (guardedOutput->openMode() & (QIODevice::Append | QIODevice::Text)) ||
-        !XBinary::isResizeEnable(guardedOutput.data()) || !guardedThis || !guardedOutput || !isPdStructNotCanceled(pPdStruct)) {
+        guardedOutput->isSequential() || (guardedOutput->openMode() & (QIODevice::Append | QIODevice::Text)) ||
+        !XBinary::isResizeEnable(guardedOutput) || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -1968,8 +1955,8 @@ bool XNSIS::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     if (!pLifetime->setContexts.contains(pContext) || (pContext->pOwnerState != pState) || !pContext->pOuterSourceDevice ||
         (pContext->pOuterSourceDevice != getDevice()) || (pContext->nOwnerDeviceGeneration != getDeviceGeneration()) || !pContext->pSourceValidator ||
         (pState->nNumberOfRecords != pContext->listEntries.size()) || (nIndex < 0) || (nIndex >= pContext->listEntries.size()) ||
-        XBinary::devicesAlias(pContext->pOuterSourceDevice.data(), guardedOutput.data()) || !guardedThis || !guardedOutput ||
-        !pContext->pSourceValidator->isUnpackSourceCurrent(&pContext->sourceValidationState, pPdStruct) || !guardedThis || !guardedOutput || !pLifetime->bOwnerAlive ||
+        XBinary::devicesAlias(pContext->pOuterSourceDevice, guardedOutput) ||
+        !pContext->pSourceValidator->isUnpackSourceCurrent(&pContext->sourceValidationState, pPdStruct) || !pLifetime->bOwnerAlive ||
         !pLifetime->setContexts.contains(pContext) || (pState->pContext != pContext)) {
         return false;
     }
@@ -1982,9 +1969,9 @@ bool XNSIS::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     stageState.pContext = nullptr;
     const bool bOuterIsImage = isImage();
     const XADDR nOuterModuleAddress = getModuleAddress();
-    XNSIS decoder(pContext->pOuterSourceDevice.data(), bOuterIsImage, nOuterModuleAddress);
+    XNSIS decoder(pContext->pOuterSourceDevice, bOuterIsImage, nOuterModuleAddress);
 
-    const NsisContextValidator contextValidator(guardedThis, guardedOutput, pLifetime, pContext, pState);
+    const NsisContextValidator contextValidator(this, guardedOutput, pLifetime, pContext, pState);
 
     // Obtain the item's raw (uncompressed) data.
     QByteArray baData;
@@ -2110,15 +2097,14 @@ bool XNSIS::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     }
 
     if (!writeUnpackData(&stageState, &stage, baData, pPdStruct) || !contextValidator.isCurrent()) return false;
-    if (!guardedThis || !guardedOutput || !pLifetime->bOwnerAlive || !pLifetime->setContexts.contains(pContext) || (pState->pContext != pContext) ||
-        !pContext->pSourceValidator->isUnpackSourceCurrent(&pContext->sourceValidationState, pPdStruct) || !guardedThis || !guardedOutput || !pLifetime->bOwnerAlive ||
+    if (!pLifetime->bOwnerAlive || !pLifetime->setContexts.contains(pContext) || (pState->pContext != pContext) ||
+        !pContext->pSourceValidator->isUnpackSourceCurrent(&pContext->sourceValidationState, pPdStruct) || !pLifetime->bOwnerAlive ||
         !pLifetime->setContexts.contains(pContext) || (pState->pContext != pContext))
         return false;
-    NsisPublisher publisher(pContext->pOuterSourceDevice.data());
+    NsisPublisher publisher(pContext->pOuterSourceDevice);
     UNPACK_STATE publicationState = {};
-    if (!publisher.bindUnpackSource(&publicationState, pPdStruct) || !publisher.validateAndFinalizeUnpackSource(&publicationState, pPdStruct) || !guardedThis ||
-        !guardedOutput || !pLifetime->bOwnerAlive || !pLifetime->setContexts.contains(pContext) || (pState->pContext != pContext) ||
-        !publisher.publishUnpackOutput(&stage, guardedOutput.data(), &publicationState, pPdStruct) || !contextValidator.isCurrent())
+    if (!publisher.bindUnpackSource(&publicationState, pPdStruct) || !publisher.validateAndFinalizeUnpackSource(&publicationState, pPdStruct) || !pLifetime->bOwnerAlive || !pLifetime->setContexts.contains(pContext) || (pState->pContext != pContext) ||
+        !publisher.publishUnpackOutput(&stage, guardedOutput, &publicationState, pPdStruct) || !contextValidator.isCurrent())
         return false;
     pState->nCurrentOffset = stage.size();
     return true;
@@ -2129,7 +2115,6 @@ bool XNSIS::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     QSharedPointer<UNPACK_LIFETIME_STATE> pLifetime = m_pUnpackLifetimeState;
     NsisOperationGuard operationGuard(pLifetime);
     if (!operationGuard.isAcquired()) return false;
-    QPointer<XNSIS> guardedThis(this);
     if (!pState || !pState->baUnpackSourceToken.isEmpty() || !pState->pContext || !isPdStructNotCanceled(pPdStruct) || (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
@@ -2137,13 +2122,12 @@ bool XNSIS::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     UNPACK_CONTEXT *pContext = static_cast<UNPACK_CONTEXT *>(pState->pContext);
     if (!pLifetime->setContexts.contains(pContext) || (pContext->pOwnerState != pState) || !pContext->pOuterSourceDevice ||
         (pContext->pOuterSourceDevice != getDevice()) || (pContext->nOwnerDeviceGeneration != getDeviceGeneration()) || !pContext->pSourceValidator ||
-        (pState->nNumberOfRecords != pContext->listEntries.size()) || !pContext->pSourceValidator->isUnpackSourceCurrent(&pContext->sourceValidationState, pPdStruct) ||
-        !guardedThis || !pLifetime->bOwnerAlive || !pLifetime->setContexts.contains(pContext) || (pState->pContext != pContext))
+        (pState->nNumberOfRecords != pContext->listEntries.size()) || !pContext->pSourceValidator->isUnpackSourceCurrent(&pContext->sourceValidationState, pPdStruct) || !pLifetime->bOwnerAlive || !pLifetime->setContexts.contains(pContext) || (pState->pContext != pContext))
         return false;
     pState->nCurrentIndex++;
     pState->nCurrentOffset = 0;
     const bool bCurrent = pContext->pSourceValidator->isUnpackSourceCurrent(&pContext->sourceValidationState, pPdStruct);
-    return bCurrent && guardedThis && pLifetime->bOwnerAlive && pLifetime->setContexts.contains(pContext) && (pState->pContext == pContext) &&
+    return bCurrent && pLifetime->bOwnerAlive && pLifetime->setContexts.contains(pContext) && (pState->pContext == pContext) &&
            (pState->nCurrentIndex < pState->nNumberOfRecords);
 }
 

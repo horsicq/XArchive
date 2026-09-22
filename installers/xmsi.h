@@ -43,7 +43,7 @@ public:
     };
 
     struct UNPACK_CONTEXT {
-        QPointer<QIODevice> pOuterSourceDevice;
+        QIODevice *pOuterSourceDevice = nullptr;
         quint64 nOwnerDeviceGeneration;
         UNPACK_STATE *pOwnerState = nullptr;
         bool bPayloadMode;
@@ -84,20 +84,11 @@ public:
     // and keeps normal external-CAB resolution restricted to the MSI directory.
     void setExternalCabinetData(const QMap<QString, QByteArray> &mapData);
 
-protected:
-    bool isDeviceReplacementAllowed() const override
-    {
-        return (!m_pUnpackOperationState || !*m_pUnpackOperationState) && m_setUnpackContexts.isEmpty();
-    }
-
 private:
     INTERNAL_INFO _getInternalInfo(PDSTRUCT *pPdStruct);
     INTERNAL_INFO m_internalInfo;
     INTERNAL_INFO _detect(PDSTRUCT *pPdStruct);
     QMap<QString, QByteArray> m_mapExternalCabinetData;
-    QSharedPointer<bool> m_pUnpackOperationState;
-    QSharedPointer<UNPACK_DEFERRED_CLEANUP> m_pUnpackDeferredCleanup;
-    QSet<UNPACK_CONTEXT *> m_setUnpackContexts;
 };
 
 #endif  // XMSI_H

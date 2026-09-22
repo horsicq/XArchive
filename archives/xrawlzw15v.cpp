@@ -23,8 +23,6 @@
 #include "Algos/xrawlzw15vdecoder.h"
 
 #include <QFileInfo>
-#include <QPointer>
-
 #include <new>
 
 namespace {
@@ -62,10 +60,9 @@ XRawLzw15v::XRawLzw15v(QIODevice *pDevice)
 
 QString XRawLzw15v::deriveContainerName()
 {
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource) return RAWLZW_FALLBACK_NAME;
+    QIODevice *guardedSource = getDevice();
 
-    const QString sDeviceName = XBinary::getDeviceFileName(guardedSource.data());
+    const QString sDeviceName = XBinary::getDeviceFileName(guardedSource);
     if (sDeviceName.isEmpty()) return RAWLZW_FALLBACK_NAME;
 
     const QString sFileName = QFileInfo(sDeviceName).fileName();
@@ -78,18 +75,16 @@ bool XRawLzw15v::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XRawLzw15v> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     const qint64 nInputSize = getSize();
-    if (!guardedThis || !guardedSource) return false;
     if ((nInputSize < RAWLZW_MIN_FILE_SIZE) || (nInputSize > RAWLZW_MAX_FILE_SIZE)) return false;
 
     const QByteArray baPrefix = read_array_process(0, RAWLZW_CACHE_PREFIX_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baPrefix.size() != RAWLZW_CACHE_PREFIX_SIZE)) return false;
+    if (baPrefix.size() != RAWLZW_CACHE_PREFIX_SIZE) return false;
 
-    if (m_bContextCached && (m_pCachedDevice == guardedSource.data()) && (m_nCachedSize == nInputSize) && (m_baCachedPrefix == baPrefix)) {
+    if (m_bContextCached && (m_pCachedDevice == guardedSource) && (m_nCachedSize == nInputSize) && (m_baCachedPrefix == baPrefix)) {
         if (!m_bContextValid) return false;
         *pContext = m_context;
         return isPdStructNotCanceled(pPdStruct);
@@ -98,12 +93,12 @@ bool XRawLzw15v::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     m_bContextCached = true;
     m_bContextValid = false;
     m_context = CONTEXT();
-    m_pCachedDevice = guardedSource.data();
+    m_pCachedDevice = guardedSource;
     m_nCachedSize = nInputSize;
     m_baCachedPrefix = baPrefix;
 
     const QByteArray baPacked = read_array_process(RAWLZW_STREAM_OFFSET, nInputSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (static_cast<qint64>(baPacked.size()) != nInputSize)) return false;
+    if (static_cast<qint64>(baPacked.size()) != nInputSize) return false;
 
     // The ONLY detector this format has: decode the whole thing under the
     // strict grammar and refuse anything that does not end exactly on the END
@@ -121,7 +116,6 @@ bool XRawLzw15v::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     context.nStreamSize = nInputSize;
     context.nUncompressedSize = nUncompressedSize;
     context.sFileName = deriveContainerName();
-    if (!guardedThis || !guardedSource) return false;
     if (context.sFileName.isEmpty()) context.sFileName = RAWLZW_FALLBACK_NAME;
 
     if (!isPdStructNotCanceled(pPdStruct)) return false;
@@ -138,7 +132,7 @@ bool XRawLzw15v::isValid(PDSTRUCT *pPdStruct)
 {
     // Detection runs on a device the caller still owns: snapshot the cursor and
     // put it back whatever the outcome.
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
 
     CONTEXT context = {};
@@ -301,16 +295,15 @@ QMap<XBinary::UNPACK_PROP, QVariant> XRawLzw15v::getDefaultUnpackProperties()
 
 bool XRawLzw15v::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XRawLzw15v> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
 
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) {
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) {
         return false;
     }
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -325,8 +318,8 @@ bool XRawLzw15v::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVaria
         return false;
     }
 
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) guardedThis->releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct)) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -342,15 +335,10 @@ bool XRawLzw15v::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVaria
 
     // Binding only stages the source.  Without this finalize the listing works
     // and every extraction silently writes nothing.
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

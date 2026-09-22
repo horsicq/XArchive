@@ -20,7 +20,6 @@
  */
 #include "xtgcfarchive.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -79,8 +78,7 @@ bool XTGCFArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XTGCFArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -88,7 +86,7 @@ bool XTGCFArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nInputSize < TGCF_MIN_SIZE) return false;
 
     const QByteArray baHeader = read_array_process(0, TGCF_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != TGCF_HEADER_SIZE)) return false;
+    if (!guardedSource || (baHeader.size() != TGCF_HEADER_SIZE)) return false;
     if (baHeader.left(4) != QByteArray("TGCF", 4)) return false;
     const uchar *pHeader = (const uchar *)baHeader.constData();
 
@@ -100,7 +98,7 @@ bool XTGCFArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     if (!tgcfRangeWithin(context.nInputSize, TGCF_HEADER_SIZE, nNameLength)) return false;
     const QByteArray baVolume = read_array_process(TGCF_HEADER_SIZE, nNameLength, pPdStruct);
-    if (!guardedThis || !guardedSource || (baVolume.size() != nNameLength)) return false;
+    if (!guardedSource || (baVolume.size() != nNameLength)) return false;
     context.sVolumeName = QString::fromLatin1(baVolume);
 
     qint64 nOffset = TGCF_HEADER_SIZE + nNameLength;
@@ -108,7 +106,7 @@ bool XTGCFArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.bExtended) {
         if (!tgcfRangeWithin(context.nInputSize, nOffset, 4)) return false;
         const QByteArray baList = read_array_process(nOffset, 4, pPdStruct);
-        if (!guardedThis || !guardedSource || (baList.size() != 4)) return false;
+        if (!guardedSource || (baList.size() != 4)) return false;
         nListStart = tgcfBE32((const uchar *)baList.constData(), 0);
         nOffset += 4;
     }
@@ -128,7 +126,7 @@ bool XTGCFArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
         const qint64 nReadSize = qMin(TGCF_RECORD_SIZE + TGCF_NAME_WINDOW, context.nInputSize - nOffset);
         const QByteArray baRecord = read_array_process(nOffset, nReadSize, pPdStruct);
-        if (!guardedThis || !guardedSource || (baRecord.size() != nReadSize)) return false;
+        if (!guardedSource || (baRecord.size() != nReadSize)) return false;
         if (baRecord.left(4) != QByteArray("TGCF", 4)) break;
         const uchar *pRecord = (const uchar *)baRecord.constData();
 
@@ -203,7 +201,7 @@ bool XTGCFArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XTGCFArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -393,11 +391,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XTGCFArchive::getDefaultUnpackProperties()
 
 bool XTGCFArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XTGCFArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -407,8 +404,8 @@ bool XTGCFArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVar
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -421,15 +418,10 @@ bool XTGCFArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVar
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

@@ -13,7 +13,6 @@
 
 #include "xnetwareinstallfile.h"
 
-#include <QPointer>
 #include <QStringList>
 
 #include <cstring>
@@ -286,19 +285,16 @@ bool XNetWareInstallFile::parseChunkChain(const QByteArray &baSource, CONTEXT *p
 bool XNetWareInstallFile::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
-
-    QPointer<XNetWareInstallFile> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     const qint64 nSize = getSize();
-    if (!guardedThis || !guardedSource) return false;
     if ((nSize < NWIF_MIN_FILE_SIZE) || (nSize > NWIF_MAX_FILE_SIZE) || (nSize > static_cast<qint64>((std::numeric_limits<int>::max)()))) {
         return false;
     }
 
     const QByteArray baSource = read_array_process(0, nSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (static_cast<qint64>(baSource.size()) != nSize) || !isPdStructNotCanceled(pPdStruct)) {
+    if ((static_cast<qint64>(baSource.size()) != nSize) || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -307,12 +303,12 @@ bool XNetWareInstallFile::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     *pContext = context;
 
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XNetWareInstallFile::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     // Detection probes a device the caller still owns.
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
 
@@ -387,7 +383,7 @@ QString XNetWareInstallFile::getMIMEString()
 
 QString XNetWareInstallFile::getVersion()
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
 
     CONTEXT context;
@@ -412,11 +408,10 @@ qint64 XNetWareInstallFile::getFileFormatSize(PDSTRUCT *pPdStruct)
 
 bool XNetWareInstallFile::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XNetWareInstallFile> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource) return false;
+    if (!finishUnpack(pState, nullptr)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
@@ -424,7 +419,7 @@ bool XNetWareInstallFile::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PRO
     // Binding only stages the source; validateAndFinalizeUnpackSource() below
     // is what makes the session usable.
     const bool bBound = bindUnpackSource(pState, pPdStruct);
-    if (!guardedThis || !bBound) return false;
+    if (!bBound) return false;
 
     UNPACK_CONTEXT *pContext = new (std::nothrow) UNPACK_CONTEXT;
     if (!pContext) {
@@ -433,8 +428,8 @@ bool XNetWareInstallFile::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PRO
         return false;
     }
 
-    if (!parseContext(&pContext->context, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) guardedThis->releaseUnpackSource(pState);
+    if (!parseContext(&pContext->context, pPdStruct)) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -447,15 +442,13 @@ bool XNetWareInstallFile::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PRO
     pState->nNumberOfRecords = 1;
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
             delete pContext;
             *pState = UNPACK_STATE();
             return false;
-        }
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -467,11 +460,9 @@ bool XNetWareInstallFile::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PRO
 XBinary::ARCHIVERECORD XNetWareInstallFile::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
-    QPointer<XNetWareInstallFile> guardedThis(this);
-
     ARCHIVERECORD result = {};
 
-    if (!operationGuard.isAllowed() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis || (pState->nCurrentIndex < 0) ||
+    if (!operationGuard.isAllowed() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords) || (pState->nNumberOfRecords != 1)) {
         return result;
     }
@@ -509,9 +500,7 @@ XBinary::ARCHIVERECORD XNetWareInstallFile::infoCurrent(UNPACK_STATE *pState, PD
 bool XNetWareInstallFile::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    QPointer<XNetWareInstallFile> guardedThis(this);
-
-    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis ||
+    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) ||
         (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }

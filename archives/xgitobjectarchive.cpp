@@ -15,7 +15,7 @@ class SourcePosition {
 public:
     explicit SourcePosition(QIODevice *device) : d(device), position(device ? device->pos() : -1) {}
     ~SourcePosition() { if (d && position >= 0) d->seek(position); }
-    QPointer<QIODevice> d;
+    QIODevice *d = nullptr;
     qint64 position;
 };
 struct Inflater {
@@ -130,21 +130,19 @@ XBinary *XGitObjectArchive::createInstance(QIODevice *device, bool image, XADDR 
 
 bool XGitObjectArchive::initUnpack(UNPACK_STATE *state, const QMap<UNPACK_PROP, QVariant> &properties, PDSTRUCT *pd)
 {
-    QPointer<XGitObjectArchive> self(this);
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);
     OUTPUT_POLICY policy = {};
     if (!guard.isAcquired() || !state || !resolveUnpackOutputPolicy(properties, &policy) ||
         ((state->pContext || !state->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(state))) return false;
     CONTEXT *old = static_cast<CONTEXT *>(state->pContext);
     releaseUnpackSource(state); *state = UNPACK_STATE(); delete old;
-    if (!self || !bindUnpackSource(state, pd) || !self) return false;
+    if (!bindUnpackSource(state, pd)) return false;
     std::unique_ptr<CONTEXT> context(new (std::nothrow) CONTEXT);
-    if (!context || !probe(getDevice(), &context->size, pd, &context->raw) || !self) {
-        if (self) releaseUnpackSource(state);
+    if (!context || !probe(getDevice(), &context->size, pd, &context->raw)) {
+        releaseUnpackSource(state);
         *state = UNPACK_STATE(); return false;
     }
     const QString name = QFileInfo(getDeviceFileName(getDevice())).fileName();
-    if (!self) return false;
     context->name = outputName(name);
     if (name.size() == 38) {
         bool hex = true;
@@ -153,17 +151,14 @@ bool XGitObjectArchive::initUnpack(UNPACK_STATE *state, const QMap<UNPACK_PROP, 
     }
     state->pContext = context.get(); state->nTotalSize = getSize(); state->nNumberOfRecords = 1; state->mapUnpackProperties = properties;
     const bool finalized = validateAndFinalizeUnpackSource(state, context.get(), pd);
-    if (!self) { context.release(); *state = UNPACK_STATE(); return false; }
     if (!finalized) { releaseUnpackSource(state); *state = UNPACK_STATE(); return false; }
     context.release(); return true;
 }
 
 XBinary::ARCHIVERECORD XGitObjectArchive::infoCurrent(UNPACK_STATE *state, PDSTRUCT *pd)
 {
-    QPointer<XGitObjectArchive> self(this);
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
-    if (!guard.isAllowed() || !state || !state->pContext || !isUnpackSourceCurrent(state, pd) || !self ||
-        state->nNumberOfRecords != 1 || state->nCurrentIndex != 0) return {};
+    if (!guard.isAllowed() || !state || !state->pContext || !isUnpackSourceCurrent(state, pd) || state->nNumberOfRecords != 1 || state->nCurrentIndex != 0) return {};
     const CONTEXT *context = static_cast<const CONTEXT *>(state->pContext);
     ARCHIVERECORD record = {};
     record.mapProperties.insert(FPART_PROP_ORIGINALNAME, context->name);
@@ -176,16 +171,15 @@ XBinary::ARCHIVERECORD XGitObjectArchive::infoCurrent(UNPACK_STATE *state, PDSTR
 
 bool XGitObjectArchive::unpackCurrent(UNPACK_STATE *state, QIODevice *device, PDSTRUCT *pd)
 {
-    QPointer<XGitObjectArchive> self(this);
-    QPointer<QIODevice> destination(device), source(getDevice());
+    QIODevice *destination = device;
+    QIODevice *source = getDevice();
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);
-    if (!guard.isAcquired() || !state || !state->pContext || !destination || !source || !isUnpackOutputSupported(device) || !self ||
-        !destination || !source || !isUnpackSourceCurrent(state, pd) || !self || !destination || !source || state->nNumberOfRecords != 1 ||
-        state->nCurrentIndex != 0 || devicesAlias(source.data(), destination.data())) return false;
+    if (!guard.isAcquired() || !state || !state->pContext || !destination || !source || !isUnpackOutputSupported(device) || !isUnpackSourceCurrent(state, pd) || state->nNumberOfRecords != 1 ||
+        state->nCurrentIndex != 0 || devicesAlias(source, destination)) return false;
     const CONTEXT item = *static_cast<CONTEXT *>(state->pContext);
     OUTPUT_POLICY policy = {};
     if (!resolveUnpackOutputPolicy(state->mapUnpackProperties, &policy) || !isUnpackOutputSizeAllowed(state->mapUnpackProperties, item.size) ||
-        (dynamic_cast<QBuffer *>(destination.data()) && policy.nMaxMemoryOutputSize >= 0 && item.size > policy.nMaxMemoryOutputSize)) {
+        (dynamic_cast<QBuffer *>(destination) && policy.nMaxMemoryOutputSize >= 0 && item.size > policy.nMaxMemoryOutputSize)) {
         setPdStructErrorString(pd, tr("Git blob exceeds the configured output limit")); return false;
     }
     DATAPROCESS_STATE output = {};
@@ -197,26 +191,26 @@ bool XGitObjectArchive::unpackCurrent(UNPACK_STATE *state, QIODevice *device, PD
     QTemporaryFile stage;
     if (!stage.open()) return false;
     output.pDeviceOutput = &stage;
-    SourcePosition saved(source.data());
-    if (!source->seek(0) || !source || !self || !destination) return false;
+    SourcePosition saved(source);
+    if (!source->seek(0) || !source || !destination) return false;
 
     // An already-inflated object: the body follows the NUL that ends the
     // header, and there is no zlib stream to run.
     if (item.raw) {
         const qint64 headerSize = source->size() - item.size;
-        if (headerSize <= 0 || !source->seek(headerSize) || !source || !self || !destination) return false;
+        if (headerSize <= 0 || !source->seek(headerSize) || !source || !destination) return false;
         QByteArray chunk(65536, Qt::Uninitialized);
         qint64 produced = 0;
-        while (produced < item.size && self && source && destination && isPdStructNotCanceled(pd)) {
+        while (produced < item.size && source && destination && isPdStructNotCanceled(pd)) {
             const qint64 want = qMin<qint64>(chunk.size(), item.size - produced);
             const qint64 n = source->read(chunk.data(), want);
-            if (!source || !self || !destination || n <= 0) return false;
+            if (!source || !destination || n <= 0) return false;
             if (_writeDevice(chunk.constData(), qint32(n), &output) != n) return false;
             produced += n;
         }
-        if (!self || !source || !destination || produced != item.size || output.bWriteError || !isPdStructNotCanceled(pd)) return false;
-        if (!isUnpackSourceCurrent(state, pd) || !self || !source || !destination) return false;
-        return publishUnpackOutput(&stage, destination.data(), state, pd);
+        if (!source || !destination || produced != item.size || output.bWriteError || !isPdStructNotCanceled(pd)) return false;
+        if (!isUnpackSourceCurrent(state, pd) || !source || !destination) return false;
+        return publishUnpackOutput(&stage, destination, state, pd);
     }
 
     Inflater z;
@@ -225,10 +219,10 @@ bool XGitObjectArchive::unpackCurrent(UNPACK_STATE *state, QIODevice *device, PD
     QCryptographicHash hash(QCryptographicHash::Sha1);
     bool headerDone = false, ended = false;
     qint64 produced = 0;
-    while (!ended && self && source && destination && isPdStructNotCanceled(pd)) {
+    while (!ended && source && destination && isPdStructNotCanceled(pd)) {
         if (z.stream.avail_in == 0) {
             const qint64 n = source->read(input.data(), input.size());
-            if (!source || !self || !destination || n <= 0) return false;
+            if (!source || !destination || n <= 0) return false;
             z.stream.next_in = reinterpret_cast<Bytef *>(input.data()); z.stream.avail_in = uInt(n);
         }
         z.stream.next_out = reinterpret_cast<Bytef *>(decoded.data()); z.stream.avail_out = uInt(decoded.size());
@@ -258,22 +252,20 @@ bool XGitObjectArchive::unpackCurrent(UNPACK_STATE *state, QIODevice *device, PD
         ended = status == Z_STREAM_END;
         if (!ended && n == 0 && before == z.stream.avail_in) return false;
     }
-    if (!self || !source || !destination || !ended || !headerDone || produced != item.size || output.bWriteError ||
+    if (!source || !destination || !ended || !headerDone || produced != item.size || output.bWriteError ||
         !isPdStructNotCanceled(pd)) return false;
     // The reference implementation checks the nineteen hash bytes represented by a loose object's basename.
     if (!item.expectedHash.isEmpty() && hash.result().mid(1) != item.expectedHash) {
         setPdStructErrorString(pd, tr("Git object name does not match its SHA-1")); return false;
     }
-    if (!isUnpackSourceCurrent(state, pd) || !self || !source || !destination) return false;
-    return publishUnpackOutput(&stage, destination.data(), state, pd);
+    if (!isUnpackSourceCurrent(state, pd) || !source || !destination) return false;
+    return publishUnpackOutput(&stage, destination, state, pd);
 }
 
 bool XGitObjectArchive::moveToNext(UNPACK_STATE *state, PDSTRUCT *pd)
 {
-    QPointer<XGitObjectArchive> self(this);
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);
-    if (!guard.isAcquired() || !state || !state->pContext || !isUnpackSourceCurrent(state, pd) || !self ||
-        state->nNumberOfRecords != 1 || state->nCurrentIndex != 0) return false;
+    if (!guard.isAcquired() || !state || !state->pContext || !isUnpackSourceCurrent(state, pd) || state->nNumberOfRecords != 1 || state->nCurrentIndex != 0) return false;
     ++state->nCurrentIndex; return false;
 }
 bool XGitObjectArchive::finishUnpack(UNPACK_STATE *state, PDSTRUCT *pd)

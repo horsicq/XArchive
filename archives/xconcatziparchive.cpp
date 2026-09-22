@@ -8,7 +8,6 @@
 #include "xzip.h"
 
 #include <QHash>
-#include <QPointer>
 #include <QSet>
 #include <QtEndian>
 
@@ -53,13 +52,12 @@ bool XConcatZipArchive::scanFormat(QList<ENTRY> *pEntries,
         localPdStruct = XBinary::createPdStruct();
         pPdStruct = &localPdStruct;
     }
-    QPointer<XConcatZipArchive> guardedThis(this);
     const qint64 total = getSize();
-    if (!guardedThis || total < 44 || total > MAX_CONCAT_ZIP_SIZE ||
+    if (total < 44 || total > MAX_CONCAT_ZIP_SIZE ||
         total > (std::numeric_limits<int>::max)() ||
         !isPdStructNotCanceled(pPdStruct)) return false;
     const QByteArray data = read_array_process(0, total, pPdStruct);
-    if (!guardedThis || data.size() != total ||
+    if (data.size() != total ||
         !data.startsWith(QByteArrayLiteral("PK\x03\x04"))) return false;
 
     QList<ENTRY> entries;

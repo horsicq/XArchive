@@ -8,7 +8,6 @@
 
 #include <QBuffer>
 #include <QCryptographicHash>
-#include <QPointer>
 #include <QtEndian>
 
 #include <cstring>
@@ -66,7 +65,7 @@ public:
     }
 
 private:
-    QPointer<QIODevice> m_pDevice;
+    QIODevice *m_pDevice;
     qint64 m_nPosition;
     bool m_bRestored;
 };
@@ -319,8 +318,8 @@ bool XRVZArchive::parseContext(QIODevice *pDevice, CONTEXT *pContext,
                                 PDSTRUCT *pPdStruct)
 {
     if (pContext) *pContext = CONTEXT();
-    QPointer<QIODevice> guardedDevice(pDevice);
-    RvzDevicePositionGuard positionGuard(guardedDevice.data());
+    QIODevice *guardedDevice = pDevice;
+    RvzDevicePositionGuard positionGuard(guardedDevice);
     if (!guardedDevice || !pContext || !positionGuard.isValid() ||
         !guardedDevice->isOpen() || !guardedDevice->isReadable() ||
         guardedDevice->isSequential() ||
@@ -331,7 +330,7 @@ bool XRVZArchive::parseContext(QIODevice *pDevice, CONTEXT *pContext,
     const qint64 nSourceSize = guardedDevice->size();
     if (!guardedDevice || (nSourceSize < RVZ_FILE_HEADER_SIZE)) return false;
     const QByteArray baFileHeader = XBinary::read_array_process(
-        guardedDevice.data(), 0, RVZ_FILE_HEADER_SIZE, pPdStruct);
+        guardedDevice, 0, RVZ_FILE_HEADER_SIZE, pPdStruct);
     if (!guardedDevice || (baFileHeader.size() != RVZ_FILE_HEADER_SIZE) ||
         (memcmp(baFileHeader.constData(), "RVZ\x01", 4) != 0)) {
         return false;
@@ -364,7 +363,7 @@ bool XRVZArchive::parseContext(QIODevice *pDevice, CONTEXT *pContext,
         return false;
     }
     const QByteArray baHeader = XBinary::read_array_process(
-        guardedDevice.data(), RVZ_FILE_HEADER_SIZE, nHeaderSize, pPdStruct);
+        guardedDevice, RVZ_FILE_HEADER_SIZE, nHeaderSize, pPdStruct);
     if (!guardedDevice || (baHeader.size() != nHeaderSize) ||
         (QCryptographicHash::hash(baHeader, QCryptographicHash::Sha1) !=
          baFileHeader.mid(0x10, 20))) {
@@ -419,9 +418,9 @@ bool XRVZArchive::parseContext(QIODevice *pDevice, CONTEXT *pContext,
         return false;
     }
     const QByteArray baRawTableCompressed = XBinary::read_array_process(
-        guardedDevice.data(), nRawTableOffset, nRawTableSize, pPdStruct);
+        guardedDevice, nRawTableOffset, nRawTableSize, pPdStruct);
     const QByteArray baGroupTableCompressed = XBinary::read_array_process(
-        guardedDevice.data(), nGroupTableOffset, nGroupTableSize, pPdStruct);
+        guardedDevice, nGroupTableOffset, nGroupTableSize, pPdStruct);
     QByteArray baRawTable;
     QByteArray baGroupTable;
     if (!guardedDevice ||
@@ -561,7 +560,7 @@ bool XRVZArchive::decodeGroup(QIODevice *pDevice, const CONTEXT &context,
                                QByteArray *pResult, PDSTRUCT *pPdStruct)
 {
     if (pResult) pResult->clear();
-    QPointer<QIODevice> guardedDevice(pDevice);
+    QIODevice *guardedDevice = pDevice;
     if (!guardedDevice || !pResult || (nExpectedSize < 1) ||
         (nExpectedSize > RVZ_MAX_CHUNK_SIZE) ||
         !isPdStructNotCanceled(pPdStruct)) {
@@ -575,7 +574,7 @@ bool XRVZArchive::decodeGroup(QIODevice *pDevice, const CONTEXT &context,
     }
 
     const QByteArray baStored = XBinary::read_array_process(
-        guardedDevice.data(), group.nDataOffset, group.nDataSize, pPdStruct);
+        guardedDevice, group.nDataOffset, group.nDataSize, pPdStruct);
     if (!guardedDevice || (baStored.size() != group.nDataSize)) return false;
 
     const qint64 nIntermediateSize = group.nPackedSize
@@ -605,7 +604,7 @@ bool XRVZArchive::writeStage(
     QIODevice *pStage, const char *pData, qint64 nSize,
     const QSharedPointer<OUTPUT_BUDGET> &spBudget, PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedStage(pStage);
+    QIODevice *guardedStage = pStage;
     if (!guardedStage || (nSize < 0) || ((nSize > 0) && !pData)) {
         return false;
     }
@@ -721,10 +720,10 @@ XBinary::OSNAME XRVZArchive::getOsName()
 
 QString XRVZArchive::getVersion()
 {
-    QPointer<QIODevice> guardedDevice(getDevice());
+    QIODevice *guardedDevice = getDevice();
     if (!guardedDevice) return QString();
     const QByteArray baHeader = XBinary::read_array_process(
-        guardedDevice.data(), 0, 8, nullptr);
+        guardedDevice, 0, 8, nullptr);
     if ((baHeader.size() == 8) &&
         (memcmp(baHeader.constData(), "RVZ\x01", 4) == 0) &&
         (qFromBigEndian<quint32>(
@@ -758,8 +757,7 @@ bool XRVZArchive::initUnpack(
     UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties,
     PDSTRUCT *pPdStruct)
 {
-    QPointer<XRVZArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
@@ -768,7 +766,7 @@ bool XRVZArchive::initUnpack(
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) || !guardedSource ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -779,14 +777,13 @@ bool XRVZArchive::initUnpack(
 
     CONTEXT *pContext = new (std::nothrow) CONTEXT;
     if (!pContext) goto failed;
-    if (!parseContext(guardedSource.data(), pContext, pPdStruct) ||
-        !guardedThis || !guardedSource ||
+    if (!parseContext(guardedSource, pContext, pPdStruct) || !guardedSource ||
         !isUnpackOutputSizeAllowed(mapProperties, pContext->nIsoSize)) {
         goto failed;
     }
 
     {
-        QString sBase = fixFileName(getDeviceFileBaseName(guardedSource.data()));
+        QString sBase = fixFileName(getDeviceFileBaseName(guardedSource));
         if (sBase.isEmpty()) sBase = QStringLiteral("gamecube-disc");
         pContext->sFileName = sBase + QStringLiteral(".iso");
         pState->mapUnpackProperties = mapProperties;
@@ -807,7 +804,7 @@ bool XRVZArchive::initUnpack(
     return true;
 
 failed:
-    if (guardedThis) releaseUnpackSource(pState);
+    releaseUnpackSource(pState);
     delete pContext;
     *pState = UNPACK_STATE();
     return false;
@@ -851,14 +848,13 @@ bool XRVZArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
                                 PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    QPointer<XRVZArchive> guardedThis(this);
-    QPointer<QIODevice> guardedOutput(pDevice);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!operationGuard.isAcquired() || !pState || !guardedThis ||
+    QIODevice *guardedOutput = pDevice;
+    QIODevice *guardedSource = getDevice();
+    if (!operationGuard.isAcquired() || !pState ||
         !guardedOutput || !guardedSource || (pState->nCurrentIndex != 0) ||
         (pState->nNumberOfRecords != 1) ||
-        !isUnpackOutputSupported(guardedOutput.data()) ||
-        devicesAlias(guardedSource.data(), guardedOutput.data()) ||
+        !isUnpackOutputSupported(guardedOutput) ||
+        devicesAlias(guardedSource, guardedOutput) ||
         !isUnpackSourceCurrent(pState, pPdStruct) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
@@ -891,7 +887,7 @@ bool XRVZArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
         qint64 nSkip = rawData.nOutputSkip;
         qint64 nRemaining = rawData.nOutputSize;
         for (quint32 i = 0; i < rawData.nGroupCount; ++i) {
-            if (!guardedThis || !guardedOutput || !guardedSource ||
+            if (!guardedOutput || !guardedSource ||
                 !isPdStructNotCanceled(pPdStruct)) {
                 return false;
             }
@@ -909,10 +905,9 @@ bool XRVZArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
             const GROUP_ENTRY &group = pContext->listGroups.at(
                 qint32(rawData.nGroupIndex + i));
             QByteArray baGroup;
-            if (!decodeGroup(guardedSource.data(), *pContext, group,
+            if (!decodeGroup(guardedSource, *pContext, group,
                              nExpectedGroupSize, nDiscGroupOffset, &baGroup,
-                             pPdStruct) ||
-                !guardedThis || !guardedOutput || !guardedSource ||
+                             pPdStruct) || !guardedOutput || !guardedSource ||
                 (baGroup.size() != nExpectedGroupSize)) {
                 return false;
             }
@@ -930,17 +925,17 @@ bool XRVZArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
         if ((nSkip != 0) || (nRemaining != 0)) return false;
     }
 
-    if (!guardedThis || !guardedOutput || !guardedSource ||
+    if (!guardedOutput || !guardedSource ||
         (pStage->pos() != pContext->nIsoSize) ||
         (pStage->size() != pContext->nIsoSize) ||
         !isUnpackSourceCurrent(pState, pPdStruct) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
-    const bool bResult = publishUnpackOutput(pStage.get(), guardedOutput.data(),
+    const bool bResult = publishUnpackOutput(pStage.get(), guardedOutput,
                                              pState, pPdStruct);
-    if (bResult && guardedThis) pState->nCurrentOffset = pContext->nSourceSize;
-    return bResult && guardedThis;
+    if (bResult) pState->nCurrentOffset = pContext->nSourceSize;
+    return bResult;
 }
 
 bool XRVZArchive::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)

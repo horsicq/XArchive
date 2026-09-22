@@ -336,7 +336,6 @@ bool XWARC::_mapTargetURI(const QByteArray &value, QString *pResult)
 
 bool XWARC::_readHeader(qint64 nOffset, QByteArray *pHeader, qint64 *pDataOffset, PDSTRUCT *pPdStruct)
 {
-    QPointer<XWARC> guardedThis(this);
     if (!pHeader || !pDataOffset || (nOffset < 0) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -345,7 +344,7 @@ bool XWARC::_readHeader(qint64 nOffset, QByteArray *pHeader, qint64 *pDataOffset
     *pDataOffset = 0;
 
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || (nOffset >= nTotalSize)) return false;
+    if (nOffset >= nTotalSize) return false;
 
     qint64 nCurrentOffset = nOffset;
     qint32 nSearchOffset = 0;
@@ -354,7 +353,7 @@ bool XWARC::_readHeader(qint64 nOffset, QByteArray *pHeader, qint64 *pDataOffset
         if (nChunkSize <= 0) return false;
 
         const QByteArray chunk = read_array_process(nCurrentOffset, nChunkSize, pPdStruct);
-        if (!guardedThis || (chunk.size() != nChunkSize)) return false;
+        if (chunk.size() != nChunkSize) return false;
 
         const qint32 nOldSize = pHeader->size();
         pHeader->append(chunk);
@@ -375,7 +374,6 @@ bool XWARC::_readHeader(qint64 nOffset, QByteArray *pHeader, qint64 *pDataOffset
 
 bool XWARC::_parseRecord(qint64 nOffset, WARC_ENTRY *pEntry, bool *pVisible, PDSTRUCT *pPdStruct)
 {
-    QPointer<XWARC> guardedThis(this);
     if (!pEntry || !pVisible || (nOffset < 0) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -386,7 +384,7 @@ bool XWARC::_parseRecord(qint64 nOffset, WARC_ENTRY *pEntry, bool *pVisible, PDS
     QByteArray header;
     qint64 nDataOffset = 0;
     const bool bRead = _readHeader(nOffset, &header, &nDataOffset, pPdStruct);
-    if (!guardedThis || !bRead || (header.size() < 12)) return false;
+    if (!bRead || (header.size() < 12)) return false;
 
     QMap<QByteArray, QByteArray> criticalFields;
     QByteArray previousFieldKey;
@@ -481,13 +479,13 @@ bool XWARC::_parseRecord(qint64 nOffset, WARC_ENTRY *pEntry, bool *pVisible, PDS
     }
 
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || (nDataOffset < nOffset) || (nDataOffset > nTotalSize) || ((nTotalSize - nDataOffset) < 4) || (nContentLength > (nTotalSize - nDataOffset - 4))) {
+    if ((nDataOffset < nOffset) || (nDataOffset > nTotalSize) || ((nTotalSize - nDataOffset) < 4) || (nContentLength > (nTotalSize - nDataOffset - 4))) {
         return false;
     }
 
     const qint64 nDataEnd = nDataOffset + nContentLength;
     const QByteArray separator = read_array_process(nDataEnd, 4, pPdStruct);
-    if (!guardedThis || (separator != "\r\n\r\n") || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if ((separator != "\r\n\r\n") || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -511,13 +509,12 @@ bool XWARC::_parseRecord(qint64 nOffset, WARC_ENTRY *pEntry, bool *pVisible, PDS
 
 bool XWARC::_scanArchive(QList<WARC_ENTRY> *pEntries, qint64 *pArchiveEnd, PDSTRUCT *pPdStruct)
 {
-    QPointer<XWARC> guardedThis(this);
     if (pEntries) pEntries->clear();
     if (pArchiveEnd) *pArchiveEnd = 0;
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || (nTotalSize <= 0)) return false;
+    if (nTotalSize <= 0) return false;
 
     qint64 nOffset = 0;
     qint32 nPhysicalRecords = 0;
@@ -531,7 +528,7 @@ bool XWARC::_scanArchive(QList<WARC_ENTRY> *pEntries, qint64 *pArchiveEnd, PDSTR
         WARC_ENTRY entry = {};
         bool bVisible = false;
         const bool bParsed = _parseRecord(nOffset, &entry, &bVisible, pPdStruct);
-        if (!guardedThis || !bParsed || (entry.nNextOffset <= nOffset) || (entry.nNextOffset > nTotalSize)) {
+        if (!bParsed || (entry.nNextOffset <= nOffset) || (entry.nNextOffset > nTotalSize)) {
             if (pEntries) pEntries->clear();
             return false;
         }
@@ -559,7 +556,6 @@ QMap<XBinary::UNPACK_PROP, QVariant> XWARC::getDefaultUnpackProperties()
 
 bool XWARC::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XWARC> guardedThis(this);
     if (m_bUnpackOperationInProgress) return false;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState) return false;
@@ -573,15 +569,14 @@ bool XWARC::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     pState->pContext = nullptr;
     *pState = UNPACK_STATE();
     delete pOldContext;
-    if (!guardedThis || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!isPdStructNotCanceled(pPdStruct)) return false;
 
     const bool bBound = bindUnpackSource(pState, pPdStruct);
-    if (!guardedThis || !bBound) return false;
+    if (!bBound) return false;
     pState->mapUnpackProperties = mapProperties;
 
     QList<WARC_ENTRY> listEntries;
     const bool bScanned = _scanArchive(&listEntries, nullptr, pPdStruct);
-    if (!guardedThis) return false;
     if (!bScanned || !isPdStructNotCanceled(pPdStruct)) {
         releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
@@ -589,7 +584,6 @@ bool XWARC::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     }
 
     const qint64 nTotalSize = getSize();
-    if (!guardedThis) return false;
 
     WARC_UNPACK_CONTEXT *pContext = new (std::nothrow) WARC_UNPACK_CONTEXT;
     if (!pContext) {
@@ -607,7 +601,6 @@ bool XWARC::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     pState->nTotalSize = nTotalSize;
 
     if (!validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
-        if (!guardedThis) return false;
         pState->pContext = nullptr;
         releaseUnpackSource(pState);
         delete pContext;
@@ -620,7 +613,6 @@ bool XWARC::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
 
 XBinary::ARCHIVERECORD XWARC::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XWARC> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return ARCHIVERECORD();
 
@@ -628,10 +620,10 @@ XBinary::ARCHIVERECORD XWARC::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
     if (!pState || !pState->pContext) return result;
 
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent) return result;
+    if (!bSourceCurrent) return result;
 
     const qint64 nCurrentSize = getSize();
-    if (!guardedThis || (pState->nTotalSize != nCurrentSize)) return result;
+    if (pState->nTotalSize != nCurrentSize) return result;
 
     WARC_UNPACK_CONTEXT *pContext = static_cast<WARC_UNPACK_CONTEXT *>(pState->pContext);
     if ((pState->nNumberOfRecords != pContext->listEntries.count()) || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pContext->listEntries.count())) {
@@ -642,7 +634,7 @@ XBinary::ARCHIVERECORD XWARC::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
     WARC_ENTRY parsed = {};
     bool bVisible = false;
     const bool bParsed = _parseRecord(entry.nHeaderOffset, &parsed, &bVisible, pPdStruct);
-    if (!guardedThis || !bParsed || !bVisible || (parsed.nHeaderOffset != entry.nHeaderOffset) || (parsed.nHeaderSize != entry.nHeaderSize) ||
+    if (!bParsed || !bVisible || (parsed.nHeaderOffset != entry.nHeaderOffset) || (parsed.nHeaderSize != entry.nHeaderSize) ||
         (parsed.nDataOffset != entry.nDataOffset) || (parsed.nDataSize != entry.nDataSize) || (parsed.nNextOffset != entry.nNextOffset) ||
         (parsed.baRecordIdHash != entry.baRecordIdHash) || (parsed.sFileName != entry.sFileName) || (parsed.created != entry.created) ||
         (parsed.modified != entry.modified)) {
@@ -667,17 +659,16 @@ XBinary::ARCHIVERECORD XWARC::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
 
 bool XWARC::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XWARC> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState || !pState->pContext) {
         return false;
     }
 
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent) return false;
+    if (!bSourceCurrent) return false;
 
     const qint64 nCurrentSize = getSize();
-    if (!guardedThis || (pState->nTotalSize != nCurrentSize)) return false;
+    if (pState->nTotalSize != nCurrentSize) return false;
 
     WARC_UNPACK_CONTEXT *pContext = static_cast<WARC_UNPACK_CONTEXT *>(pState->pContext);
     if ((pState->nNumberOfRecords != pContext->listEntries.count()) || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
@@ -736,26 +727,24 @@ QList<XBinary::FPART_PROP> XWARC::getAvailableFPARTProperties()
 
 bool XWARC::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XWARC> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
-        if (!guardedThis || !bResult) return false;
-        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(guardedThis->XArchive::getInternalInfo(pPdStruct));
-        if (!guardedThis || !pInfo) return false;
-        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        if (!bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        if (!pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) = *pInfo;
     }
 
-    return guardedThis && bResult;
+    return bResult;
 }
 
 void *XWARC::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XWARC> guardedThis(this);
-    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
-    if (!guardedThis || !bHandled) return nullptr;
-    return &guardedThis->m_internalInfo;
+    const bool bHandled = handleInternalInfo(pPdStruct);
+    if (!bHandled) return nullptr;
+    return &m_internalInfo;
 }
 
 void XWARC::setInternalInfo(void *pInternalInfo)

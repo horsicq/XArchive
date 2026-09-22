@@ -5,7 +5,6 @@
 
 #include "xmiz.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <cstring>
@@ -66,9 +65,8 @@ bool XMiz::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XMiz> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -78,7 +76,7 @@ bool XMiz::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nInputSize < MIZ_MAGIC_SIZE + 2 + MIZ_RECORD_SIZE + MIZ_FOOTER_SIZE) return false;
 
     const QByteArray baMagic = read_array_process(0, MIZ_MAGIC_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baMagic.size() != MIZ_MAGIC_SIZE)) return false;
+    if ((baMagic.size() != MIZ_MAGIC_SIZE)) return false;
 
     const uchar *pMagic = reinterpret_cast<const uchar *>(baMagic.constData());
     if (std::memcmp(pMagic, "DKCL", 4) != 0) return false;
@@ -93,14 +91,14 @@ bool XMiz::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (!mizRangeWithin(context.nInputSize, MIZ_MAGIC_SIZE, nNameFieldSize)) return false;
 
     const QByteArray baName = read_array_process(MIZ_MAGIC_SIZE, nNameFieldSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baName.size() != nNameFieldSize)) return false;
+    if ((baName.size() != nNameFieldSize)) return false;
     if (!mizSplitName(baName, &context.sFileName)) return false;
 
     const qint64 nRecordOffset = MIZ_MAGIC_SIZE + nNameFieldSize;
     if (!mizRangeWithin(context.nInputSize, nRecordOffset, MIZ_RECORD_SIZE)) return false;
 
     const QByteArray baRecord = read_array_process(nRecordOffset, MIZ_RECORD_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baRecord.size() != MIZ_RECORD_SIZE)) return false;
+    if ((baRecord.size() != MIZ_RECORD_SIZE)) return false;
 
     const uchar *pRecord = reinterpret_cast<const uchar *>(baRecord.constData());
     const quint16 nDosTime = qFromLittleEndian<quint16>(pRecord + 0);
@@ -126,7 +124,7 @@ bool XMiz::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     // "MJDK" closes every container; the reference implementation fails the extraction when it is absent,
     // so it is treated here as part of the format gate.
     const QByteArray baFooter = read_array_process(context.nFooterOffset, MIZ_FOOTER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baFooter.size() != MIZ_FOOTER_SIZE)) return false;
+    if ((baFooter.size() != MIZ_FOOTER_SIZE)) return false;
     if (std::memcmp(baFooter.constData(), "MJDK", 4) != 0) return false;
 
     // The payload is a raw PKWARE DCL stream whose first two bytes are the
@@ -134,7 +132,7 @@ bool XMiz::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     // them keeps a container with a foreign payload from reaching the decoder.
     if (context.nCompressedSize >= 2) {
         const QByteArray baPreamble = read_array_process(context.nDataOffset, 2, pPdStruct);
-        if (!guardedThis || !guardedSource || (baPreamble.size() != 2)) return false;
+        if ((baPreamble.size() != 2)) return false;
         const quint8 nLiteralMode = static_cast<quint8>(baPreamble.at(0));
         const quint8 nDictExponent = static_cast<quint8>(baPreamble.at(1));
         if (nLiteralMode > 1) return false;
@@ -151,16 +149,16 @@ bool XMiz::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     *pContext = context;
 
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return isPdStructNotCanceled(pPdStruct);
 }
 
 bool XMiz::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
-    const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
+    QIODevice *guardedSource = getDevice();
+    const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
-    if (guardedSource && (nSavedPosition >= 0)) {
+    if ((nSavedPosition >= 0)) {
         guardedSource->seek(nSavedPosition);
     }
     return bResult;
@@ -344,15 +342,14 @@ QMap<XBinary::UNPACK_PROP, QVariant> XMiz::getDefaultUnpackProperties()
 
 bool XMiz::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XMiz> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) {
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) {
         return false;
     }
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -366,8 +363,8 @@ bool XMiz::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct)) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -381,15 +378,10 @@ bool XMiz::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     pState->nNumberOfRecords = 1;
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

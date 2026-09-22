@@ -6,7 +6,6 @@
 
 #include <QtEndian>
 #include <QHash>
-#include <QPointer>
 #include <QSet>
 #include <QStringList>
 #if (QT_VERSION_MAJOR < 6) || defined(QT_CORE5COMPAT_LIB)
@@ -121,15 +120,14 @@ XBinary *XDiskDoublerArchive::createInstance(QIODevice *pDevice,
 XBinary::ARCHIVERECORD XDiskDoublerArchive::infoCurrent(
     UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XDiskDoublerArchive> guardedThis(this);
     ARCHIVERECORD record = XGameStoreArchiveBase::infoCurrent(pState, pPdStruct);
-    if (!guardedThis || record.mapProperties.isEmpty()) return ARCHIVERECORD();
+    if (record.mapProperties.isEmpty()) return ARCHIVERECORD();
     if (record.mapProperties.value(FPART_PROP_HANDLEMETHOD).toUInt() !=
         HANDLE_METHOD_DISKDOUBLER_LZW) return record;
 
     const qint64 headerOffset = record.mapProperties.value(FPART_PROP_HEADER_OFFSET).toLongLong();
     const QByteArray header = read_array_process(headerOffset, 84, pPdStruct);
-    if (!guardedThis || header.size() != 84 || !isUnpackSourceCurrent(pState, pPdStruct))
+    if (header.size() != 84 || !isUnpackSourceCurrent(pState, pPdStruct))
         return ARCHIVERECORD();
     const uchar *h = reinterpret_cast<const uchar *>(header.constData());
     if (qFromBigEndian<quint32>(h) != DISKDOUBLER_FILE_MAGIC) return ARCHIVERECORD();
@@ -225,10 +223,9 @@ bool XDiskDoublerArchive::scanFormat(QList<ENTRY> *pEntries,
                                      qint64 *pArchiveEnd,
                                      PDSTRUCT *pPdStruct)
 {
-    QPointer<XDiskDoublerArchive> guardedThis(this);
     const qint64 nTotalSize = getSize();
     const FT fileType = getFileType();
-    if (!guardedThis || nTotalSize < 84 ||
+    if (nTotalSize < 84 ||
         nTotalSize > MAX_DISKDOUBLER_PARSE_SIZE ||
         nTotalSize > (std::numeric_limits<int>::max)() ||
         ((fileType != FT_DISK_DOUBLER) &&
@@ -236,7 +233,7 @@ bool XDiskDoublerArchive::scanFormat(QList<ENTRY> *pEntries,
          (fileType != FT_DISK_DOUBLER_DDA2)) ||
         !isPdStructNotCanceled(pPdStruct)) return false;
     const QByteArray baData = read_array_process(0, nTotalSize, pPdStruct);
-    if (!guardedThis || baData.size() != nTotalSize) return false;
+    if (baData.size() != nTotalSize) return false;
     const uchar *pData = reinterpret_cast<const uchar *>(baData.constData());
 
     QSet<QString> usedFiles;
@@ -336,7 +333,7 @@ bool XDiskDoublerArchive::scanFormat(QList<ENTRY> *pEntries,
         bool bTerminated = false;
         qint32 nRecords = 0;
         while (rangeWithin(nTotalSize, nPosition, 6)) {
-            if (!guardedThis || !isPdStructNotCanceled(pPdStruct) ||
+            if (!isPdStructNotCanceled(pPdStruct) ||
                 qFromBigEndian<quint32>(pData + nPosition) != 0x44444132U)
                 return false;
             const quint16 nEntryType =

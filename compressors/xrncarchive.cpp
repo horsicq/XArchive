@@ -5,8 +5,6 @@
 #include "xrncarchive.h"
 
 #include "Algos/xancientdecoder.h"
-
-#include <QPointer>
 #include <QSet>
 #include <QtEndian>
 
@@ -50,16 +48,15 @@ XBinary *XRncArchive::createInstance(QIODevice *pDevice, bool bIsImage,
 bool XRncArchive::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
                              PDSTRUCT *pPdStruct)
 {
-    QPointer<XRncArchive> guardedThis(this);
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || nTotalSize < 24 ||
+    if (nTotalSize < 24 ||
         nTotalSize > (std::numeric_limits<qint32>::max)() ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     const QByteArray header = read_array(0, 11);
-    if (!guardedThis || header.size() != 11 ||
+    if (header.size() != 11 ||
         header.left(4) != QByteArray("RNCA", 4)) {
         return false;
     }
@@ -81,7 +78,7 @@ bool XRncArchive::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
     // accidental RNCA prefix without relying on the undocumented checksum at
     // bytes 6..7.
     const QByteArray directory = read_array(11, nFirstDataOffset - 11);
-    if (!guardedThis || directory.size() != nFirstDataOffset - 11 ||
+    if (directory.size() != nFirstDataOffset - 11 ||
         directory.isEmpty() || directory.at(directory.size() - 1) != 0) {
         return false;
     }
@@ -90,7 +87,7 @@ bool XRncArchive::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
     qint32 nPosition = 0;
     const qint32 nDirectoryRecordsEnd = directory.size() - 1;
     while (nPosition < nDirectoryRecordsEnd) {
-        if (!guardedThis || !isPdStructNotCanceled(pPdStruct) ||
+        if (!isPdStructNotCanceled(pPdStruct) ||
             directoryEntries.size() >= MAX_RECORDS) {
             return false;
         }
@@ -134,7 +131,7 @@ bool XRncArchive::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
     QHash<QString, QString> resolvedDirectories;
 
     for (qint32 i = 0; i < directoryEntries.size(); ++i) {
-        if (!guardedThis || !isPdStructNotCanceled(pPdStruct)) return false;
+        if (!isPdStructNotCanceled(pPdStruct)) return false;
         const RncDirectoryEntry &source = directoryEntries.at(i);
         const qint64 nContainerEnd = (i + 1 < directoryEntries.size())
             ? directoryEntries.at(i + 1).nDataOffset
@@ -146,7 +143,7 @@ bool XRncArchive::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
         }
 
         const QByteArray memberHeader = read_array(source.nDataOffset, 18);
-        if (!guardedThis || memberHeader.size() < 8 ||
+        if (memberHeader.size() < 8 ||
             memberHeader.left(3) != QByteArray("RNC", 3)) {
             return false;
         }
@@ -179,7 +176,7 @@ bool XRncArchive::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
             const QByteArray packed =
                 read_array(source.nDataOffset, nCanonicalSize);
             XAncientDecoder::INFO decoderInfo;
-            if (!guardedThis || packed.size() != nCanonicalSize ||
+            if (packed.size() != nCanonicalSize ||
                 !XAncientDecoder::describe(
                     packed, XAncientDecoder::TYPE_RNC, &decoderInfo) ||
                 decoderInfo.packedSize != nCanonicalSize ||
@@ -217,7 +214,7 @@ bool XRncArchive::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
         entries.append(entry);
     }
 
-    if (!guardedThis || entries.size() != directoryEntries.size() ||
+    if (entries.size() != directoryEntries.size() ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }

@@ -20,7 +20,6 @@
  */
 #include "xtrdosarchive.h"
 
-#include <QPointer>
 
 #include <new>
 
@@ -94,8 +93,7 @@ bool XTRDOSArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XTRDOSArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -104,7 +102,7 @@ bool XTRDOSArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     // The disk descriptor is what makes this format identifiable at all.
     const QByteArray baDescriptor = read_array_process(TRDOS_DESCRIPTOR_OFFSET, TRDOS_DESCRIPTOR_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baDescriptor.size() != TRDOS_DESCRIPTOR_SIZE)) return false;
+    if (!guardedSource || (baDescriptor.size() != TRDOS_DESCRIPTOR_SIZE)) return false;
     const quint8 nDiskType = (quint8)baDescriptor.at(3);
     const quint8 nIdentifier = (quint8)baDescriptor.at(7);
     if (nIdentifier != 0x10) return false;
@@ -112,7 +110,7 @@ bool XTRDOSArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     context.nDiskType = nDiskType;
 
     const QByteArray baCatalogue = read_array_process(0, TRDOS_CATALOGUE_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baCatalogue.size() != TRDOS_CATALOGUE_SIZE)) return false;
+    if (!guardedSource || (baCatalogue.size() != TRDOS_CATALOGUE_SIZE)) return false;
 
     for (qint32 i = 0; i < TRDOS_RECORD_COUNT; ++i) {
         if (!isPdStructNotCanceled(pPdStruct)) return false;
@@ -154,7 +152,7 @@ bool XTRDOSArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XTRDOSArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -307,11 +305,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XTRDOSArchive::getDefaultUnpackProperties()
 
 bool XTRDOSArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XTRDOSArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -321,8 +318,8 @@ bool XTRDOSArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVa
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -335,15 +332,10 @@ bool XTRDOSArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVa
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

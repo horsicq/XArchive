@@ -56,13 +56,12 @@ XBinary *XT64::createInstance(QIODevice *pDevice, bool bIsImage,
 bool XT64::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
                       PDSTRUCT *pPdStruct)
 {
-    QPointer<XT64> guardedThis(this);
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || (nTotalSize < 96) ||
+    if ((nTotalSize < 96) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
     const QByteArray baHeader = read_array_process(0, 64, pPdStruct);
-    if (!guardedThis || (baHeader.size() != 64) ||
+    if ((baHeader.size() != 64) ||
         ((memcmp(baHeader.constData(), "C64 tape image file", 19) != 0) &&
          (memcmp(baHeader.constData(), "C64S tape image file", 20) != 0))) {
         return false;
@@ -84,7 +83,7 @@ bool XT64::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
     if (!rangeWithin(nTotalSize, 64, nDirectorySize)) return false;
     const QByteArray baDirectory =
         read_array_process(64, nDirectorySize, pPdStruct);
-    if (!guardedThis || (baDirectory.size() != nDirectorySize)) return false;
+    if ((baDirectory.size() != nDirectorySize)) return false;
 
     QSet<QString> stUsedFiles;
     QSet<QString> stUsedDirectories;

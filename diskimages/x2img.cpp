@@ -57,14 +57,13 @@ XBinary *X2IMG::createInstance(QIODevice *pDevice, bool bIsImage,
 bool X2IMG::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
                        PDSTRUCT *pPdStruct)
 {
-    QPointer<X2IMG> guardedThis(this);
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || (nTotalSize < 64) ||
+    if ((nTotalSize < 64) ||
         !XBinary::isPdStructNotCanceled(pPdStruct))
         return false;
 
     const QByteArray baHeader = read_array_process(0, 64, pPdStruct);
-    if (!guardedThis || (baHeader.size() != 64) ||
+    if ((baHeader.size() != 64) ||
         (std::memcmp(baHeader.constData(), "2IMG", 4) != 0))
         return false;
     const uchar *pHeader =

@@ -8,7 +8,6 @@
 #include "Algos/xdcldecoder.h"
 
 #include <QFileInfo>
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -78,9 +77,8 @@ bool XDTPacked::parseContext(CONTEXT *pContext, bool bVerifyPayload,
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XDTPacked> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -90,7 +88,7 @@ bool XDTPacked::parseContext(CONTEXT *pContext, bool bVerifyPayload,
 
     const QByteArray baHeader =
         read_array_process(0, DTPACK_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || !dtPackIsMagic(baHeader)) {
+    if (!dtPackIsMagic(baHeader)) {
         return false;
     }
     context.nVersion = DTPACK_VERSION;
@@ -119,14 +117,13 @@ bool XDTPacked::parseContext(CONTEXT *pContext, bool bVerifyPayload,
 
     const QByteArray baPrelude =
         read_array_process(member.nDataOffset, 2, pPdStruct);
-    if (!guardedThis || !guardedSource || !dtPackIsDclPrelude(baPrelude)) {
+    if (!dtPackIsDclPrelude(baPrelude)) {
         return false;
     }
 
     // The container stores no name of its own; the packer overwrites the file in
     // place on the install media, so the container's own name IS the name.
-    const QString sDeviceName = XBinary::getDeviceFileName(guardedSource.data());
-    if (!guardedThis || !guardedSource) return false;
+    const QString sDeviceName = XBinary::getDeviceFileName(guardedSource);
     if (!sDeviceName.isEmpty()) {
         member.sFileName = QFileInfo(sDeviceName).fileName();
     }
@@ -137,8 +134,7 @@ bool XDTPacked::parseContext(CONTEXT *pContext, bool bVerifyPayload,
     if (bVerifyPayload) {
         const QByteArray baPacked = read_array_process(
             member.nDataOffset, member.nCompressedSize, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            (baPacked.size() != member.nCompressedSize)) {
+        if ((baPacked.size() != member.nCompressedSize)) {
             return false;
         }
 
@@ -168,21 +164,19 @@ bool XDTPacked::parseContext(CONTEXT *pContext, bool bVerifyPayload,
     context.listEntries.append(member);
     context.nArchiveSize = context.nInputSize;
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return isPdStructNotCanceled(pPdStruct);
 }
 
 bool XDTPacked::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
-    const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
+    QIODevice *guardedSource = getDevice();
+    const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
     // The magic is six bytes with no length or checksum behind it; only a trial
     // decode that reproduces the declared plaintext length keeps this class from
     // claiming unrelated files and writing garbage at exit 0.
     const bool bResult = parseContext(&context, true, pPdStruct);
-    if (guardedSource && (nSavedPosition >= 0)) {
-        guardedSource->seek(nSavedPosition);
-    }
+    guardedSource->seek(nSavedPosition);
     return bResult;
 }
 
@@ -352,9 +346,8 @@ bool XDTPacked::initUnpack(UNPACK_STATE *pState,
                            const QMap<UNPACK_PROP, QVariant> &mapProperties,
                            PDSTRUCT *pPdStruct)
 {
-    QPointer<XDTPacked> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
     }
@@ -362,7 +355,7 @@ bool XDTPacked::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -379,9 +372,8 @@ bool XDTPacked::initUnpack(UNPACK_STATE *pState,
     }
     // bVerifyPayload = true: the DCL handler takes the plaintext length as an
     // INPUT, so a length the decoder cannot reproduce would silently truncate.
-    if (!parseContext(pContext, true, pPdStruct) || !guardedThis ||
-        !guardedSource || pContext->listEntries.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, true, pPdStruct) || pContext->listEntries.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -398,16 +390,11 @@ bool XDTPacked::initUnpack(UNPACK_STATE *pState,
     pState->pContext = pContext;
 
     const bool bFinalized =
-        guardedThis->validateAndFinalizeUnpackSource(pState, pContext,
+        validateAndFinalizeUnpackSource(pState, pContext,
                                                      pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

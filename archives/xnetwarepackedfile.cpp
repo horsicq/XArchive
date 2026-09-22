@@ -23,8 +23,6 @@
 #include "Algos/xnetwarepackdecoder.h"
 
 #include <QFileInfo>
-#include <QPointer>
-
 #include <cstring>
 #include <limits>
 #include <new>
@@ -93,10 +91,10 @@ bool XNetWarePackedFile::isUsableMemberName(const QByteArray &baName)
 
 QString XNetWarePackedFile::deriveContainerName()
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return NWPF_FALLBACK_NAME;
 
-    const QString sDeviceName = XBinary::getDeviceFileName(guardedSource.data());
+    const QString sDeviceName = XBinary::getDeviceFileName(guardedSource);
     if (sDeviceName.isEmpty()) return NWPF_FALLBACK_NAME;
 
     const QString sFileName = QFileInfo(sDeviceName).fileName();
@@ -109,17 +107,16 @@ bool XNetWarePackedFile::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XNetWarePackedFile> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = getSize();
-    if (!guardedThis || !guardedSource) return false;
+    if (!guardedSource) return false;
     if ((context.nInputSize <= NWPF_HEADER_SIZE) || (context.nInputSize > NWPF_MAX_FILE_SIZE)) return false;
 
     const QByteArray baHeader = read_array_process(0, NWPF_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != NWPF_HEADER_SIZE)) return false;
+    if ((baHeader.size() != NWPF_HEADER_SIZE)) return false;
 
     if (std::memcmp(baHeader.constData(), NWPF_MAGIC, static_cast<size_t>(NWPF_MAGIC_SIZE)) != 0) return false;
     if (static_cast<quint8>(baHeader.at(NWPF_EOF_OFFSET)) != NWPF_EOF_MARKER) return false;
@@ -152,7 +149,7 @@ bool XNetWarePackedFile::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         context.sFileName = QString::fromLatin1(baTrimmed);
     } else {
         context.sFileName = deriveContainerName();
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
     }
 
     // A 15-byte fixed prefix is strong, but not strong enough on its own to
@@ -160,7 +157,7 @@ bool XNetWarePackedFile::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     // to prove the three Huffman tables and the token grammar hold.
     const qint64 nSampleSize = (context.nStreamSize < NWPF_PROBE_INPUT) ? context.nStreamSize : NWPF_PROBE_INPUT;
     const QByteArray baSample = read_array_process(context.nStreamOffset, nSampleSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (static_cast<qint64>(baSample.size()) != nSampleSize)) return false;
+    if ((static_cast<qint64>(baSample.size()) != nSampleSize)) return false;
 
     if (!XNetWarePackDecoder::probe(baSample, context.nUncompressedSize, nSampleSize == context.nStreamSize, NWPF_PROBE_OUTPUT)) {
         return false;
@@ -175,13 +172,13 @@ bool XNetWarePackedFile::isValid(PDSTRUCT *pPdStruct)
 {
     // Detection runs on a device the caller still owns: snapshot the cursor and
     // put it back whatever the outcome.
-    QPointer<QIODevice> guardedSource(getDevice());
-    const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
+    QIODevice *guardedSource = getDevice();
+    const qint64 nSavedPosition = guardedSource->pos();
 
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
 
-    if (guardedSource && (nSavedPosition >= 0)) {
+    if ((nSavedPosition >= 0)) {
         guardedSource->seek(nSavedPosition);
     }
 
@@ -254,13 +251,13 @@ QString XNetWarePackedFile::getMIMEString()
 QString XNetWarePackedFile::getVersion()
 {
     // Probes a device the caller still owns; put its cursor back either way.
-    QPointer<QIODevice> guardedSource(getDevice());
-    const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
+    QIODevice *guardedSource = getDevice();
+    const qint64 nSavedPosition = guardedSource->pos();
 
     CONTEXT context = {};
     const bool bResult = parseContext(&context, nullptr);
 
-    if (guardedSource && (nSavedPosition >= 0)) {
+    if ((nSavedPosition >= 0)) {
         guardedSource->seek(nSavedPosition);
     }
 
@@ -366,16 +363,15 @@ QMap<XBinary::UNPACK_PROP, QVariant> XNetWarePackedFile::getDefaultUnpackPropert
 
 bool XNetWarePackedFile::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XNetWarePackedFile> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
 
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) {
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) {
         return false;
     }
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -390,8 +386,8 @@ bool XNetWarePackedFile::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP
         return false;
     }
 
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) guardedThis->releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct)) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -407,15 +403,10 @@ bool XNetWarePackedFile::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP
 
     // Binding only stages the source.  Without this finalize the listing works
     // and every extraction silently writes nothing.
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

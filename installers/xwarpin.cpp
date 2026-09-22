@@ -6,7 +6,6 @@
 #include "xwarpin.h"
 
 #include <QDateTime>
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -132,13 +131,12 @@ void XWarpIn::fillRecordProperties(const MEMBER &member, QMap<FPART_PROP, QVaria
 
 bool XWarpIn::readMember(qint64 nOffset, const CONTEXT *pContext, MEMBER *pMember, PDSTRUCT *pPdStruct)
 {
-    QPointer<XWarpIn> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pContext || !pMember || !guardedSource) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pContext || !pMember) return false;
     if (!warpinRangeWithin(pContext->nInputSize, nOffset, WARPIN_MEMBER_HEADER_SIZE)) return false;
 
     const QByteArray baRecord = read_array_process(nOffset, WARPIN_MEMBER_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baRecord.size() != WARPIN_MEMBER_HEADER_SIZE)) return false;
+    if ((baRecord.size() != WARPIN_MEMBER_HEADER_SIZE)) return false;
     const uchar *pRecord = reinterpret_cast<const uchar *>(baRecord.constData());
 
     if (qFromLittleEndian<quint16>(pRecord) != WARPIN_MEMBER_MAGIC) return false;
@@ -183,17 +181,15 @@ bool XWarpIn::readMember(qint64 nOffset, const CONTEXT *pContext, MEMBER *pMembe
 bool XWarpIn::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
-
-    QPointer<XWarpIn> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
     if (context.nInputSize < WARPIN_HEADER_SIZE + WARPIN_MEMBER_HEADER_SIZE) return false;
 
     const QByteArray baHeader = read_array_process(0, WARPIN_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != WARPIN_HEADER_SIZE)) return false;
+    if ((baHeader.size() != WARPIN_HEADER_SIZE)) return false;
     const uchar *pHeader = reinterpret_cast<const uchar *>(baHeader.constData());
 
     if (qFromLittleEndian<quint32>(pHeader) != WARPIN_MAGIC) return false;
@@ -222,11 +218,11 @@ bool XWarpIn::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     // rule that separates a real .wpi from a file that merely opens with the
     // magic dword.
     const QByteArray baScriptMagic = read_array_process(context.nScriptOffset, 3, pPdStruct);
-    if (!guardedThis || !guardedSource || (baScriptMagic.size() != 3)) return false;
+    if ((baScriptMagic.size() != 3)) return false;
     if (memcmp(baScriptMagic.constData(), "BZh", 3) != 0) return false;
 
     const QByteArray baTable = read_array_process(context.nPackageTableOffset, nPackages * WARPIN_PACKAGE_ENTRY_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baTable.size() != nPackages * WARPIN_PACKAGE_ENTRY_SIZE)) return false;
+    if ((baTable.size() != nPackages * WARPIN_PACKAGE_ENTRY_SIZE)) return false;
 
     qint64 nTotalMembers = 0;
     for (qint64 i = 0; i < nPackages; i++) {
@@ -252,7 +248,7 @@ bool XWarpIn::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     for (qint64 i = 0; i < nTotalMembers; i++) {
         if (!isPdStructNotCanceled(pPdStruct)) return false;
         MEMBER member = {};
-        if (!readMember(nCurrent, &context, &member, pPdStruct) || !guardedThis || !guardedSource) return false;
+        if (!readMember(nCurrent, &context, &member, pPdStruct)) return false;
         context.listMembers.append(member);
         nCurrent = member.nDataOffset + member.nPackedSize;
     }
@@ -261,12 +257,12 @@ bool XWarpIn::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nArchiveSize > context.nInputSize) return false;
 
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XWarpIn::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -432,11 +428,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XWarpIn::getDefaultUnpackProperties()
 
 bool XWarpIn::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XWarpIn> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -446,8 +441,8 @@ bool XWarpIn::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant>
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -461,15 +456,13 @@ bool XWarpIn::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant>
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
             delete pContext;
             *pState = UNPACK_STATE();
             return false;
-        }
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

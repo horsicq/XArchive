@@ -44,13 +44,12 @@ XBinary *XGRP::createInstance(QIODevice *pDevice, bool bIsImage,
 bool XGRP::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
                       PDSTRUCT *pPdStruct)
 {
-    QPointer<XGRP> guardedThis(this);
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || (nTotalSize < 16) ||
+    if ((nTotalSize < 16) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
     const QByteArray baHeader = read_array_process(0, 16, pPdStruct);
-    if (!guardedThis || (baHeader.size() != 16) ||
+    if ((baHeader.size() != 16) ||
         (memcmp(baHeader.constData(), "KenSilverman", 12) != 0)) {
         return false;
     }
@@ -67,7 +66,7 @@ bool XGRP::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
     QByteArray baDirectory;
     if (nDirectorySize > 0) {
         baDirectory = read_array_process(16, nDirectorySize, pPdStruct);
-        if (!guardedThis || (baDirectory.size() != nDirectorySize))
+        if ((baDirectory.size() != nDirectorySize))
             return false;
     }
 

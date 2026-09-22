@@ -57,13 +57,12 @@ XBinary *XWintermuteDCP::createInstance(QIODevice *pDevice, bool bIsImage,
 bool XWintermuteDCP::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
                                 PDSTRUCT *pPdStruct)
 {
-    QPointer<XWintermuteDCP> guardedThis(this);
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || (nTotalSize < 128) ||
+    if ((nTotalSize < 128) ||
         !XBinary::isPdStructNotCanceled(pPdStruct))
         return false;
     const QByteArray baHeader = read_array_process(0, 132, pPdStruct);
-    if (!guardedThis || (baHeader.size() < 128) ||
+    if ((baHeader.size() < 128) ||
         (std::memcmp(baHeader.constData(), "\xde\xad\xc0\xdeJUNK", 8) != 0))
         return false;
     const uchar *pHeader =
@@ -87,7 +86,7 @@ bool XWintermuteDCP::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
     if (nDirectorySize > (256LL * 1024LL * 1024LL)) return false;
     const QByteArray baDirectory =
         read_array_process(nDirectoryOffset, nDirectorySize, pPdStruct);
-    if (!guardedThis || (baDirectory.size() != nDirectorySize)) return false;
+    if ((baDirectory.size() != nDirectorySize)) return false;
 
     QSet<QString> stUsedFiles;
     QSet<QString> stUsedDirectories;

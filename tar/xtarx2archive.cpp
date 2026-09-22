@@ -23,7 +23,6 @@
 #include "Algos/xtarx2decoder.h"
 
 #include <QFileInfo>
-#include <QPointer>
 
 #include <new>
 #include <string.h>
@@ -51,8 +50,7 @@ bool XTARX2Archive::measureTar(qint64 nOffset, qint64 nSize, qint64 *pnTarSize, 
     if (!pnTarSize) return false;
     *pnTarSize = -1;
 
-    QPointer<XTARX2Archive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
 
     const qint64 nCipherSize = (nSize / XTARX2Decoder::BLOCK_SIZE) * XTARX2Decoder::BLOCK_SIZE;
@@ -78,7 +76,7 @@ bool XTARX2Archive::measureTar(qint64 nOffset, qint64 nSize, qint64 *pnTarSize, 
         }
         const qint64 nChunk = qMin<qint64>(TARX2_CHUNK_SIZE, nCipherSize - nPosition);
         const QByteArray baCipher = read_array_process(nOffset + nPosition, nChunk, pPdStruct);
-        if (!guardedThis || !guardedSource || ((qint64)baCipher.size() != nChunk)) {
+        if (!guardedSource || ((qint64)baCipher.size() != nChunk)) {
             bFailed = true;
             break;
         }
@@ -104,7 +102,7 @@ bool XTARX2Archive::measureTar(qint64 nOffset, qint64 nSize, qint64 *pnTarSize, 
     }
 
     inflateEnd(&stream);
-    if (bFailed || !bFinished || !guardedThis || !guardedSource) return false;
+    if (bFailed || !bFinished || !guardedSource) return false;
 
     *pnTarSize = nProduced;
 
@@ -119,8 +117,7 @@ bool XTARX2Archive::parseContext(CONTEXT *pContext, bool bMeasure, PDSTRUCT *pPd
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XTARX2Archive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -128,7 +125,7 @@ bool XTARX2Archive::parseContext(CONTEXT *pContext, bool bMeasure, PDSTRUCT *pPd
     if ((context.nInputSize < TARX2_MIN_SIZE) || (context.nInputSize > TARX2_MAX_INPUT_SIZE)) return false;
 
     const QByteArray baHeader = read_array_process(0, TARX2_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || ((qint64)baHeader.size() != TARX2_HEADER_SIZE)) return false;
+    if (!guardedSource || ((qint64)baHeader.size() != TARX2_HEADER_SIZE)) return false;
     if (!XTARX2Decoder::isValidHeader(baHeader)) return false;
 
     context.nDataOffset = TARX2_HEADER_SIZE;
@@ -148,20 +145,20 @@ bool XTARX2Archive::parseContext(CONTEXT *pContext, bool bMeasure, PDSTRUCT *pPd
         if ((m_nMeasuredTarSize >= 0) && (m_nMeasuredInputSize == context.nInputSize) && (m_nMeasuredGeneration == nGeneration)) {
             nTarSize = m_nMeasuredTarSize;
         } else if (measureTar(context.nDataOffset, context.nCompressedSize, &nTarSize, pPdStruct)) {
-            if (!guardedThis || !guardedSource) return false;
+            if (!guardedSource) return false;
             m_nMeasuredInputSize = context.nInputSize;
             m_nMeasuredGeneration = nGeneration;
             m_nMeasuredTarSize = nTarSize;
         }
-        if (!guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+        if (!guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
         if (nTarSize >= 0) {
             context.nUncompressedSize = nTarSize;
             context.bSizeKnown = true;
         }
     }
 
-    QString sName = QFileInfo(getDeviceFileName(guardedSource.data())).completeBaseName();
-    if (!guardedThis || !guardedSource) return false;
+    QString sName = QFileInfo(getDeviceFileName(guardedSource)).completeBaseName();
+    if (!guardedSource) return false;
     if (sName.isEmpty()) sName = QStringLiteral("archive");
     context.sFileName = sName + QStringLiteral(".tar");
 
@@ -172,7 +169,7 @@ bool XTARX2Archive::parseContext(CONTEXT *pContext, bool bMeasure, PDSTRUCT *pPd
 
 bool XTARX2Archive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -318,11 +315,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XTARX2Archive::getDefaultUnpackProperties()
 
 bool XTARX2Archive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XTARX2Archive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -332,8 +328,8 @@ bool XTARX2Archive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVa
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, true, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, true, pPdStruct) || !guardedSource) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -346,15 +342,10 @@ bool XTARX2Archive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVa
     pState->nNumberOfRecords = 1;
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

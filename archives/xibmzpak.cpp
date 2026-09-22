@@ -7,7 +7,6 @@
 
 #include "Algos/xdcldecoder.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -125,14 +124,12 @@ bool XIBMZPak::scanMemberSize(MEMBER *pMember, PDSTRUCT *pPdStruct)
 {
     if (!pMember || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XIBMZPak> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
 
     const QByteArray baPacked = read_array_process(
         pMember->nDataOffset, pMember->nCompressedSize, pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        baPacked.size() != pMember->nCompressedSize) {
+    if (baPacked.size() != pMember->nCompressedSize) {
         return false;
     }
 
@@ -163,9 +160,8 @@ bool XIBMZPak::parseContext(CONTEXT *pContext, bool bScanSizes,
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XIBMZPak> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -176,15 +172,14 @@ bool XIBMZPak::parseContext(CONTEXT *pContext, bool bScanSizes,
 
     const QByteArray baHeader =
         read_array_process(0, IBMZPAK_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || !ibmZPakIsMagic(baHeader)) {
+    if (!ibmZPakIsMagic(baHeader)) {
         return false;
     }
     context.nVersion = IBMZPAK_VERSION;
 
     const QByteArray baCount = read_array_process(
         context.nInputSize - IBMZPAK_COUNT_SIZE, IBMZPAK_COUNT_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        baCount.size() != IBMZPAK_COUNT_SIZE) {
+    if (baCount.size() != IBMZPAK_COUNT_SIZE) {
         return false;
     }
     const qint32 nNumberOfMembers = static_cast<qint32>(
@@ -207,8 +202,7 @@ bool XIBMZPak::parseContext(CONTEXT *pContext, bool bScanSizes,
 
     const QByteArray baDirectory =
         read_array_process(nDirectoryOffset, nDirectorySize, pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        baDirectory.size() != nDirectorySize) {
+    if (baDirectory.size() != nDirectorySize) {
         return false;
     }
 
@@ -251,7 +245,7 @@ bool XIBMZPak::parseContext(CONTEXT *pContext, bool bScanSizes,
 
         const QByteArray baPrelude =
             read_array_process(member.nDataOffset, 2, pPdStruct);
-        if (!guardedThis || !guardedSource || baPrelude.size() != 2 ||
+        if (baPrelude.size() != 2 ||
             !ibmZPakIsDclPrelude(baPrelude)) {
             return false;
         }
@@ -273,23 +267,23 @@ bool XIBMZPak::parseContext(CONTEXT *pContext, bool bScanSizes,
             // size unknown; methodToHandleMethod() then reports it as UNKNOWN so
             // extraction refuses it instead of writing a truncated file.
             scanMemberSize(&context.listMembers[i], pPdStruct);
-            if (!guardedThis || !guardedSource) return false;
+            if (!guardedSource) return false;
         }
     }
 
     context.nArchiveSize = context.nInputSize;
     context.nFirstMemberOffset = context.listMembers.first().nDataOffset;
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return isPdStructNotCanceled(pPdStruct);
 }
 
 bool XIBMZPak::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
-    const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
+    QIODevice *guardedSource = getDevice();
+    const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
     const bool bResult = parseContext(&context, false, pPdStruct);
-    if (guardedSource && (nSavedPosition >= 0)) {
+    if ((nSavedPosition >= 0)) {
         guardedSource->seek(nSavedPosition);
     }
     return bResult;
@@ -494,9 +488,8 @@ bool XIBMZPak::initUnpack(UNPACK_STATE *pState,
                           const QMap<UNPACK_PROP, QVariant> &mapProperties,
                           PDSTRUCT *pPdStruct)
 {
-    QPointer<XIBMZPak> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
     }
@@ -504,8 +497,7 @@ bool XIBMZPak::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
-        !isPdStructNotCanceled(pPdStruct)) {
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -521,9 +513,8 @@ bool XIBMZPak::initUnpack(UNPACK_STATE *pState,
     }
     // bScanSizes = true: the extraction path needs the plaintext length of every
     // member, and the container does not store it anywhere.
-    if (!parseContext(pContext, true, pPdStruct) || !guardedThis ||
-        !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, true, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -540,16 +531,11 @@ bool XIBMZPak::initUnpack(UNPACK_STATE *pState,
     pState->pContext = pContext;
 
     const bool bFinalized =
-        guardedThis->validateAndFinalizeUnpackSource(pState, pContext,
+        validateAndFinalizeUnpackSource(pState, pContext,
                                                      pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

@@ -5,7 +5,6 @@
 
 #include "xbsn.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -77,8 +76,7 @@ bool XBSN::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XBSN> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -90,7 +88,7 @@ bool XBSN::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const QByteArray baArchiveHeader =
         read_array_process(0, BSN_ARCHIVE_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource ||
+    if (!guardedSource ||
         baArchiveHeader.size() != BSN_ARCHIVE_HEADER_SIZE) {
         return false;
     }
@@ -110,7 +108,7 @@ bool XBSN::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         const QByteArray baPrefix = read_array_process(
             nOffset, qMin<qint64>(BSN_MEMBER_PREFIX_SIZE, nRemaining),
             pPdStruct);
-        if (!guardedThis || !guardedSource ||
+        if (!guardedSource ||
             baPrefix.size() < BSN_TRAILER_SIZE) {
             return false;
         }
@@ -125,7 +123,7 @@ bool XBSN::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
             context.nFirstMemberOffset =
                 context.listMembers.first().nHeaderOffset;
             *pContext = context;
-            return guardedThis && guardedSource &&
+            return guardedSource &&
                    isPdStructNotCanceled(pPdStruct);
         }
 
@@ -152,7 +150,7 @@ bool XBSN::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
         const QByteArray baHeader =
             read_array_process(nOffset, nHeaderSize, pPdStruct);
-        if (!guardedThis || !guardedSource ||
+        if (!guardedSource ||
             baHeader.size() != nHeaderSize) {
             return false;
         }
@@ -232,8 +230,7 @@ bool XBSN::ensureDictionary(CONTEXT *pContext, qint32 nIndex,
         return false;
     }
 
-    QPointer<XBSN> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
 
     // Records are consumed in index order by every extraction path, so the
@@ -266,20 +263,20 @@ bool XBSN::ensureDictionary(CONTEXT *pContext, qint32 nIndex,
                 baPlain = read_array_process(
                     member.nDataOffset + member.nCompressedSize - nTailSize,
                     nTailSize, pPdStruct);
-                if (!guardedThis || !guardedSource ||
+                if (!guardedSource ||
                     (baPlain.size() != nTailSize)) {
-                    if (guardedThis) pContext->nDictionaryIndex = -1;
+                    pContext->nDictionaryIndex = -1;
                     return false;
                 }
             } else {
                 const QByteArray baPacked = read_array_process(
                     member.nDataOffset, member.nCompressedSize, pPdStruct);
-                if (!guardedThis || !guardedSource ||
+                if (!guardedSource ||
                     (baPacked.size() != member.nCompressedSize) ||
                     !XBSNDecoder::decode(baPacked, member.nUncompressedSize,
                                          pContext->baDictionary, &baPlain,
                                          pPdStruct)) {
-                    if (guardedThis) pContext->nDictionaryIndex = -1;
+                    pContext->nDictionaryIndex = -1;
                     return false;
                 }
             }
@@ -295,12 +292,12 @@ bool XBSN::ensureDictionary(CONTEXT *pContext, qint32 nIndex,
         ++pContext->nDictionaryIndex;
     }
 
-    return guardedThis && guardedSource;
+    return guardedSource;
 }
 
 bool XBSN::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition =
         guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
@@ -522,8 +519,7 @@ bool XBSN::initUnpack(UNPACK_STATE *pState,
                       const QMap<UNPACK_PROP, QVariant> &mapProperties,
                       PDSTRUCT *pPdStruct)
 {
-    QPointer<XBSN> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
@@ -532,7 +528,7 @@ bool XBSN::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) || !guardedSource ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -548,9 +544,9 @@ bool XBSN::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis ||
+    if (!parseContext(pContext, pPdStruct) ||
         !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -568,16 +564,11 @@ bool XBSN::initUnpack(UNPACK_STATE *pState,
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(
+    const bool bFinalized = validateAndFinalizeUnpackSource(
         pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

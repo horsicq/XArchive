@@ -29,7 +29,7 @@ private:
     // normal XArchive snapshot, including its complete backing-device chain.
     friend class XVirtualDiskArchive;
     XNTFSArchive(QIODevice *identityDevice, QIODevice *logicalDevice);
-    QPointer<QIODevice> m_logicalDevice;
+    QIODevice *m_logicalDevice = nullptr;
     bool m_mapped = false;
 };
 #endif

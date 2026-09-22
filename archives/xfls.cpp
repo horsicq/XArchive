@@ -6,7 +6,6 @@
 #include "xfls.h"
 
 #include <QHash>
-#include <QPointer>
 #include <QSet>
 
 namespace {
@@ -72,9 +71,8 @@ XBinary *XFLS::createInstance(QIODevice *pDevice, bool bIsImage,
 bool XFLS::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
                       PDSTRUCT *pPdStruct)
 {
-    QPointer<XFLS> guardedThis(this);
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || nTotalSize < (2 + 2 * FLS_RECORD_SIZE + 9) ||
+    if (nTotalSize < (2 + 2 * FLS_RECORD_SIZE + 9) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -113,7 +111,7 @@ bool XFLS::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
     qint64 nExpectedDataOffset = nDataStart;
 
     for (qint64 i = 1; i < nRecords; ++i) {
-        if (!guardedThis || !isPdStructNotCanceled(pPdStruct)) return false;
+        if (!isPdStructNotCanceled(pPdStruct)) return false;
         const qint64 nRecordOffset = 2 + i * FLS_RECORD_SIZE;
         // Only the first four bytes of the member tag are invariant.
         // Across the 485-file reference set (7040 records) the fifth is
@@ -192,7 +190,7 @@ bool XFLS::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
         nExpectedDataOffset += nCompressedSize + nTailSize;
     }
 
-    if (!guardedThis || !isPdStructNotCanceled(pPdStruct) ||
+    if (!isPdStructNotCanceled(pPdStruct) ||
         listEntries.size() != (nRecords - 1) ||
         nExpectedDataOffset > nTotalSize) {
         return false;

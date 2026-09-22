@@ -6,8 +6,6 @@
 #include "xnpack.h"
 
 #include <QFileInfo>
-#include <QPointer>
-
 #include <cstring>
 #include <new>
 
@@ -46,16 +44,15 @@ bool XNPack::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XNPack> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
     if (context.nInputSize < NPACK_MIN_FILE_SIZE) return false;
 
     const QByteArray baHeader = read_array_process(0, NPACK_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != NPACK_HEADER_SIZE)) return false;
+    if ((baHeader.size() != NPACK_HEADER_SIZE)) return false;
     if (std::memcmp(baHeader.constData(), NPACK_MAGIC, sizeof(NPACK_MAGIC)) != 0) return false;
 
     context.nStreamOffset = NPACK_HEADER_SIZE;
@@ -66,7 +63,7 @@ bool XNPack::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     const qint64 nProbeSize = bFullProbe ? context.nStreamSize : NPACK_PARTIAL_PROBE_INPUT;
 
     const QByteArray baPayload = read_array_process(context.nStreamOffset, nProbeSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baPayload.size() != nProbeSize)) return false;
+    if ((baPayload.size() != nProbeSize)) return false;
 
     XNPackDecoder::PROBE_RESULT probe = {};
 
@@ -92,8 +89,8 @@ bool XNPack::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (!probe.bOutputCapped) return false;
     }
 
-    QString sName = XBinary::getDeviceFileName(guardedSource.data());
-    if (!guardedThis || !guardedSource) return false;
+    QString sName = XBinary::getDeviceFileName(guardedSource);
+    if (!guardedSource) return false;
     if (!sName.isEmpty()) sName = QFileInfo(sName).fileName();
     // NPack keeps no name of its own; the installer encodes it by replacing the
     // last character of the original name with '$', and the reference extractor
@@ -108,11 +105,11 @@ bool XNPack::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XNPack::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
-    const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
+    QIODevice *guardedSource = getDevice();
+    const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
-    if (guardedSource && (nSavedPosition >= 0)) {
+    if ((nSavedPosition >= 0)) {
         guardedSource->seek(nSavedPosition);
     }
     return bResult;
@@ -369,15 +366,14 @@ QMap<XBinary::UNPACK_PROP, QVariant> XNPack::getDefaultUnpackProperties()
 
 bool XNPack::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XNPack> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) {
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) {
         return false;
     }
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -391,8 +387,8 @@ bool XNPack::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> 
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct)) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -406,15 +402,10 @@ bool XNPack::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> 
     pState->nNumberOfRecords = 1;
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -457,7 +448,7 @@ bool XNPack::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     if (!pContext) return false;
 
     // Advance FIRST, then report.  With a single record the correct behaviour is
-    // 0 -> 1 plus a false return; refusing to advance would make the listing
+    // 0 -> 1 plus a false return true; refusing to advance would make the listing
     // come back empty.
     ++pState->nCurrentIndex;
     if (pState->nCurrentIndex < pState->nNumberOfRecords) {

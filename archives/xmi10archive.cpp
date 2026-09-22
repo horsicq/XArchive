@@ -38,9 +38,8 @@ XBinary *XMI10Archive::createInstance(QIODevice *pDevice, bool bIsImage,
 bool XMI10Archive::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
                               PDSTRUCT *pPdStruct)
 {
-    QPointer<XMI10Archive> guardedThis(this);
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || (nTotalSize < (MI10_HEADER_SIZE +
+    if ((nTotalSize < (MI10_HEADER_SIZE +
                                        MI10_STREAM_PREFIX_SIZE + 1)) ||
         !XBinary::isPdStructNotCanceled(pPdStruct))
         return false;
@@ -57,7 +56,7 @@ bool XMI10Archive::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
 
         const QByteArray header = read_array_process(
             nOffset, MI10_HEADER_SIZE, pPdStruct);
-        if (!guardedThis || (header.size() != MI10_HEADER_SIZE) ||
+        if ((header.size() != MI10_HEADER_SIZE) ||
             (std::memcmp(header.constData(), "MI10", 4) != 0))
             return false;
         const uchar *p = reinterpret_cast<const uchar *>(header.constData());
@@ -84,7 +83,7 @@ bool XMI10Archive::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
         // collisions with arbitrary files beginning with the printable magic.
         const QByteArray prefix = read_array_process(
             nDataOffset, MI10_STREAM_PREFIX_SIZE, pPdStruct);
-        if (!guardedThis || (prefix.size() != MI10_STREAM_PREFIX_SIZE) ||
+        if ((prefix.size() != MI10_STREAM_PREFIX_SIZE) ||
             (static_cast<quint8>(prefix.at(0)) != 0))
             return false;
 

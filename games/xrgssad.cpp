@@ -87,11 +87,11 @@ void decryptChunk(uchar *pData, qint32 nSize, quint32 *pnKey)
 }
 
 struct RGSSAD_CANCELED {
-    const QPointer<XRgssad> &owner;
-    const QPointer<QIODevice> &source;
-    const QPointer<QIODevice> &output;
+    XRgssad *owner;
+    QIODevice *source;
+    QIODevice *output;
     XBinary::PDSTRUCT *pPdStruct;
-    RGSSAD_CANCELED(const QPointer<XRgssad> &ownerRef, const QPointer<QIODevice> &sourceRef, const QPointer<QIODevice> &outputRef, XBinary::PDSTRUCT *pPd)
+    RGSSAD_CANCELED(XRgssad *ownerRef, QIODevice *sourceRef, QIODevice *outputRef, XBinary::PDSTRUCT *pPd)
         : owner(ownerRef), source(sourceRef), output(outputRef), pPdStruct(pPd)
     {
     }
@@ -197,15 +197,13 @@ bool XRgssad::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 
 bool XRgssad::readContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
-    QPointer<XRgssad> owner(this);
-    QPointer<QIODevice> source(getDevice());
+    QIODevice *source = getDevice();
     if (!pContext || !source || !source->isOpen() || !source->isReadable() || source->isSequential() || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
     const qint64 nTotalSize = getSize();
-    if (!owner || !source || (nTotalSize < 8)) return false;
+    if (!source || (nTotalSize < 8)) return false;
     const QByteArray baHeader = read_array_process(0, 8, pPdStruct);
-    if (!owner) return false;
     const qint32 nVersion = readVersionByte(baHeader);
     if (nVersion == 0) return false;
 
@@ -217,14 +215,13 @@ bool XRgssad::readContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     } catch (const std::bad_alloc &) {
         return false;
     }
-    if (!owner || !bResult || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!bResult || !isPdStructNotCanceled(pPdStruct)) return false;
     *pContext = parsed;
     return true;
 }
 
 bool XRgssad::readVersion1(qint64 nTotalSize, CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
-    QPointer<XRgssad> owner(this);
     quint32 nKey = KeyVersion1;
     qint64 nPos = 8;
     QList<MEMBER> listMembers;
@@ -232,13 +229,13 @@ bool XRgssad::readVersion1(qint64 nTotalSize, CONTEXT *pContext, PDSTRUCT *pPdSt
         if (!isPdStructNotCanceled(pPdStruct) || (listMembers.size() >= MaxMembers)) return false;
         if (nTotalSize - nPos < 4) return false;
         QByteArray baField = read_array_process(nPos, 4, pPdStruct);
-        if (!owner || (baField.size() != 4)) return false;
+        if ((baField.size() != 4)) return false;
         const qint64 nNameLength = le32(reinterpret_cast<const uchar *>(baField.constData())) ^ nKey;
         nKey = advanceKey(nKey);
         nPos += 4;
         if ((nNameLength < 1) || (nNameLength > MaxNameLength) || (nTotalSize - nPos < nNameLength + 4)) return false;
         QByteArray baName = read_array_process(nPos, nNameLength, pPdStruct);
-        if (!owner || (baName.size() != nNameLength)) return false;
+        if ((baName.size() != nNameLength)) return false;
         uchar *pName = reinterpret_cast<uchar *>(baName.data());
         for (qint64 i = 0; i < nNameLength; i++) {
             pName[i] ^= (uchar)(nKey & 0xFF);
@@ -247,7 +244,7 @@ bool XRgssad::readVersion1(qint64 nTotalSize, CONTEXT *pContext, PDSTRUCT *pPdSt
         }
         nPos += nNameLength;
         baField = read_array_process(nPos, 4, pPdStruct);
-        if (!owner || (baField.size() != 4)) return false;
+        if ((baField.size() != 4)) return false;
         const qint64 nSize = le32(reinterpret_cast<const uchar *>(baField.constData())) ^ nKey;
         nKey = advanceKey(nKey);
         nPos += 4;
@@ -269,10 +266,9 @@ bool XRgssad::readVersion1(qint64 nTotalSize, CONTEXT *pContext, PDSTRUCT *pPdSt
 
 bool XRgssad::readVersion3(qint64 nTotalSize, CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
-    QPointer<XRgssad> owner(this);
     if (nTotalSize < 12 + 4) return false;
     const QByteArray baBase = read_array_process(8, 4, pPdStruct);
-    if (!owner || (baBase.size() != 4)) return false;
+    if ((baBase.size() != 4)) return false;
     const quint32 nKey = le32(reinterpret_cast<const uchar *>(baBase.constData())) * 9 + 3;
     qint64 nPos = 12;
     qint64 nArchiveEnd = 12;
@@ -281,13 +277,13 @@ bool XRgssad::readVersion3(qint64 nTotalSize, CONTEXT *pContext, PDSTRUCT *pPdSt
         if (!isPdStructNotCanceled(pPdStruct) || (listMembers.size() >= MaxMembers)) return false;
         if (nTotalSize - nPos < 4) return false;
         const QByteArray baOffset = read_array_process(nPos, 4, pPdStruct);
-        if (!owner || (baOffset.size() != 4)) return false;
+        if ((baOffset.size() != 4)) return false;
         const qint64 nOffset = le32(reinterpret_cast<const uchar *>(baOffset.constData())) ^ nKey;
         nPos += 4;
         if (nOffset == 0) break;
         if (nTotalSize - nPos < 12) return false;
         const QByteArray baFields = read_array_process(nPos, 12, pPdStruct);
-        if (!owner || (baFields.size() != 12)) return false;
+        if ((baFields.size() != 12)) return false;
         const uchar *pFields = reinterpret_cast<const uchar *>(baFields.constData());
         const qint64 nSize = le32(pFields) ^ nKey;
         const quint32 nDataKey = le32(pFields + 4) ^ nKey;
@@ -295,7 +291,7 @@ bool XRgssad::readVersion3(qint64 nTotalSize, CONTEXT *pContext, PDSTRUCT *pPdSt
         nPos += 12;
         if ((nNameLength < 1) || (nNameLength > MaxNameLength) || (nTotalSize - nPos < nNameLength)) return false;
         QByteArray baName = read_array_process(nPos, nNameLength, pPdStruct);
-        if (!owner || (baName.size() != nNameLength)) return false;
+        if ((baName.size() != nNameLength)) return false;
         uchar *pName = reinterpret_cast<uchar *>(baName.data());
         for (qint64 i = 0; i < nNameLength; i++) {
             pName[i] ^= (uchar)(nKey >> (8 * (i % 4)));
@@ -326,7 +322,6 @@ bool XRgssad::readVersion3(qint64 nTotalSize, CONTEXT *pContext, PDSTRUCT *pPdSt
 bool XRgssad::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);
-    QPointer<XRgssad> owner(this);
     if (!guard.isAcquired() || !pState || ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState))) return false;
     CONTEXT *pOld = static_cast<CONTEXT *>(pState->pContext);
     releaseUnpackSource(pState);
@@ -334,9 +329,10 @@ bool XRgssad::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant>
     *pState = UNPACK_STATE();
     if (!isPdStructNotCanceled(pPdStruct)) return false;
     const bool bBound = bindUnpackSource(pState, pPdStruct);
-    if (!owner || !bBound) return false;
+    if (!bBound) return false;
     CONTEXT *pContext = new (std::nothrow) CONTEXT;
     OUTPUT_POLICY policy = {};
+    XRgssad *owner = this;
     const bool bValid = pContext && resolveUnpackOutputPolicy(mapProperties, &policy) && readContext(pContext, pPdStruct);
     if (!owner) {
         delete pContext;
@@ -354,7 +350,6 @@ bool XRgssad::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant>
     pState->nTotalSize = pContext->nArchiveEnd;
     pState->mapUnpackProperties = mapProperties;
     const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!owner) return false;
     if (!bFinalized) {
         pState->pContext = nullptr;
         releaseUnpackSource(pState);
@@ -368,9 +363,8 @@ bool XRgssad::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant>
 XBinary::ARCHIVERECORD XRgssad::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
-    QPointer<XRgssad> owner(this);
     ARCHIVERECORD record = {};
-    if (!guard.isAllowed() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || !owner) return record;
+    if (!guard.isAllowed() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct)) return record;
     const CONTEXT *pContext = static_cast<const CONTEXT *>(pState->pContext);
     const qint32 nCount = pContext->listMembers.size();
     if ((pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= nCount) || (pState->nNumberOfRecords != nCount)) return record;
@@ -387,17 +381,17 @@ XBinary::ARCHIVERECORD XRgssad::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdS
 bool XRgssad::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);
-    QPointer<XRgssad> owner(this);
-    QPointer<QIODevice> source(getDevice());
-    QPointer<QIODevice> output(pDevice);
-    if (!guard.isAcquired() || !pState || !pState->pContext || !source || !output || !isUnpackSourceCurrent(pState, pPdStruct) || !owner || !source ||
+    QIODevice *source = getDevice();
+    QIODevice *output = pDevice;
+    XRgssad *owner = this;
+    if (!guard.isAcquired() || !pState || !pState->pContext || !source || !output || !isUnpackSourceCurrent(pState, pPdStruct) || !source ||
         !output) {
         return false;
     }
-    const bool bSupported = isUnpackOutputSupported(output.data());
-    if (!owner || !source || !output || !bSupported) return false;
-    const bool bAliases = devicesAlias(source.data(), output.data());
-    if (!owner || !source || !output || bAliases) return false;
+    const bool bSupported = isUnpackOutputSupported(output);
+    if (!source || !output || !bSupported) return false;
+    const bool bAliases = devicesAlias(source, output);
+    if (!source || !output || bAliases) return false;
     const CONTEXT *pContext = static_cast<const CONTEXT *>(pState->pContext);
     const qint32 nCount = pContext->listMembers.size();
     if ((pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= nCount) || (pState->nNumberOfRecords != nCount)) return false;
@@ -442,15 +436,14 @@ bool XRgssad::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *
     if (canceled() || (stage.size() != member.nSize) || !stage.flush() || !stage.seek(0) || !isUnpackSourceCurrent(pState, pPdStruct) || canceled()) {
         return false;
     }
-    const bool bPublished = publishUnpackOutput(&stage, output.data(), pState, pPdStruct);
-    return owner && output && bPublished;
+    const bool bPublished = publishUnpackOutput(&stage, output, pState, pPdStruct);
+    return output && bPublished;
 }
 
 bool XRgssad::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);
-    QPointer<XRgssad> owner(this);
-    if (!guard.isAcquired() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || !owner) return false;
+    if (!guard.isAcquired() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct)) return false;
     const qint64 nCount = static_cast<CONTEXT *>(pState->pContext)->listMembers.size();
     if ((pState->nNumberOfRecords != nCount) || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= nCount)) return false;
     ++pState->nCurrentIndex;

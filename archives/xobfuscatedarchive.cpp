@@ -25,7 +25,6 @@
 #include "Algos/xdiskimagedecoder.h"
 
 #include <QFileInfo>
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -52,16 +51,15 @@ bool XObfuscatedArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XObfuscatedArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
     if (context.nInputSize < OBFUSCATED_MIN_SIZE) return false;
 
     const QByteArray baHeader = read_array_process(0, OBFUSCATED_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != OBFUSCATED_HEADER_SIZE)) return false;
+    if ((baHeader.size() != OBFUSCATED_HEADER_SIZE)) return false;
 
     const QByteArray baZip = QByteArray(OBFUSCATED_ZIP_PLAIN, 4);
     const QByteArray baArj = QByteArray(OBFUSCATED_ARJ_PLAIN, 2);
@@ -82,7 +80,7 @@ bool XObfuscatedArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (sExtension == QStringLiteral(".arj")) {
         QByteArray baProbe;
         if (!XObfuscationDecoder::decode(read_array_process(0, 12, pPdStruct), method, &baProbe, pPdStruct)) return false;
-        if (!guardedThis || !guardedSource || (baProbe.size() != 12)) return false;
+        if ((baProbe.size() != 12)) return false;
         // ARJ basic header: u16 magic, u16 header size, u8 first header size,
         // u8 archiver version, u8 minimum version, u8 host OS (0..11)
         if ((quint8)baProbe.at(4) < 0x1e) return false;
@@ -97,8 +95,8 @@ bool XObfuscatedArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     context.baProperty = XObfuscationDecoder::methodToProperty(method);
     context.sReportedMethod = XObfuscationDecoder::methodToString(method);
 
-    QString sName = QFileInfo(getDeviceFileName(guardedSource.data())).fileName();
-    if (!guardedThis || !guardedSource) return false;
+    QString sName = QFileInfo(getDeviceFileName(guardedSource)).fileName();
+    if (!guardedSource) return false;
     if (sName.isEmpty()) sName = QStringLiteral("archive");
     context.sFileName = sName + sExtension;
 
@@ -109,12 +107,12 @@ bool XObfuscatedArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XObfuscatedArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
-    if (guardedSource) guardedSource->seek(nSavedPosition);
+    guardedSource->seek(nSavedPosition);
 
     return bResult;
 }
@@ -256,11 +254,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XObfuscatedArchive::getDefaultUnpackPropert
 
 bool XObfuscatedArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XObfuscatedArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -270,8 +267,8 @@ bool XObfuscatedArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct)) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -284,15 +281,10 @@ bool XObfuscatedArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP
     pState->nNumberOfRecords = 1;
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

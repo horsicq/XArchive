@@ -13,8 +13,6 @@
 
 #include "xpcommos2.h"
 
-#include <QPointer>
-
 #include <limits>
 #include <new>
 
@@ -53,23 +51,19 @@ bool XPCommOS2::probeGate(PDSTRUCT *pPdStruct)
     // match against yet), and a complete file always ends with the two block
     // terminators.  Over 18806 files of other formats this gate alone left
     // nothing for the full walk to reject.
-    QPointer<XPCommOS2> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     const qint64 nSize = getSize();
-    if (!guardedThis || !guardedSource || (nSize < PCOMM_MIN_FILE_SIZE) || (nSize > PCOMM_MAX_FILE_SIZE)) {
+    if ((nSize < PCOMM_MIN_FILE_SIZE) || (nSize > PCOMM_MAX_FILE_SIZE)) {
         return false;
     }
 
     const quint8 nFirst = read_uint8(0);
-    if (!guardedThis || !guardedSource) return false;
     if (nFirst < 0xE1) return false;
 
     const quint8 nLast = read_uint8(nSize - 1);
-    if (!guardedThis || !guardedSource) return false;
     const quint8 nPrevious = read_uint8(nSize - 2);
-    if (!guardedThis || !guardedSource) return false;
 
     return (nLast == 0xE0) && (nPrevious == 0xE0);
 }
@@ -78,19 +72,18 @@ bool XPCommOS2::readSource(QByteArray *pbaSource, PDSTRUCT *pPdStruct)
 {
     if (!pbaSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XPCommOS2> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     const qint64 nSize = getSize();
-    if (!guardedThis || !guardedSource || (nSize < PCOMM_MIN_FILE_SIZE) || (nSize > PCOMM_MAX_FILE_SIZE) ||
+    if ((nSize < PCOMM_MIN_FILE_SIZE) || (nSize > PCOMM_MAX_FILE_SIZE) ||
         (nSize > static_cast<qint64>((std::numeric_limits<int>::max)()))) {
         return false;
     }
 
     *pbaSource = read_array_process(0, nSize, pPdStruct);
 
-    return guardedThis && guardedSource && (static_cast<qint64>(pbaSource->size()) == nSize) && isPdStructNotCanceled(pPdStruct);
+    return (static_cast<qint64>(pbaSource->size()) == nSize) && isPdStructNotCanceled(pPdStruct);
 }
 
 QString XPCommOS2::sourceMemberName()
@@ -99,14 +92,11 @@ QString XPCommOS2::sourceMemberName()
     // device, with its mangled last character.  The missing character is not
     // recoverable from the stream, so the name is reported exactly as found
     // rather than guessed at.
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource) return QString();
+    QIODevice *guardedSource = getDevice();
 
-    QString sResult = XBinary::getDeviceFileBaseName(guardedSource.data());
-    if (!guardedSource) return QString();
+    QString sResult = XBinary::getDeviceFileBaseName(guardedSource);
 
-    const QString sSuffix = XBinary::getDeviceFileCompleteSuffix(guardedSource.data());
-    if (!guardedSource) return QString();
+    const QString sSuffix = XBinary::getDeviceFileCompleteSuffix(guardedSource);
 
     if (!sSuffix.isEmpty()) {
         sResult += QString(".") + sSuffix;
@@ -124,15 +114,14 @@ bool XPCommOS2::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XPCommOS2> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
 
     // Cheap bounded shape test first, so the whole-file read below only ever
     // runs on a genuine candidate.
-    if (!probeGate(pPdStruct) || !guardedThis || !guardedSource) return false;
+    if (!probeGate(pPdStruct)) return false;
 
     QByteArray baSource;
-    if (!readSource(&baSource, pPdStruct) || !guardedThis || !guardedSource) return false;
+    if (!readSource(&baSource, pPdStruct)) return false;
 
     CONTEXT context;
     context.nInputSize = static_cast<qint64>(baSource.size());
@@ -145,7 +134,7 @@ bool XPCommOS2::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nUncompressedSize <= 0) return false;
 
     context.sFileName = sourceMemberName();
-    if (!guardedThis || !guardedSource || context.sFileName.isEmpty()) return false;
+    if (context.sFileName.isEmpty()) return false;
 
     *pContext = context;
 
@@ -156,7 +145,7 @@ bool XPCommOS2::isValid(PDSTRUCT *pPdStruct)
 {
     // Detection probes a device the caller still owns; read_array_process
     // moves its cursor, so the position has to be put back.
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
 
     CONTEXT context;
@@ -259,10 +248,9 @@ QMap<XBinary::UNPACK_PROP, QVariant> XPCommOS2::getDefaultUnpackProperties()
 
 bool XPCommOS2::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XPCommOS2> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
 
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) {
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) {
         return false;
     }
 
@@ -270,7 +258,7 @@ bool XPCommOS2::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
         return false;
     }
 
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -280,7 +268,7 @@ bool XPCommOS2::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
     // Staging the source is only half of the contract: without the matching
     // validateAndFinalizeUnpackSource() below, listing works and extraction
     // silently yields nothing.
-    if (!bindUnpackSource(pState, pPdStruct) || !guardedThis || !guardedSource) return false;
+    if (!bindUnpackSource(pState, pPdStruct)) return false;
 
     UNPACK_CONTEXT *pContext = new (std::nothrow) UNPACK_CONTEXT;
     if (!pContext) {
@@ -289,8 +277,8 @@ bool XPCommOS2::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
         return false;
     }
 
-    if (!parseContext(&pContext->context, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) guardedThis->releaseUnpackSource(pState);
+    if (!parseContext(&pContext->context, pPdStruct)) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -303,15 +291,9 @@ bool XPCommOS2::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
     pState->nNumberOfRecords = 1;
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
-        pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -323,9 +305,8 @@ bool XPCommOS2::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
 XBinary::ARCHIVERECORD XPCommOS2::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
-    QPointer<XPCommOS2> guardedThis(this);
 
-    if (!operationGuard.isAllowed() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis ||
+    if (!operationGuard.isAllowed() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) ||
         (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords) || (pState->nNumberOfRecords != 1)) {
         return ARCHIVERECORD();
     }
@@ -353,9 +334,8 @@ XBinary::ARCHIVERECORD XPCommOS2::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pP
 bool XPCommOS2::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    QPointer<XPCommOS2> guardedThis(this);
 
-    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis ||
+    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) ||
         (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }

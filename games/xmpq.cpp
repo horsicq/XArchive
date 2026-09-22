@@ -24,7 +24,6 @@
 
 #include <QBuffer>
 #include <QHash>
-#include <QPointer>
 #include <QSet>
 #include <QtEndian>
 #include <algorithm>
@@ -81,7 +80,7 @@ public:
     }
 
 private:
-    QPointer<QIODevice> m_pDevice;
+    QIODevice *m_pDevice;
     qint64 m_nPosition;
     bool m_bRestored;
 };
@@ -720,8 +719,8 @@ QString mpqUniqueName(const QString &sName, QSet<QString> *pUsedNames)
 
 struct XMPQ::DECODE_IO_CONTEXT
 {
-    QPointer<XMPQ> guardedArchive;
-    QPointer<QIODevice> guardedOutput;
+    XMPQ *guardedArchive;
+    QIODevice *guardedOutput;
     const MPQ_HEADER *pHeader;
     const MPQ_ENTRY *pEntry;
     PDSTRUCT *pPdStruct;
@@ -790,7 +789,7 @@ bool XMPQ::writeDecodedData(DECODE_IO_CONTEXT *pContext,
         !XBinary::isPdStructNotCanceled(pContext->pPdStruct)) return false;
     if (baData.isEmpty()) return true;
     const qint64 nWritten = safeWriteData(
-        pContext->guardedOutput.data(), pContext->nOutputOffset,
+        pContext->guardedOutput, pContext->nOutputOffset,
         baData.constData(), baData.size(), pContext->pPdStruct);
     if (!pContext->guardedArchive || !pContext->guardedOutput ||
         (nWritten != baData.size())) return false;
@@ -814,18 +813,17 @@ bool XMPQ::scanArchive(MPQ_HEADER *pHeader, QList<MPQ_ENTRY> *pEntries,
 {
     if (pHeader) *pHeader = MPQ_HEADER();
     if (pEntries) pEntries->clear();
-    QPointer<XMPQ> guardedThis(this);
     MpqDevicePositionGuard positionGuard(getDevice());
     if (!positionGuard.isValid() ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
     const qint64 nDeviceSize = getSize();
-    if (!guardedThis || (nDeviceSize < 32)) return false;
+    if ((nDeviceSize < 32)) return false;
     const qint64 nSearchSize = qMin<qint64>(
         nDeviceSize, MPQ_HEADER_SEARCH_LIMIT + 4);
     const QByteArray baSearch = read_array_process(
         0, nSearchSize, pPdStruct);
-    if (!guardedThis || (baSearch.size() != nSearchSize) ||
+    if ((baSearch.size() != nSearchSize) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
     QList<qint64> listCandidates;
@@ -852,7 +850,7 @@ bool XMPQ::scanArchive(MPQ_HEADER *pHeader, QList<MPQ_ENTRY> *pEntries,
         const qint64 nProbeSize = qMin<qint64>(nAvailable, 44);
         const QByteArray baHeader = read_array_process(
             nCandidate, nProbeSize, pPdStruct);
-        if (!guardedThis || (baHeader.size() != nProbeSize)) return false;
+        if ((baHeader.size() != nProbeSize)) return false;
         if ((baHeader.size() < 32) ||
             (memcmp(baHeader.constData(), "MPQ\x1A", 4) != 0)) {
             continue;
@@ -926,12 +924,10 @@ bool XMPQ::scanArchive(MPQ_HEADER *pHeader, QList<MPQ_ENTRY> *pEntries,
             nHashAbsolute, static_cast<qint64>(nHashBytes), pPdStruct);
         QByteArray baBlockTable = read_array_process(
             nBlockAbsolute, static_cast<qint64>(nBlockBytes), pPdStruct);
-        if (!guardedThis ||
-            (baHashTable.size() != static_cast<qint64>(nHashBytes)) ||
+        if ((baHashTable.size() != static_cast<qint64>(nHashBytes)) ||
             (baBlockTable.size() != static_cast<qint64>(nBlockBytes)) ||
             !mpqDecryptBlock(&baHashTable, MPQ_HASH_TABLE_KEY) ||
             !mpqDecryptBlock(&baBlockTable, MPQ_BLOCK_TABLE_KEY)) {
-            if (!guardedThis) return false;
             continue;
         }
 
@@ -946,10 +942,8 @@ bool XMPQ::scanArchive(MPQ_HEADER *pHeader, QList<MPQ_ENTRY> *pEntries,
             baHiBlockTable = read_array_process(
                 nHiBlockAbsolute, static_cast<qint64>(nHiBlockBytes),
                 pPdStruct);
-            if (!guardedThis ||
-                (baHiBlockTable.size() !=
+            if ((baHiBlockTable.size() !=
                  static_cast<qint64>(nHiBlockBytes))) {
-                if (!guardedThis) return false;
                 continue;
             }
         }
@@ -1072,7 +1066,6 @@ bool XMPQ::scanArchive(MPQ_HEADER *pHeader, QList<MPQ_ENTRY> *pEntries,
                     const bool bDecoded = decodeEntry(
                         header, listFileEntry, &listFileBuffer,
                         mapListLimits, pPdStruct);
-                    if (!guardedThis) return false;
                     if (bDecoded) {
                         baListFile.replace('\0', '\n');
                         const QList<QByteArray> listLines =
@@ -1108,14 +1101,14 @@ bool XMPQ::scanArchive(MPQ_HEADER *pHeader, QList<MPQ_ENTRY> *pEntries,
         }
 
         const bool bRestored = positionGuard.restore();
-        if (!guardedThis || !bRestored ||
+        if (!bRestored ||
             !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
         if (pHeader) *pHeader = header;
         if (pEntries) *pEntries = listEntries;
         return true;
     }
 
-    return guardedThis && positionGuard.restore() &&
+    return positionGuard.restore() &&
            XBinary::isPdStructNotCanceled(pPdStruct) && false;
 }
 
@@ -1125,9 +1118,8 @@ bool XMPQ::decodeEntry(
     const QMap<UNPACK_PROP, QVariant> &mapProperties,
     PDSTRUCT *pPdStruct)
 {
-    QPointer<XMPQ> guardedThis(this);
-    QPointer<QIODevice> guardedOutput(pOutputDevice);
-    if (!guardedThis || !guardedOutput ||
+    QIODevice *guardedOutput = pOutputDevice;
+    if (!guardedOutput ||
         !XBinary::isPdStructNotCanceled(pPdStruct) ||
         !XBinary::isUnpackOutputSizeAllowed(
             mapProperties, entry.block.nUncompressedSize) ||
@@ -1146,7 +1138,7 @@ bool XMPQ::decodeEntry(
     const bool bEncrypted = (nFlags & MPQ_FILE_ENCRYPTED) != 0;
     const bool bCompressed = (nFlags & MPQ_FILE_COMPRESS_MASK) != 0;
     const bool bSingleUnit = (nFlags & MPQ_FILE_SINGLE_UNIT) != 0;
-    DECODE_IO_CONTEXT ioContext = {guardedThis, guardedOutput, &header,
+    DECODE_IO_CONTEXT ioContext = {this, guardedOutput, &header,
                                    &entry, pPdStruct, 0};
 
     if (nFileSize == 0) return nCompressedSize == 0;
@@ -1192,7 +1184,7 @@ bool XMPQ::decodeEntry(
         }
         if (!writeDecodedData(&ioContext, baDecoded))
             return mpqFail(pPdStruct, tr("Cannot write unpacked MPQ member"));
-        return guardedThis && guardedOutput &&
+        return guardedOutput &&
                (ioContext.nOutputOffset == nFileSize);
     }
 
@@ -1306,7 +1298,7 @@ bool XMPQ::decodeEntry(
                 return mpqFail(pPdStruct, tr("Cannot write unpacked MPQ sector"));
             nRemaining -= nExpected;
         }
-        return guardedThis && guardedOutput && (nRemaining == 0) &&
+        return guardedOutput && (nRemaining == 0) &&
                (ioContext.nOutputOffset == nFileSize);
     }
 
@@ -1342,7 +1334,7 @@ bool XMPQ::decodeEntry(
         nRemaining -= nChunkSize;
         nSectorIndex++;
     }
-    return guardedThis && guardedOutput &&
+    return guardedOutput &&
            (ioContext.nOutputOffset == nFileSize);
 }
 
@@ -1438,7 +1430,6 @@ bool XMPQ::initUnpack(
     const QMap<UNPACK_PROP, QVariant> &mapProperties,
     PDSTRUCT *pPdStruct)
 {
-    QPointer<XMPQ> guardedThis(this);
     if (m_bUnpackOperationInProgress) return false;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState) return false;
@@ -1453,16 +1444,16 @@ bool XMPQ::initUnpack(
     pState->pContext = nullptr;
     *pState = UNPACK_STATE();
     delete pOldContext;
-    if (!guardedThis || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!isPdStructNotCanceled(pPdStruct)) return false;
 
-    if (!bindUnpackSource(pState, pPdStruct) || !guardedThis) return false;
+    if (!bindUnpackSource(pState, pPdStruct)) return false;
 
     MPQ_HEADER header = {};
     QList<MPQ_ENTRY> listEntries;
     const bool bScanned = scanArchive(&header, &listEntries, pPdStruct);
-    if (!guardedThis || !bScanned ||
+    if (!bScanned ||
         !isPdStructNotCanceled(pPdStruct)) {
-        if (guardedThis) {
+        {
             releaseUnpackSource(pState);
             *pState = UNPACK_STATE();
         }
@@ -1482,14 +1473,12 @@ bool XMPQ::initUnpack(
     pState->nCurrentIndex = 0;
     pState->nNumberOfRecords = listEntries.count();
     pState->nTotalSize = getSize();
-    if (!guardedThis) return false;
     pState->nCurrentOffset = listEntries.isEmpty()
         ? static_cast<qint64>(header.nHeaderOffset + header.nArchiveSize)
         : listEntries.constFirst().nHashEntryOffset;
     pState->mapUnpackProperties = mapProperties;
 
     if (!validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
-        if (!guardedThis) return false;
         pState->pContext = nullptr;
         releaseUnpackSource(pState);
         delete pContext;
@@ -1502,17 +1491,16 @@ bool XMPQ::initUnpack(
 XBinary::ARCHIVERECORD XMPQ::infoCurrent(
     UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XMPQ> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(
         &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed() || !pState || !pState->pContext)
         return ARCHIVERECORD();
-    if (!isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis ||
+    if (!isUnpackSourceCurrent(pState, pPdStruct) ||
         !isPdStructNotCanceled(pPdStruct)) return ARCHIVERECORD();
 
     MPQ_UNPACK_CONTEXT *pContext =
         static_cast<MPQ_UNPACK_CONTEXT *>(pState->pContext);
-    if ((pState->nTotalSize != getSize()) || !guardedThis ||
+    if ((pState->nTotalSize != getSize()) ||
         (pState->nNumberOfRecords != pContext->listEntries.count()) ||
         (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pContext->listEntries.count())) {
@@ -1584,17 +1572,16 @@ XBinary::ARCHIVERECORD XMPQ::infoCurrent(
 bool XMPQ::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
                          PDSTRUCT *pPdStruct)
 {
-    QPointer<XMPQ> guardedThis(this);
     MpqDevicePositionGuard positionGuard(getDevice());
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    QPointer<QIODevice> guardedOutput(pDevice);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedOutput = pDevice;
+    QIODevice *guardedSource = getDevice();
     if (!positionGuard.isValid() || !operationGuard.isAcquired() ||
         !pState || !pState->pContext || !guardedOutput ||
-        !guardedSource || !isUnpackOutputSupported(guardedOutput.data()) ||
-        XBinary::devicesAlias(guardedSource.data(), guardedOutput.data()) ||
+        !guardedSource || !isUnpackOutputSupported(guardedOutput) ||
+        XBinary::devicesAlias(guardedSource, guardedOutput) ||
         !isPdStructNotCanceled(pPdStruct) ||
-        !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis) {
+        !isUnpackSourceCurrent(pState, pPdStruct)) {
         return false;
     }
 
@@ -1603,7 +1590,7 @@ bool XMPQ::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
     if ((pState->nNumberOfRecords != pContext->listEntries.count()) ||
         (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pContext->listEntries.count()) ||
-        (pState->nTotalSize != getSize()) || !guardedThis) {
+        (pState->nTotalSize != getSize())) {
         return false;
     }
     const MPQ_ENTRY entry =
@@ -1618,15 +1605,15 @@ bool XMPQ::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
 
     std::unique_ptr<QIODevice> pStage(XBinary::createFileBuffer(
         entry.block.nUncompressedSize, pPdStruct));
-    if (!pStage || !guardedThis || !guardedOutput || !guardedSource)
+    if (!pStage || !guardedOutput || !guardedSource)
         return false;
     const bool bDecoded = decodeEntry(
         pContext->header, entry, pStage.get(),
         pState->mapUnpackProperties, pPdStruct);
-    if (!guardedThis || !guardedOutput || !guardedSource || !bDecoded ||
+    if (!guardedOutput || !guardedSource || !bDecoded ||
         !isPdStructNotCanceled(pPdStruct) ||
         (pStage->size() != entry.block.nUncompressedSize) ||
-        !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis) {
+        !isUnpackSourceCurrent(pState, pPdStruct)) {
         return false;
     }
     if (pState->spOutputBudget) {
@@ -1653,8 +1640,8 @@ bool XMPQ::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
         }
     }
     const bool bPublished = publishUnpackOutput(
-        pStage.get(), guardedOutput.data(), pState, pPdStruct);
-    if (!guardedThis || !guardedOutput || !guardedSource || !bPublished ||
+        pStage.get(), guardedOutput, pState, pPdStruct);
+    if (!guardedOutput || !guardedSource || !bPublished ||
         !positionGuard.restore()) {
         return false;
     }
@@ -1664,10 +1651,9 @@ bool XMPQ::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
 
 bool XMPQ::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XMPQ> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState || !pState->pContext ||
-        !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis ||
+        !isUnpackSourceCurrent(pState, pPdStruct) ||
         !isPdStructNotCanceled(pPdStruct)) return false;
     MPQ_UNPACK_CONTEXT *pContext =
         static_cast<MPQ_UNPACK_CONTEXT *>(pState->pContext);
@@ -1725,27 +1711,25 @@ QList<XBinary::FPART_PROP> XMPQ::getAvailableFPARTProperties()
 
 bool XMPQ::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XMPQ> guardedThis(this);
     bool bResult = true;
     if (!isInternalInfoHandled()) {
-        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
-        if (!guardedThis || !bResult) return false;
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        if (!bResult) return false;
         XArchive::INTERNAL_INFO *pInfo =
             static_cast<XArchive::INTERNAL_INFO *>(
-                guardedThis->XArchive::getInternalInfo(pPdStruct));
-        if (!guardedThis || !pInfo) return false;
+                XArchive::getInternalInfo(pPdStruct));
+        if (!pInfo) return false;
         static_cast<XArchive::INTERNAL_INFO &>(
-            guardedThis->m_internalInfo) = *pInfo;
+            m_internalInfo) = *pInfo;
     }
-    return guardedThis && bResult;
+    return bResult;
 }
 
 void *XMPQ::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XMPQ> guardedThis(this);
-    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
-    if (!guardedThis || !bHandled) return nullptr;
-    return &guardedThis->m_internalInfo;
+    const bool bHandled = handleInternalInfo(pPdStruct);
+    if (!bHandled) return nullptr;
+    return &m_internalInfo;
 }
 
 void XMPQ::setInternalInfo(void *pInternalInfo)

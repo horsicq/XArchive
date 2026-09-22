@@ -5,7 +5,6 @@
 
 #include "xnextstepdiskimage.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -31,8 +30,7 @@ bool XNextStepDiskImage::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XNextStepDiskImage> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -40,7 +38,7 @@ bool XNextStepDiskImage::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nInputSize < NEXTSTEP_HEADER_SIZE + qint64(NEXTSTEP_SECTOR_SIZE)) return false;
 
     const QByteArray baHeader = read_array_process(0, NEXTSTEP_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != NEXTSTEP_HEADER_SIZE)) return false;
+    if (!guardedSource || (baHeader.size() != NEXTSTEP_HEADER_SIZE)) return false;
     const uchar *pRaw = reinterpret_cast<const uchar *>(baHeader.constData());
 
     context.nVersion = qFromBigEndian<quint32>(pRaw);
@@ -81,19 +79,19 @@ bool XNextStepDiskImage::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nImageSize > context.nInputSize - context.nImageOffset) return false;
     context.nArchiveSize = context.nImageOffset + context.nImageSize;
 
-    context.sFileName = XBinary::getDeviceFileBaseName(guardedSource.data());
+    context.sFileName = XBinary::getDeviceFileBaseName(guardedSource);
     if (context.sFileName.isEmpty()) {
         context.sFileName = QStringLiteral("disk");
     }
     context.sFileName.append(QStringLiteral(".img"));
 
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XNextStepDiskImage::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -242,11 +240,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XNextStepDiskImage::getDefaultUnpackPropert
 
 bool XNextStepDiskImage::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XNextStepDiskImage> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -256,8 +253,8 @@ bool XNextStepDiskImage::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -271,15 +268,10 @@ bool XNextStepDiskImage::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP
     pState->nNumberOfRecords = 1;
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

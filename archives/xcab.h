@@ -21,7 +21,6 @@
 #ifndef XCAB_H
 #define XCAB_H
 
-#include <QPointer>
 #include <QSet>
 
 #include "xarchive.h"

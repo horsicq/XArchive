@@ -6,7 +6,6 @@
 #include "xgentee.h"
 
 #include <QDateTime>
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -42,28 +41,25 @@ XGentee::~XGentee()
 // carry the same eight bytes in its code or resources out of the format.
 bool XGentee::locatePayload(qint64 *pnPayloadOffset, PDSTRUCT *pPdStruct)
 {
-    QPointer<XGentee> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pnPayloadOffset || !guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pnPayloadOffset || guardedSource->isSequential()) return false;
 
     const qint64 nInputSize = guardedSource->size();
     if (nInputSize < GENTEE_MIN_PAYLOAD) return false;
 
     XPE pe(getDevice());
-    if (!pe.isValid(pPdStruct) || !guardedThis || !guardedSource) return false;
+    if (!pe.isValid(pPdStruct)) return false;
     const qint64 nOverlayOffset = pe.getOverlayOffset(pPdStruct);
-    if (!guardedThis || !guardedSource) return false;
     if ((nOverlayOffset < 0) || (nOverlayOffset + GENTEE_HEADER_SIZE > nInputSize)) return false;
 
     qint64 nSearchSize = nInputSize - nOverlayOffset;
     if (nSearchSize > GENTEE_MAX_SEARCH) nSearchSize = GENTEE_MAX_SEARCH;
     const qint64 nFound = find_signature(nOverlayOffset, nSearchSize, GENTEE_SIGNATURE, nullptr, pPdStruct);
-    if (!guardedThis || !guardedSource) return false;
     if (nFound < nOverlayOffset + 4) return false;
 
     const qint64 nPayloadOffset = nFound - 4;
     const QByteArray baHeader = read_array_process(nPayloadOffset, GENTEE_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != GENTEE_HEADER_SIZE)) return false;
+    if ((baHeader.size() != GENTEE_HEADER_SIZE)) return false;
     if (!XGenteeDecoder::isPayloadHeader(baHeader.constData(), baHeader.size())) return false;
 
     *pnPayloadOffset = nPayloadOffset;
@@ -75,24 +71,20 @@ bool XGentee::locatePayload(qint64 *pnPayloadOffset, PDSTRUCT *pPdStruct)
 bool XGentee::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
-
-    QPointer<XGentee> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource) return false;
-
+    QIODevice *guardedSource = getDevice();
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
-    if (!locatePayload(&context.nPayloadOffset, pPdStruct) || !guardedThis || !guardedSource) return false;
+    if (!locatePayload(&context.nPayloadOffset, pPdStruct)) return false;
 
     const qint64 nPayloadSize = context.nInputSize - context.nPayloadOffset;
     if ((nPayloadSize <= 0) || (nPayloadSize > GENTEE_MAX_PAYLOAD)) return false;
 
     const QByteArray baPayload = read_array_process(context.nPayloadOffset, nPayloadSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baPayload.size() != nPayloadSize)) return false;
+    if ((baPayload.size() != nPayloadSize)) return false;
 
     qint64 nArchiveSize = 0;
     if (!XGenteeDecoder::scan(baPayload, &context.listMembers, &nArchiveSize, pPdStruct)) return false;
-    if (!guardedThis || !guardedSource || context.listMembers.isEmpty()) return false;
+    if (context.listMembers.isEmpty()) return false;
 
     if (nArchiveSize <= 0) nArchiveSize = nPayloadSize;
     context.nArchiveSize = context.nPayloadOffset + nArchiveSize;
@@ -157,7 +149,7 @@ void XGentee::fillMemberProperties(const CONTEXT &context, qint32 nIndex, QMap<F
 
 bool XGentee::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     qint64 nPayloadOffset = 0;
     const bool bResult = locatePayload(&nPayloadOffset, pPdStruct);
@@ -305,11 +297,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XGentee::getDefaultUnpackProperties()
 
 bool XGentee::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XGentee> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -319,8 +310,8 @@ bool XGentee::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant>
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -334,15 +325,13 @@ bool XGentee::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant>
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
             delete pContext;
             *pState = UNPACK_STATE();
             return false;
-        }
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

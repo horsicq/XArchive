@@ -63,12 +63,12 @@ quint32 crc32(const QByteArray &bytes)
 
 bool readAt(QIODevice *device, qint64 offset, qint64 size, qint64 limit, QByteArray *bytes, XBinary::PDSTRUCT *pd)
 {
-    QPointer<QIODevice> source(device);
-    if (!source || !bytes || offset < 0 || size < 0 || size > limit || size > kSolidLimit || !XBinary::isPdStructNotCanceled(pd)) return false;
+    QIODevice *source = device;
+    if (!bytes || offset < 0 || size < 0 || size > limit || size > kSolidLimit || !XBinary::isPdStructNotCanceled(pd)) return false;
     const qint64 total = source->size();
-    if (!source || offset > total || size > total - offset || !XBinary::isPdStructNotCanceled(pd)) return false;
+    if (offset > total || size > total - offset || !XBinary::isPdStructNotCanceled(pd)) return false;
     const bool seeked = source->seek(offset);
-    if (!source || !seeked || !XBinary::isPdStructNotCanceled(pd)) return false;
+    if (!seeked || !XBinary::isPdStructNotCanceled(pd)) return false;
     // One exact-capacity input allocation, not a growing array plus a second
     // chunk array. The decoder's estimate includes this retained input.
     *bytes = QByteArray((qint32)size, Qt::Uninitialized);
@@ -76,10 +76,10 @@ bool readAt(QIODevice *device, qint64 offset, qint64 size, qint64 limit, QByteAr
     while (done < size && source && XBinary::isPdStructNotCanceled(pd)) {
         const qint64 request = qMin<qint64>(65536, size - done);
         const qint64 received = source->read(bytes->data() + done, request);
-        if (!source || received <= 0 || received > request) { bytes->clear(); return false; }
+        if (received <= 0 || received > request) { bytes->clear(); return false; }
         done += received;
     }
-    if (!source || done != size || !XBinary::isPdStructNotCanceled(pd)) { bytes->clear(); return false; }
+    if (done != size || !XBinary::isPdStructNotCanceled(pd)) { bytes->clear(); return false; }
     return true;
 }
 

@@ -4,8 +4,6 @@
  */
 
 #include "xhuff.h"
-
-#include <QPointer>
 #include <QtEndian>
 
 #include <algorithm>
@@ -55,9 +53,7 @@ XHUFF::~XHUFF()
 bool XHUFF::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
-
-    QPointer<XHUFF> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -68,7 +64,7 @@ bool XHUFF::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const QByteArray baHeader =
         read_array_process(0, HUFF_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource ||
+    if (!guardedSource ||
         (baHeader.size() != HUFF_HEADER_SIZE)) {
         return false;
     }
@@ -100,12 +96,12 @@ bool XHUFF::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const QByteArray baSymbols =
         read_array_process(HUFF_HEADER_SIZE, nSymbolCount, pPdStruct);
-    if (!guardedThis || !guardedSource || (baSymbols.size() != nSymbolCount)) {
+    if (!guardedSource || (baSymbols.size() != nSymbolCount)) {
         return false;
     }
     const QByteArray baTreeBits = read_array_process(
         context.nTreeOffset, context.nTreeSize, pPdStruct);
-    if (!guardedThis || !guardedSource ||
+    if (!guardedSource ||
         (baTreeBits.size() != context.nTreeSize)) {
         return false;
     }
@@ -125,7 +121,7 @@ bool XHUFF::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const QByteArray baDirectory =
         read_array_process(nDirectoryOffset, nDirectorySize, pPdStruct);
-    if (!guardedThis || !guardedSource ||
+    if (!guardedSource ||
         (baDirectory.size() != nDirectorySize)) {
         return false;
     }
@@ -178,7 +174,7 @@ bool XHUFF::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
             qMin<qint64>(context.nInputSize - member.nNameOffset, 8448);
         const QByteArray baNameStream =
             read_array_process(member.nNameOffset, nNameWindow, pPdStruct);
-        if (!guardedThis || !guardedSource || baNameStream.isEmpty()) {
+        if (!guardedSource || baNameStream.isEmpty()) {
             return false;
         }
         QByteArray baName;
@@ -203,7 +199,7 @@ bool XHUFF::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     }
 
     if (context.listMembers.isEmpty()) return false;
-    if (!guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
+    if (!guardedSource || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -214,7 +210,7 @@ bool XHUFF::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XHUFF::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -388,8 +384,7 @@ bool XHUFF::initUnpack(UNPACK_STATE *pState,
                        const QMap<UNPACK_PROP, QVariant> &mapProperties,
                        PDSTRUCT *pPdStruct)
 {
-    QPointer<XHUFF> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
@@ -398,7 +393,7 @@ bool XHUFF::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) || !guardedSource ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -413,9 +408,9 @@ bool XHUFF::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource ||
+    if (!parseContext(pContext, pPdStruct) || !guardedSource ||
         pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -432,16 +427,11 @@ bool XHUFF::initUnpack(UNPACK_STATE *pState,
     pState->pContext = pContext;
 
     const bool bFinalized =
-        guardedThis->validateAndFinalizeUnpackSource(pState, pContext,
+        validateAndFinalizeUnpackSource(pState, pContext,
                                                      pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

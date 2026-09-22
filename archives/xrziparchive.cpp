@@ -21,9 +21,8 @@ QString XRzipArchive::getFileFormatExtsString() { return QStringLiteral("RZIP co
 QString XRzipArchive::getMIMEString() { return QStringLiteral("application/x-rzip"); }
 qint64 XRzipArchive::getFileFormatSize(PDSTRUCT *progress)
 {
-    QPointer<XRzipArchive> owner(this);
     const bool valid = isValid(progress);
-    return owner && valid ? getSize() : 0;
+    return valid ? getSize() : 0;
 }
 QList<QString> XRzipArchive::getSearchSignatures() { return {QStringLiteral("'RZIP'02")}; }
 XBinary *XRzipArchive::createInstance(QIODevice *device, bool image, XADDR address)
@@ -34,14 +33,12 @@ XBinary *XRzipArchive::createInstance(QIODevice *device, bool image, XADDR addre
 }
 bool XRzipArchive::readHeader(XRzipDecoder::HEADER *header, PDSTRUCT *progress)
 {
-    QPointer<XRzipArchive> owner(this);
-    QPointer<QIODevice> source(getDevice());
-    if (!source || !source->isOpen() || !source->isReadable() || source->isSequential() || !isPdStructNotCanceled(progress)) return false;
-    if (!owner || !source) return false;
+    QIODevice *source = getDevice();
+    if (!source->isOpen() || !source->isReadable() || source->isSequential() || !isPdStructNotCanceled(progress)) return false;
     const qint64 size = source->size();
-    if (!owner || !source || size < 24 || size > XRzipDecoder::MaxInput) return false;
+    if (size < 24 || size > XRzipDecoder::MaxInput) return false;
     const QByteArray bytes = read_array_process(0, 24, progress);
-    if (!owner || !source || !XRzipDecoder::parseHeader(bytes, header)) return false;
+    if (!XRzipDecoder::parseHeader(bytes, header)) return false;
     return (header->rawSize == 0 ? size == 24 : size >= 70) && isPdStructNotCanceled(progress);
 }
 bool XRzipArchive::isValid(PDSTRUCT *progress)
@@ -58,7 +55,6 @@ bool XRzipArchive::isValid(QIODevice *device, PDSTRUCT *progress)
 bool XRzipArchive::initUnpack(UNPACK_STATE *state, const QMap<UNPACK_PROP,QVariant> &properties, PDSTRUCT *progress)
 {
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);
-    QPointer<XRzipArchive> owner(this);
     if (!guard.isAcquired() || !state) return false;
     if ((state->pContext || !state->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(state)) return false;
     CONTEXT *old = static_cast<CONTEXT *>(state->pContext);
@@ -67,11 +63,10 @@ bool XRzipArchive::initUnpack(UNPACK_STATE *state, const QMap<UNPACK_PROP,QVaria
     *state = UNPACK_STATE();
     if (!isPdStructNotCanceled(progress)) return false;
     const bool bound = bindUnpackSource(state, progress);
-    if (!owner || !bound) return false;
+    if (!bound) return false;
     OUTPUT_POLICY policy = {};
     XRzipDecoder::HEADER header;
     const bool valid = resolveUnpackOutputPolicy(properties, &policy) && readHeader(&header, progress);
-    if (!owner) return false;
     if (!valid || (policy.nMaxEntryOutputSize >= 0 && header.rawSize > policy.nMaxEntryOutputSize) ||
         (properties.contains(UNPACK_PROP_MAX_TOTAL_OUTPUT_SIZE) && policy.nMaxTotalOutputSize >= 0 && header.rawSize > policy.nMaxTotalOutputSize)) {
         releaseUnpackSource(state); *state = UNPACK_STATE(); return false;
@@ -80,7 +75,6 @@ bool XRzipArchive::initUnpack(UNPACK_STATE *state, const QMap<UNPACK_PROP,QVaria
     if (!context) { releaseUnpackSource(state); *state = UNPACK_STATE(); return false; }
     context->header = header;
     context->name = QFileInfo(XBinary::getDeviceFileName(getDevice())).completeBaseName();
-    if (!owner) { delete context; return false; }
     if (context->name.isEmpty()) context->name = QStringLiteral("data");
     state->pContext = context;
     state->nNumberOfRecords = 1;
@@ -89,7 +83,6 @@ bool XRzipArchive::initUnpack(UNPACK_STATE *state, const QMap<UNPACK_PROP,QVaria
     state->nTotalSize = getSize();
     state->mapUnpackProperties = properties;
     const bool finalized = validateAndFinalizeUnpackSource(state, context, progress);
-    if (!owner) return false;
     if (!finalized) {
         state->pContext = nullptr; releaseUnpackSource(state); delete context; *state = UNPACK_STATE(); return false;
     }
@@ -99,13 +92,12 @@ bool XRzipArchive::initUnpack(UNPACK_STATE *state, const QMap<UNPACK_PROP,QVaria
 XBinary::ARCHIVERECORD XRzipArchive::infoCurrent(UNPACK_STATE *state, PDSTRUCT *progress)
 {
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
-    QPointer<XRzipArchive> owner(this);
     ARCHIVERECORD record = {};
     if (!guard.isAllowed() || !state || !state->pContext || state->nCurrentIndex != 0 || state->nNumberOfRecords != 1 ||
-        !isUnpackSourceCurrent(state, progress) || !owner) return record;
+        !isUnpackSourceCurrent(state, progress)) return record;
     const CONTEXT context = *static_cast<CONTEXT *>(state->pContext);
     const qint64 size = getSize();
-    if (!owner || state->nTotalSize != size) return record;
+    if (state->nTotalSize != size) return record;
     record.mapProperties.insert(FPART_PROP_ORIGINALNAME, context.name);
     record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, size);
     record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, context.header.rawSize);
@@ -117,14 +109,14 @@ XBinary::ARCHIVERECORD XRzipArchive::infoCurrent(UNPACK_STATE *state, PDSTRUCT *
 bool XRzipArchive::unpackCurrent(UNPACK_STATE *state, QIODevice *device, PDSTRUCT *progress)
 {
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);
-    QPointer<XRzipArchive> owner(this);
-    QPointer<QIODevice> source(getDevice()), output(device);
-    if (!guard.isAcquired() || !state || !state->pContext || !source || !output || state->nCurrentIndex != 0 || state->nNumberOfRecords != 1 ||
-        !isUnpackSourceCurrent(state, progress) || !owner || !source || !output) return false;
-    const bool supported = isUnpackOutputSupported(output.data());
-    if (!owner || !source || !output || !supported) return false;
-    const bool aliases = devicesAlias(source.data(), output.data());
-    if (!owner || !source || !output || aliases) return false;
+    QIODevice *source = getDevice();
+    QIODevice *output = device;
+    if (!guard.isAcquired() || !state || !state->pContext || state->nCurrentIndex != 0 || state->nNumberOfRecords != 1 ||
+        !isUnpackSourceCurrent(state, progress)) return false;
+    const bool supported = isUnpackOutputSupported(output);
+    if (!supported) return false;
+    const bool aliases = devicesAlias(source, output);
+    if (aliases) return false;
     const CONTEXT context = *static_cast<CONTEXT *>(state->pContext);
     const qint64 inputSize = state->nTotalSize;
     const QMap<UNPACK_PROP,QVariant> properties = state->mapUnpackProperties;
@@ -137,7 +129,7 @@ bool XRzipArchive::unpackCurrent(UNPACK_STATE *state, QIODevice *device, PDSTRUC
     if (budget && budget->isEnforcing() && budget->totalLimit() >= 0 &&
         (budget->totalWritten() > budget->totalLimit() || context.header.rawSize > budget->totalLimit() - budget->totalWritten())) return false;
     const QByteArray input = read_array_process(0, inputSize, progress);
-    if (!owner || !source || !output || input.size() != inputSize) return false;
+    if (input.size() != inputSize) return false;
     XRzipDecoder::HEADER header;
     if (!XRzipDecoder::parseHeader(input, &header) || header.rawSize != context.header.rawSize || header.major != context.header.major || header.minor != context.header.minor)
         return false;
@@ -149,11 +141,11 @@ bool XRzipArchive::unpackCurrent(UNPACK_STATE *state, QIODevice *device, PDSTRUC
     writer.mapUnpackProperties = properties;
     writer.spOutputBudget = budget;
     XRzipDecoder::RESULT decoded;
-    if (!XRzipDecoder::decode(input, &writer, &decoded, progress) || !owner || !source || !output ||
+    if (!XRzipDecoder::decode(input, &writer, &decoded, progress) ||
         decoded.outputSize != context.header.rawSize || decoded.consumed != inputSize) return false;
-    if (!stage.flush() || !stage.seek(0) || !isUnpackSourceCurrent(state, progress) || !owner || !source || !output) return false;
-    const bool published = publishUnpackOutput(&stage, output.data(), state, progress);
-    if (!owner || !output || !published) return false;
+    if (!stage.flush() || !stage.seek(0) || !isUnpackSourceCurrent(state, progress)) return false;
+    const bool published = publishUnpackOutput(&stage, output, state, progress);
+    if (!published) return false;
     state->nCurrentOffset = decoded.consumed;
     return true;
 }
@@ -161,9 +153,8 @@ bool XRzipArchive::unpackCurrent(UNPACK_STATE *state, QIODevice *device, PDSTRUC
 bool XRzipArchive::moveToNext(UNPACK_STATE *state, PDSTRUCT *progress)
 {
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);
-    QPointer<XRzipArchive> owner(this);
     if (!guard.isAcquired() || !state || !state->pContext || state->nCurrentIndex != 0 || state->nNumberOfRecords != 1 ||
-        !isUnpackSourceCurrent(state, progress) || !owner) return false;
+        !isUnpackSourceCurrent(state, progress)) return false;
     state->nCurrentIndex = 1;
     return false;
 }

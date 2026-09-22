@@ -44,15 +44,14 @@ XBinary *XParsecArchive::createInstance(QIODevice *pDevice, bool bIsImage,
 bool XParsecArchive::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
                                 PDSTRUCT *pPdStruct)
 {
-    QPointer<XParsecArchive> guardedThis(this);
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || (nTotalSize < 20) ||
+    if ((nTotalSize < 20) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     const QByteArray baFirstOffset = read_array_process(0, 4, pPdStruct);
-    if (!guardedThis || (baFirstOffset.size() != 4)) return false;
+    if ((baFirstOffset.size() != 4)) return false;
     const uchar *pFirstOffset = reinterpret_cast<const uchar *>(
         baFirstOffset.constData());
     const quint32 nHeaderSizeValue = readLE32(pFirstOffset);
@@ -74,7 +73,7 @@ bool XParsecArchive::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
 
     const QByteArray baHeader = read_array_process(
         0, nHeaderSize, pPdStruct);
-    if (!guardedThis || (baHeader.size() != nHeaderSize)) return false;
+    if ((baHeader.size() != nHeaderSize)) return false;
     const uchar *pHeader = reinterpret_cast<const uchar *>(
         baHeader.constData());
     if (readLE32(pHeader + ((qint64)nRecordCount * 4)) != 0) return false;
@@ -100,7 +99,7 @@ bool XParsecArchive::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
 
         const QByteArray baSignature = read_array_process(
             nDataOffset, 6, pPdStruct);
-        if (!guardedThis || (baSignature.size() != 6)) return false;
+        if ((baSignature.size() != 6)) return false;
         const bool bRib =
             (memcmp(baSignature.constData(), "RIB\0", 4) == 0);
         const bool bSm8 =

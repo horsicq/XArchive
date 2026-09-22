@@ -80,25 +80,24 @@ QString XTAR_BZIP2::getMIMEString()
 
 QIODevice *XTAR_BZIP2::decompressData(PDSTRUCT *pPdStruct)
 {
-    QPointer<XTAR_BZIP2> self(this);
-    QPointer<QIODevice> source(getDevice());
+    QIODevice *source = getDevice();
     m_nTrailingOffset = m_nTrailingSize = 0;
     if (!source || !isPdStructNotCanceled(pPdStruct)) return nullptr;
     qint64 size = source->size();
-    if (!self || !source || size <= 0 || m_nMaterializedOutputLimit < 0) return nullptr;
+    if (!source || size <= 0 || m_nMaterializedOutputLimit < 0) return nullptr;
     const qint64 limit = m_nMaterializedOutputLimit;
     QByteArray data;
     BzipTarBuffer output(&data, limit);
     if (!output.open(QIODevice::ReadWrite)) return nullptr;
     DATAPROCESS_STATE state = {};
-    state.pDeviceInput = source.data();
+    state.pDeviceInput = source;
     state.pDeviceOutput = &output;
     state.nInputOffset = 0;
     state.nInputLimit = size;
     state.nProcessedLimit = -1;
     state.mapUnpackProperties.insert(UNPACK_PROP_MAX_OUTPUT_SIZE, limit);
     const bool decoded = XBZIP2Decoder::decompressPrefix(&state, pPdStruct);
-    if (!self || !source || !decoded || state.bReadError || state.bWriteError || !isPdStructNotCanceled(pPdStruct) ||
+    if (!source || !decoded || state.bReadError || state.bWriteError || !isPdStructNotCanceled(pPdStruct) ||
         state.nCountInput <= 0 || state.nCountInput > size || state.nCountOutput <= 0 || state.nCountOutput > limit || state.nCountOutput != data.size()) return nullptr;
     // Only a complete, checksummed sequence reaches this point. The exact
     // trailing extent is descriptive metadata, never a decoder input range.
@@ -109,9 +108,8 @@ QIODevice *XTAR_BZIP2::decompressData(PDSTRUCT *pPdStruct)
 
 XBinary::ARCHIVERECORD XTAR_BZIP2::infoCurrent(UNPACK_STATE *state, PDSTRUCT *pd)
 {
-    QPointer<XTAR_BZIP2> self(this);
     ARCHIVERECORD result = XTARCOMPRESSED::infoCurrent(state, pd);
-    if (!self || result.mapProperties.isEmpty()) return ARCHIVERECORD();
+    if (result.mapProperties.isEmpty()) return ARCHIVERECORD();
     if (m_nTrailingSize > 0) {
         result.mapProperties.insert(FPART_PROP_INFO, tr("BZip2 transport; %1 trailing bytes outside the stream, at offset %2")
                                                         .arg(m_nTrailingSize).arg(m_nTrailingOffset));
@@ -134,27 +132,25 @@ XBinary *XTAR_BZIP2::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nMo
 
 bool XTAR_BZIP2::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XTAR_BZIP2> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = guardedThis->XTARCOMPRESSED::handleInternalInfo(pPdStruct);
-        if (!guardedThis || !bResult) return false;
-        XTARCOMPRESSED::INTERNAL_INFO *pInfo = static_cast<XTARCOMPRESSED::INTERNAL_INFO *>(guardedThis->XTARCOMPRESSED::getInternalInfo(pPdStruct));
-        if (!guardedThis || !pInfo) return false;
-        static_cast<XTARCOMPRESSED::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
+        bResult = XTARCOMPRESSED::handleInternalInfo(pPdStruct);
+        if (!bResult) return false;
+        XTARCOMPRESSED::INTERNAL_INFO *pInfo = static_cast<XTARCOMPRESSED::INTERNAL_INFO *>(XTARCOMPRESSED::getInternalInfo(pPdStruct));
+        if (!pInfo) return false;
+        static_cast<XTARCOMPRESSED::INTERNAL_INFO &>(m_internalInfo) = *pInfo;
     }
 
-    return guardedThis && bResult;
+    return bResult;
 }
 
 void *XTAR_BZIP2::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XTAR_BZIP2> guardedThis(this);
-    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
-    if (!guardedThis || !bHandled) return nullptr;
+    const bool bHandled = handleInternalInfo(pPdStruct);
+    if (!bHandled) return nullptr;
 
-    return &guardedThis->m_internalInfo;
+    return &m_internalInfo;
 }
 
 void XTAR_BZIP2::setInternalInfo(void *pInternalInfo)

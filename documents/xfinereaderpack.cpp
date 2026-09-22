@@ -44,25 +44,24 @@ bool XFineReaderPack::_readAndCheckHeader(quint32 *pnUnpackedSize, quint32 *pnCr
 {
     Q_UNUSED(pPdStruct)
 
-    QPointer<XFineReaderPack> guardedArchive(this);
 
-    QPointer<QIODevice> guardedDevice(guardedArchive->getDevice());
-    if (!guardedArchive || !guardedDevice) return false;
+    QIODevice *guardedDevice = getDevice();
+    if (!guardedDevice) return false;
 
     // Detection probes a device the caller still owns: remember where it was
     // and put it back before returning.
     const qint64 nSavedPosition = guardedDevice->pos();
 
-    const qint64 nSize = guardedArchive->getSize();
-    if (!guardedArchive || !guardedDevice) return false;
+    const qint64 nSize = getSize();
+    if (!guardedDevice) return false;
 
     bool bResult = false;
 
     // A 17-byte header plus at least one byte of coded stream.
     if (nSize > FINEAR_HEADER_SIZE) {
-        const QByteArray baHeader = guardedArchive->read_array(0, (qint32)FINEAR_HEADER_SIZE);
+        const QByteArray baHeader = read_array(0, (qint32)FINEAR_HEADER_SIZE);
 
-        if (guardedArchive && guardedDevice && (baHeader.size() == (qint32)FINEAR_HEADER_SIZE)) {
+        if (guardedDevice && (baHeader.size() == (qint32)FINEAR_HEADER_SIZE)) {
             const quint8 *pHeader = reinterpret_cast<const quint8 *>(baHeader.constData());
 
             // 72 bits of fixed signature: "FINEAR" DD 88 DD.
@@ -85,7 +84,7 @@ bool XFineReaderPack::_readAndCheckHeader(quint32 *pnUnpackedSize, quint32 *pnCr
 
     if (guardedDevice) guardedDevice->seek(nSavedPosition);
 
-    return guardedArchive && guardedDevice && bResult;
+    return guardedDevice && bResult;
 }
 
 bool XFineReaderPack::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
@@ -374,7 +373,7 @@ QMap<XBinary::UNPACK_PROP, QVariant> XFineReaderPack::getDefaultUnpackProperties
 
 bool XFineReaderPack::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XFineReaderPack> guardedArchive(this);
+    XFineReaderPack *guardedArchive = this;
     bool bResult = false;
 
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
@@ -382,8 +381,8 @@ bool XFineReaderPack::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, Q
         pPdStruct = &pdStructEmpty;
     }
 
-    if (pState && !m_bUnpackOperationInProgress && ((!pState->pContext && pState->baUnpackSourceToken.isEmpty()) || guardedArchive->ownsUnpackSource(pState))) {
-        if (!guardedArchive->finishUnpack(pState, nullptr) || !guardedArchive) return false;
+    if (pState && !m_bUnpackOperationInProgress && ((!pState->pContext && pState->baUnpackSourceToken.isEmpty()) || ownsUnpackSource(pState))) {
+        if (!finishUnpack(pState, nullptr)) return false;
         UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
         if (!operationGuard.isAcquired()) return false;
 
@@ -391,38 +390,38 @@ bool XFineReaderPack::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, Q
             return false;
         }
 
-        const bool bBound = guardedArchive->bindUnpackSource(pState, pPdStruct);
-        if (!guardedArchive || !bBound) return false;
+        const bool bBound = bindUnpackSource(pState, pPdStruct);
+        if (!bBound) return false;
 
         quint32 nUnpackedSize = 0;
         quint32 nCrc = 0;
 
-        const bool bValid = guardedArchive->_readAndCheckHeader(&nUnpackedSize, &nCrc, pPdStruct);
+        const bool bValid = _readAndCheckHeader(&nUnpackedSize, &nCrc, pPdStruct);
         if (!guardedArchive) return false;
         if (!bValid) {
-            guardedArchive->releaseUnpackSource(pState);
+            releaseUnpackSource(pState);
             return false;
         }
 
-        const qint64 nSize = guardedArchive->getSize();
+        const qint64 nSize = getSize();
         if (!guardedArchive) return false;
 
         FINEAR_UNPACK_CONTEXT *pContext = new (std::nothrow) FINEAR_UNPACK_CONTEXT;
         if (!pContext) {
-            guardedArchive->releaseUnpackSource(pState);
+            releaseUnpackSource(pState);
             return false;
         }
 
-        QPointer<QIODevice> guardedSource(guardedArchive->getDevice());
-        if (!guardedArchive || !guardedSource) {
-            if (guardedArchive) guardedArchive->releaseUnpackSource(pState);
+        QIODevice *guardedSource = getDevice();
+        if (!guardedSource) {
+            if (guardedArchive) releaseUnpackSource(pState);
             delete pContext;
             return false;
         }
 
-        QString sName = XBinary::getDeviceFileName(guardedSource.data());
-        if (!guardedArchive || !guardedSource) {
-            if (guardedArchive) guardedArchive->releaseUnpackSource(pState);
+        QString sName = XBinary::getDeviceFileName(guardedSource);
+        if (!guardedSource) {
+            if (guardedArchive) releaseUnpackSource(pState);
             delete pContext;
             return false;
         }
@@ -448,11 +447,11 @@ bool XFineReaderPack::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, Q
         pState->pContext = pContext;
         pState->mapUnpackProperties = mapProperties;
 
-        bResult = guardedArchive->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+        bResult = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
         if (!guardedArchive) return false;
         if (!bResult) {
             pState->pContext = nullptr;
-            guardedArchive->releaseUnpackSource(pState);
+            releaseUnpackSource(pState);
             delete pContext;
             *pState = UNPACK_STATE();
         }
@@ -465,11 +464,10 @@ XBinary::ARCHIVERECORD XFineReaderPack::infoCurrent(UNPACK_STATE *pState, PDSTRU
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
-    QPointer<XFineReaderPack> guardedArchive(this);
 
     XBinary::ARCHIVERECORD result = {};
 
-    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive) {
+    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct)) {
         return result;
     }
 
@@ -494,13 +492,12 @@ bool XFineReaderPack::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PD
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
-    QPointer<XFineReaderPack> guardedArchive(this);
 
     if (!pState || !pState->pContext || !pDevice) return false;
-    QPointer<QIODevice> guardedOutput(pDevice);
-    QPointer<QIODevice> guardedSource(guardedArchive->getDevice());
-    if (!guardedOutput || !guardedSource || !guardedArchive->isUnpackOutputSupported(guardedOutput.data()) || !guardedArchive ||
-        XBinary::devicesAlias(guardedSource.data(), guardedOutput.data()) || !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive ||
+    QIODevice *guardedOutput = pDevice;
+    QIODevice *guardedSource = getDevice();
+    if (!guardedOutput || !guardedSource || !isUnpackOutputSupported(guardedOutput) ||
+        XBinary::devicesAlias(guardedSource, guardedOutput) || !isUnpackSourceCurrent(pState, pPdStruct) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -511,8 +508,8 @@ bool XFineReaderPack::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PD
 
     FINEAR_UNPACK_CONTEXT *pContext = reinterpret_cast<FINEAR_UNPACK_CONTEXT *>(pState->pContext);
 
-    const qint64 nFileSize = guardedArchive->getSize();
-    if (!guardedArchive || !guardedSource) return false;
+    const qint64 nFileSize = getSize();
+    if (!guardedSource) return false;
 
     if ((nFileSize != pContext->nTotalSize) || (nFileSize <= FINEAR_HEADER_SIZE) || (pContext->nCompressedSize != (nFileSize - FINEAR_HEADER_SIZE))) {
         return false;
@@ -536,9 +533,9 @@ bool XFineReaderPack::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PD
     }
 
     std::unique_ptr<QIODevice> pStage(XBinary::createFileBuffer(pContext->nUncompressedSize, pPdStruct));
-    if (!guardedArchive || !pStage || !guardedOutput || !guardedSource || !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive) return false;
+    if (!pStage || !guardedOutput || !guardedSource || !isUnpackSourceCurrent(pState, pPdStruct)) return false;
 
-    SubDevice sd(guardedSource.data(), FINEAR_HEADER_SIZE, pContext->nCompressedSize);
+    SubDevice sd(guardedSource, FINEAR_HEADER_SIZE, pContext->nCompressedSize);
 
     bool bResult = false;
 
@@ -555,23 +552,21 @@ bool XFineReaderPack::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PD
         state.nProcessedOffset = 0;
         state.nProcessedLimit = pContext->nUncompressedSize;
 
-        bResult = XLZHDecoder::decompress(&state, 1, pPdStruct) && guardedArchive && guardedOutput && guardedSource &&
+        bResult = XLZHDecoder::decompress(&state, 1, pPdStruct) && guardedOutput && guardedSource &&
                   (state.nCountOutput == pContext->nUncompressedSize);
 
         sd.close();
     }
 
-    return bResult && guardedArchive && guardedOutput && guardedSource && guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) && guardedArchive &&
-           guardedArchive->publishUnpackOutput(pStage.get(), guardedOutput.data(), pState, pPdStruct);
+    return bResult && guardedOutput && guardedSource && isUnpackSourceCurrent(pState, pPdStruct) && publishUnpackOutput(pStage.get(), guardedOutput, pState, pPdStruct);
 }
 
 bool XFineReaderPack::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
-    QPointer<XFineReaderPack> guardedArchive(this);
 
-    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive ||
+    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) ||
         (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }
@@ -583,9 +578,9 @@ bool XFineReaderPack::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 bool XFineReaderPack::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    XFineReaderPack *guardedArchive = this;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
-    QPointer<XFineReaderPack> guardedArchive(this);
 
     Q_UNUSED(pPdStruct)
 
@@ -593,10 +588,10 @@ bool XFineReaderPack::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         return false;
     }
 
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedArchive->ownsUnpackSource(pState)) return false;
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
 
     FINEAR_UNPACK_CONTEXT *pContext = static_cast<FINEAR_UNPACK_CONTEXT *>(pState->pContext);
-    guardedArchive->releaseUnpackSource(pState);
+    releaseUnpackSource(pState);
     pState->pContext = nullptr;
     delete pContext;
     if (!guardedArchive) return false;
@@ -626,27 +621,25 @@ XBinary *XFineReaderPack::createInstance(QIODevice *pDevice, bool bIsImage, XADD
 
 bool XFineReaderPack::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XFineReaderPack> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
-        if (!guardedThis || !bResult) return false;
-        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(guardedThis->XArchive::getInternalInfo(pPdStruct));
-        if (!guardedThis || !pInfo) return false;
-        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        if (!bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        if (!pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) = *pInfo;
     }
 
-    return guardedThis && bResult;
+    return bResult;
 }
 
 void *XFineReaderPack::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XFineReaderPack> guardedThis(this);
-    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
-    if (!guardedThis || !bHandled) return nullptr;
+    const bool bHandled = handleInternalInfo(pPdStruct);
+    if (!bHandled) return nullptr;
 
-    return &guardedThis->m_internalInfo;
+    return &m_internalInfo;
 }
 
 void XFineReaderPack::setInternalInfo(void *pInternalInfo)

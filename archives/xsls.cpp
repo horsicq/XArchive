@@ -6,7 +6,6 @@
 #include "xsls.h"
 
 #include <QFileInfo>
-#include <QPointer>
 #include <QtEndian>
 
 #include <cstring>
@@ -29,12 +28,12 @@ XSLS::~XSLS()
 
 QString XSLS::memberName()
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return QStringLiteral("sls_data");
 
     // The reference implementation names the single member after the archive file itself, extension
     // included; there is nothing else in the container to name it with.
-    const QString sPath = XBinary::getDeviceFileName(guardedSource.data());
+    const QString sPath = XBinary::getDeviceFileName(guardedSource);
     QString sResult;
     if (!sPath.isEmpty()) {
         sResult = QFileInfo(sPath).fileName();
@@ -47,8 +46,7 @@ bool XSLS::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XSLS> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -58,7 +56,7 @@ bool XSLS::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const QByteArray baHeader =
         read_array_process(0, SLS_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource ||
+    if (!guardedSource ||
         (baHeader.size() != SLS_HEADER_SIZE)) {
         return false;
     }
@@ -77,7 +75,7 @@ bool XSLS::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     context.nCompressedSize = context.nInputSize - SLS_HEADER_SIZE;
     context.nUncompressedSize = nUncompressed;
     context.sFileName = memberName();
-    if (!guardedThis || !guardedSource) return false;
+    if (!guardedSource) return false;
 
     *pContext = context;
     return isPdStructNotCanceled(pPdStruct);
@@ -85,7 +83,7 @@ bool XSLS::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XSLS::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -244,8 +242,7 @@ bool XSLS::initUnpack(UNPACK_STATE *pState,
                       const QMap<UNPACK_PROP, QVariant> &mapProperties,
                       PDSTRUCT *pPdStruct)
 {
-    QPointer<XSLS> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
@@ -254,7 +251,7 @@ bool XSLS::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) || !guardedSource ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -269,8 +266,8 @@ bool XSLS::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -287,16 +284,11 @@ bool XSLS::initUnpack(UNPACK_STATE *pState,
     pState->pContext = pContext;
 
     const bool bFinalized =
-        guardedThis->validateAndFinalizeUnpackSource(pState, pContext,
-                                                     pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+        validateAndFinalizeUnpackSource(pState, pContext,
+                                        pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

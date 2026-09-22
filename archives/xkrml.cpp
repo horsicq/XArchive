@@ -5,7 +5,6 @@
 
 #include "xkrml.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -51,9 +50,8 @@ bool XKRML::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XKRML> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -63,8 +61,7 @@ bool XKRML::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const QByteArray baHeader =
         read_array_process(0, KRML_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        (baHeader.size() != KRML_HEADER_SIZE)) {
+    if ((baHeader.size() != KRML_HEADER_SIZE)) {
         return false;
     }
     if (baHeader.left(4) != QByteArray("KRML", 4)) return false;
@@ -81,8 +78,7 @@ bool XKRML::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const QByteArray baDirectory =
         read_array_process(KRML_HEADER_SIZE, nDirectorySize, pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        (baDirectory.size() != nDirectorySize)) {
+    if ((baDirectory.size() != nDirectorySize)) {
         return false;
     }
 
@@ -129,7 +125,7 @@ bool XKRML::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     }
 
     if (context.listMembers.isEmpty()) return false;
-    if (!guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
+    if (!isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -146,11 +142,11 @@ bool XKRML::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XKRML::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
-    const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
+    QIODevice *guardedSource = getDevice();
+    const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
-    if (guardedSource && (nSavedPosition >= 0)) {
+    if ((nSavedPosition >= 0)) {
         guardedSource->seek(nSavedPosition);
     }
     return bResult;
@@ -312,9 +308,8 @@ bool XKRML::initUnpack(UNPACK_STATE *pState,
                        const QMap<UNPACK_PROP, QVariant> &mapProperties,
                        PDSTRUCT *pPdStruct)
 {
-    QPointer<XKRML> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
     }
@@ -322,8 +317,7 @@ bool XKRML::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
-        !isPdStructNotCanceled(pPdStruct)) {
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -337,9 +331,8 @@ bool XKRML::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource ||
-        pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -355,16 +348,11 @@ bool XKRML::initUnpack(UNPACK_STATE *pState,
     pState->pContext = pContext;
 
     const bool bFinalized =
-        guardedThis->validateAndFinalizeUnpackSource(pState, pContext,
+        validateAndFinalizeUnpackSource(pState, pContext,
                                                      pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

@@ -21,7 +21,6 @@
 
 #include "xpowerboardbbs.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -131,9 +130,7 @@ bool XPowerBoardBBS::readHeader(qint64 nOffset, qint64 nInputSize, HEADER *pHead
 
     *pHeader = HEADER();
 
-    QPointer<XPowerBoardBBS> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource) return false;
+    QIODevice *guardedSource = getDevice();
 
     if (!pbbbsRangeWithin(nInputSize, nOffset, PBBBS_MIN_RECORD)) return false;
 
@@ -141,7 +138,7 @@ bool XPowerBoardBBS::readHeader(qint64 nOffset, qint64 nInputSize, HEADER *pHead
     if (nAvailable > PBBBS_MAX_HEADER) nAvailable = PBBBS_MAX_HEADER;
 
     const QByteArray baHeader = read_array_process(nOffset, nAvailable, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != nAvailable)) return false;
+    if (baHeader.size() != nAvailable) return false;
 
     const quint8 nLead = static_cast<quint8>(baHeader.at(0));
 
@@ -221,9 +218,8 @@ bool XPowerBoardBBS::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XPowerBoardBBS> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -254,7 +250,6 @@ bool XPowerBoardBBS::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (nOffset < context.nInputSize) {
             HEADER header = {};
             if (readHeader(nOffset, context.nInputSize, &header, pPdStruct)) {
-                if (!guardedThis || !guardedSource) return false;
                 if (context.listMembers.size() >= PBBBS_MAX_MEMBERS) return false;
 
                 if (header.nCount > 1) {
@@ -318,20 +313,18 @@ bool XPowerBoardBBS::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     context.nArchiveSize = context.nInputSize;
     *pContext = context;
 
-    return guardedThis && guardedSource;
+    return true;
 }
 
 bool XPowerBoardBBS::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
-    const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
+    QIODevice *guardedSource = getDevice();
+    const qint64 nSavedPosition = guardedSource->pos();
 
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
 
-    if (guardedSource && (nSavedPosition >= 0)) {
-        guardedSource->seek(nSavedPosition);
-    }
+    guardedSource->seek(nSavedPosition);
 
     return bResult;
 }
@@ -514,16 +507,15 @@ QMap<XBinary::UNPACK_PROP, QVariant> XPowerBoardBBS::getDefaultUnpackProperties(
 
 bool XPowerBoardBBS::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XPowerBoardBBS> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
 
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) {
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) {
         return false;
     }
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -538,8 +530,8 @@ bool XPowerBoardBBS::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QV
         return false;
     }
 
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -553,15 +545,10 @@ bool XPowerBoardBBS::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QV
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

@@ -21,7 +21,6 @@
 #include "xandroidbootimage.h"
 
 #include <QBuffer>
-#include <QPointer>
 #include <QtEndian>
 
 #include <memory>
@@ -117,20 +116,19 @@ XAndroidBootImage::~XAndroidBootImage()
 
 bool XAndroidBootImage::parseImage(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
-    QPointer<XAndroidBootImage> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pContext || !guardedThis || !guardedSource || !guardedSource->isOpen() || !guardedSource->isReadable() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pContext || !guardedSource || !guardedSource->isOpen() || !guardedSource->isReadable() ||
         guardedSource->isSequential() || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     CONTEXT context = {};
     context.nFileSize = getSize();
-    if (!guardedThis || !guardedSource || (context.nFileSize < BOOT_HDR_V3_SIZE)) return false;
+    if (!guardedSource || (context.nFileSize < BOOT_HDR_V3_SIZE)) return false;
 
     const qint64 nHeaderRead = qMin<qint64>(BOOT_HDR_READ_SIZE, context.nFileSize);
     const QByteArray baHeader = read_array_process(0, nHeaderRead, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != nHeaderRead)) return false;
+    if (!guardedSource || (baHeader.size() != nHeaderRead)) return false;
     if (baHeader.left(static_cast<int>(BOOT_MAGIC_SIZE)) != QByteArray("ANDROID!", 8)) return false;
 
     context.nHeaderVersion = readLE32(baHeader, OFF_HEADER_VERSION);
@@ -227,7 +225,7 @@ bool XAndroidBootImage::parseImage(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XAndroidBootImage::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -308,18 +306,17 @@ QMap<XBinary::UNPACK_PROP, QVariant> XAndroidBootImage::getDefaultUnpackProperti
 
 bool XAndroidBootImage::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XAndroidBootImage> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedThis || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
 
     CONTEXT *pContext = new (std::nothrow) CONTEXT;
     if (!pContext) goto failed;
-    if (!parseImage(pContext, pPdStruct) || !guardedThis || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) goto failed;
+    if (!parseImage(pContext, pPdStruct) || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) goto failed;
 
     pState->mapUnpackProperties = mapProperties;
     pState->nCurrentIndex = 0;
@@ -331,7 +328,7 @@ bool XAndroidBootImage::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP,
     return true;
 
 failed:
-    if (guardedThis) releaseUnpackSource(pState);
+    releaseUnpackSource(pState);
     delete pContext;
     *pState = UNPACK_STATE();
     return false;
@@ -339,9 +336,8 @@ failed:
 
 XBinary::ARCHIVERECORD XAndroidBootImage::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XAndroidBootImage> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
-    if (!operationGuard.isAllowed() || !pState || !pState->pContext || !guardedThis || !isUnpackSourceCurrent(pState, pPdStruct) ||
+    if (!operationGuard.isAllowed() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return ARCHIVERECORD();
     }
@@ -369,12 +365,11 @@ XBinary::ARCHIVERECORD XAndroidBootImage::infoCurrent(UNPACK_STATE *pState, PDST
 
 bool XAndroidBootImage::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    QPointer<XAndroidBootImage> guardedThis(this);
-    QPointer<QIODevice> guardedOutput(pDevice);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedOutput = pDevice;
+    QIODevice *guardedSource = getDevice();
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !guardedThis || !guardedOutput || !guardedSource ||
-        !isUnpackOutputSupported(guardedOutput.data()) || devicesAlias(guardedSource.data(), guardedOutput.data()) ||
+    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !guardedOutput || !guardedSource ||
+        !isUnpackOutputSupported(guardedOutput) || devicesAlias(guardedSource, guardedOutput) ||
         !isUnpackSourceCurrent(pState, pPdStruct) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -408,7 +403,7 @@ bool XAndroidBootImage::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, 
     }
 
     std::unique_ptr<QIODevice> pStage(createFileBuffer(member.nSize, pPdStruct));
-    if (!pStage || !pStage->seek(0) || !guardedThis || !guardedOutput || !guardedSource) return false;
+    if (!pStage || !pStage->seek(0) || !guardedOutput || !guardedSource) return false;
 
     if (member.bSynthesized) {
         if (member.baSynthesized.size() != member.nSize) return false;
@@ -420,31 +415,30 @@ bool XAndroidBootImage::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, 
         if ((member.nOffset < 0) || (member.nOffset + member.nSize > pContext->nFileSize)) return false;
         qint64 nDone = 0;
         while (nDone < member.nSize) {
-            if (!guardedThis || !guardedOutput || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+            if (!guardedOutput || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
             const qint64 nChunk = qMin<qint64>(BOOT_COPY_CHUNK, member.nSize - nDone);
             const QByteArray baChunk = read_array_process(member.nOffset + nDone, nChunk, pPdStruct);
-            if (!guardedThis || !guardedOutput || !guardedSource || (baChunk.size() != nChunk) || !isUnpackSourceCurrent(pState, pPdStruct)) return false;
+            if (!guardedOutput || !guardedSource || (baChunk.size() != nChunk) || !isUnpackSourceCurrent(pState, pPdStruct)) return false;
             const qint64 nWrite = pStage->write(baChunk.constData(), nChunk);
             if (nWrite != nChunk) return false;
             nDone += nChunk;
         }
     }
 
-    if ((pStage->size() != member.nSize) || !pStage->seek(0) || !guardedThis || !guardedOutput || !guardedSource ||
+    if ((pStage->size() != member.nSize) || !pStage->seek(0) || !guardedOutput || !guardedSource ||
         !isUnpackSourceCurrent(pState, pPdStruct) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
-    const bool bResult = publishUnpackOutput(pStage.get(), guardedOutput.data(), pState, pPdStruct);
-    if (bResult && guardedThis) pState->nCurrentOffset = member.nOffset + member.nSize;
-    return bResult && guardedThis;
+    const bool bResult = publishUnpackOutput(pStage.get(), guardedOutput, pState, pPdStruct);
+    if (bResult) pState->nCurrentOffset = member.nOffset + member.nSize;
+    return bResult;
 }
 
 bool XAndroidBootImage::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XAndroidBootImage> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !guardedThis || !isUnpackSourceCurrent(pState, pPdStruct) ||
+    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }

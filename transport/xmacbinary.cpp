@@ -113,14 +113,13 @@ bool XMacBinary::appendEntry(ENTRY_CONTEXT *pContext,
 bool XMacBinary::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
                             PDSTRUCT *pPdStruct)
 {
-    QPointer<XMacBinary> guardedThis(this);
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || (nTotalSize < 128) ||
+    if ((nTotalSize < 128) ||
         !XBinary::isPdStructNotCanceled(pPdStruct))
         return false;
 
     const QByteArray baHeader = read_array_process(0, 128, pPdStruct);
-    if (!guardedThis || (baHeader.size() != 128))
+    if ((baHeader.size() != 128))
         return false;
     const uchar *pHeader =
         reinterpret_cast<const uchar *>(baHeader.constData());

@@ -21,7 +21,6 @@
 #include "xshar.h"
 
 #include <QBuffer>
-#include <QPointer>
 
 #include <new>
 
@@ -65,11 +64,10 @@ QByteArray XSHAR::_stripTrailingCR(const QByteArray &line)
 
 bool XSHAR::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<XSHAR> guardedThis(this);
-    QPointer<QIODevice> guardedDevice(getDevice());
+    QIODevice *guardedDevice = getDevice();
     if (!guardedDevice || guardedDevice->isSequential()) return false;
     const bool bResult = _scanArchive(nullptr, pPdStruct);
-    return guardedThis && bResult;
+    return bResult;
 }
 
 bool XSHAR::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
@@ -126,7 +124,6 @@ XBinary *XSHAR::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleA
 
 bool XSHAR::_readPhysicalLine(qint64 nOffset, QByteArray *pLine, qint64 *pNextOffset, bool *pHadNewline, bool *pTooLong, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSHAR> guardedThis(this);
     if (!pLine || !pNextOffset || !pHadNewline || !pTooLong || (nOffset < 0) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -137,7 +134,7 @@ bool XSHAR::_readPhysicalLine(qint64 nOffset, QByteArray *pLine, qint64 *pNextOf
     *pTooLong = false;
 
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || (nOffset >= nTotalSize)) return false;
+    if ((nOffset >= nTotalSize)) return false;
 
     qint64 nCurrentOffset = nOffset;
     while ((nCurrentOffset < nTotalSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
@@ -145,7 +142,7 @@ bool XSHAR::_readPhysicalLine(qint64 nOffset, QByteArray *pLine, qint64 *pNextOf
         if (nChunkSize <= 0) return false;
 
         const QByteArray chunk = read_array_process(nCurrentOffset, nChunkSize, pPdStruct);
-        if (!guardedThis || (chunk.size() != nChunkSize)) return false;
+        if ((chunk.size() != nChunkSize)) return false;
 
         const qint32 nNewline = chunk.indexOf('\n');
         if (nNewline >= 0) {
@@ -594,7 +591,6 @@ bool XSHAR::_readMemberBody(qint64 nBodyOffset, const QByteArray &baDelim, bool 
                             qint64 *pnBodyEndOffset, qint64 *pnNextOffset, qint64 *pnDecodedSize, QByteArray *pTextOutput, QList<QByteArray> *pUuLines,
                             bool *pbTerminated, bool *pbTooLong, bool *pbOversize, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSHAR> guardedThis(this);
     if (!pnBodyEndOffset || !pnNextOffset || !pnDecodedSize || !pbTerminated || !pbTooLong || !pbOversize) return false;
 
     *pnBodyEndOffset = nBodyOffset;
@@ -607,7 +603,6 @@ bool XSHAR::_readMemberBody(qint64 nBodyOffset, const QByteArray &baDelim, bool 
     if (pUuLines) pUuLines->clear();
 
     const qint64 nTotalSize = getSize();
-    if (!guardedThis) return false;
 
     qint64 nOffset = nBodyOffset;
     qint64 nDecodedSize = 0;
@@ -618,7 +613,6 @@ bool XSHAR::_readMemberBody(qint64 nBodyOffset, const QByteArray &baDelim, bool 
         bool bHadNewline = false;
         bool bTooLong = false;
         const bool bRead = _readPhysicalLine(nOffset, &line, &nNextOffset, &bHadNewline, &bTooLong, pPdStruct);
-        if (!guardedThis) return false;
         if (bTooLong) {
             *pbTooLong = true;
             return false;
@@ -628,7 +622,7 @@ bool XSHAR::_readMemberBody(qint64 nBodyOffset, const QByteArray &baDelim, bool 
             *pnBodyEndOffset = nOffset;
             *pnNextOffset = nOffset;
             if (kind != MEMBER_KIND_UU) *pnDecodedSize = nDecodedSize;
-            return guardedThis && XBinary::isPdStructNotCanceled(pPdStruct);
+            return XBinary::isPdStructNotCanceled(pPdStruct);
         }
 
         QByteArray compare = line;
@@ -670,14 +664,13 @@ bool XSHAR::_readMemberBody(qint64 nBodyOffset, const QByteArray &baDelim, bool 
     *pnBodyEndOffset = nOffset;
     *pnNextOffset = nOffset;
     if (kind != MEMBER_KIND_UU) *pnDecodedSize = nDecodedSize;
-    return guardedThis && XBinary::isPdStructNotCanceled(pPdStruct);
+    return XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
 bool XSHAR::_findMarker(PDSTRUCT *pPdStruct)
 {
-    QPointer<XSHAR> guardedThis(this);
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || (nTotalSize <= 0)) return false;
+    if ((nTotalSize <= 0)) return false;
 
     qint64 nOffset = 0;
     while ((nOffset < nTotalSize) && (nOffset < SHAR_MAX_PREAMBLE) && XBinary::isPdStructNotCanceled(pPdStruct)) {
@@ -686,7 +679,7 @@ bool XSHAR::_findMarker(PDSTRUCT *pPdStruct)
         bool bHadNewline = false;
         bool bTooLong = false;
         const bool bRead = _readPhysicalLine(nOffset, &line, &nNextOffset, &bHadNewline, &bTooLong, pPdStruct);
-        if (!guardedThis || bTooLong) return false;
+        if (bTooLong) return false;
         if (!bRead || (nNextOffset <= nOffset)) break;
 
         qint32 nLeading = 0;
@@ -707,14 +700,13 @@ bool XSHAR::_findMarker(PDSTRUCT *pPdStruct)
 
 bool XSHAR::_scanArchive(QList<SHAR_ENTRY> *pEntries, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSHAR> guardedThis(this);
     if (pEntries) pEntries->clear();
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || (nTotalSize <= 0)) return false;
+    if ((nTotalSize <= 0)) return false;
 
-    if (!_findMarker(pPdStruct) || !guardedThis) return false;
+    if (!_findMarker(pPdStruct)) return false;
 
     QList<SHAR_ENTRY> entries;
     qint64 nOffset = 0;
@@ -729,7 +721,6 @@ bool XSHAR::_scanArchive(QList<SHAR_ENTRY> *pEntries, PDSTRUCT *pPdStruct)
         bool bHadNewline = false;
         bool bTooLong = false;
         const bool bRead = _readPhysicalLine(nOffset, &line, &nNextOffset, &bHadNewline, &bTooLong, pPdStruct);
-        if (!guardedThis) return false;
         if (bTooLong) {
             bRejectWhole = true;
             break;
@@ -748,7 +739,6 @@ bool XSHAR::_scanArchive(QList<SHAR_ENTRY> *pEntries, PDSTRUCT *pPdStruct)
                 bool bFirstNewline = false;
                 bool bFirstTooLong = false;
                 const bool bPeek = _readPhysicalLine(nBodyOffset, &firstBody, &nFirstNext, &bFirstNewline, &bFirstTooLong, pPdStruct);
-                if (!guardedThis) return false;
                 if (bFirstTooLong) {
                     bRejectWhole = true;
                     break;
@@ -771,7 +761,6 @@ bool XSHAR::_scanArchive(QList<SHAR_ENTRY> *pEntries, PDSTRUCT *pPdStruct)
             const bool bBody = _readMemberBody(nBodyOffset, memberStart.baDelim, memberStart.bDash, memberStart.kind, memberStart.baStripPrefix, SHAR_MAX_DECODED,
                                                &nBodyEndOffset, &nAfterTerminator, &nDecodedSize, nullptr, (memberStart.kind == MEMBER_KIND_UU) ? &uuLines : nullptr,
                                                &bTerminated, &bBodyTooLong, &bOversize, pPdStruct);
-            if (!guardedThis) return false;
             if (bBodyTooLong) {
                 bRejectWhole = true;
                 break;
@@ -872,7 +861,7 @@ bool XSHAR::_scanArchive(QList<SHAR_ENTRY> *pEntries, PDSTRUCT *pPdStruct)
         nOffset = nNextOffset;
     }
 
-    if (bRejectWhole || !guardedThis || entries.isEmpty()) {
+    if (bRejectWhole || entries.isEmpty()) {
         return false;
     }
 
@@ -882,7 +871,6 @@ bool XSHAR::_scanArchive(QList<SHAR_ENTRY> *pEntries, PDSTRUCT *pPdStruct)
 
 bool XSHAR::_decodeMember(const SHAR_ENTRY &entry, qint64 nCap, QByteArray *pOutput, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSHAR> guardedThis(this);
     if (!pOutput) return false;
     pOutput->clear();
 
@@ -897,13 +885,13 @@ bool XSHAR::_decodeMember(const SHAR_ENTRY &entry, qint64 nCap, QByteArray *pOut
         QList<QByteArray> uuLines;
         const bool bBody = _readMemberBody(entry.nBodyOffset, entry.baDelim, entry.bDash, MEMBER_KIND_UU, QByteArray(), nCap, &nBodyEndOffset, &nAfterTerminator,
                                            &nDecodedSize, nullptr, &uuLines, &bTerminated, &bTooLong, &bOversize, pPdStruct);
-        if (!guardedThis || !bBody || bTooLong || bOversize || !bTerminated) return false;
+        if (!bBody || bTooLong || bOversize || !bTerminated) return false;
         qint64 nSize = 0;
         if (!_uudecodeBody(uuLines, nCap, pOutput, &nSize)) return false;
     } else {
         const bool bBody = _readMemberBody(entry.nBodyOffset, entry.baDelim, entry.bDash, entry.kind, entry.baStripPrefix, nCap, &nBodyEndOffset, &nAfterTerminator,
                                            &nDecodedSize, pOutput, nullptr, &bTerminated, &bTooLong, &bOversize, pPdStruct);
-        if (!guardedThis || !bBody || bTooLong || bOversize || !bTerminated) return false;
+        if (!bBody || bTooLong || bOversize || !bTerminated) return false;
     }
 
     return true;
@@ -925,7 +913,6 @@ QMap<XBinary::UNPACK_PROP, QVariant> XSHAR::getDefaultUnpackProperties()
 
 bool XSHAR::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSHAR> guardedThis(this);
     if (m_bUnpackOperationInProgress) return false;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState) return false;
@@ -939,15 +926,14 @@ bool XSHAR::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     pState->pContext = nullptr;
     *pState = UNPACK_STATE();
     delete pOldContext;
-    if (!guardedThis || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!isPdStructNotCanceled(pPdStruct)) return false;
 
     const bool bBound = bindUnpackSource(pState, pPdStruct);
-    if (!guardedThis || !bBound) return false;
+    if (!bBound) return false;
     pState->mapUnpackProperties = mapProperties;
 
     QList<SHAR_ENTRY> listEntries;
     const bool bScanned = _scanArchive(&listEntries, pPdStruct);
-    if (!guardedThis) return false;
     if (!bScanned || !isPdStructNotCanceled(pPdStruct)) {
         releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
@@ -955,7 +941,6 @@ bool XSHAR::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     }
 
     const qint64 nTotalSize = getSize();
-    if (!guardedThis) return false;
 
     SHAR_UNPACK_CONTEXT *pContext = new (std::nothrow) SHAR_UNPACK_CONTEXT;
     if (!pContext) {
@@ -973,7 +958,6 @@ bool XSHAR::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     pState->nTotalSize = nTotalSize;
 
     if (!validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
-        if (!guardedThis) return false;
         pState->pContext = nullptr;
         releaseUnpackSource(pState);
         delete pContext;
@@ -986,7 +970,6 @@ bool XSHAR::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
 
 XBinary::ARCHIVERECORD XSHAR::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSHAR> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return ARCHIVERECORD();
 
@@ -994,10 +977,10 @@ XBinary::ARCHIVERECORD XSHAR::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
     if (!pState || !pState->pContext) return result;
 
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent) return result;
+    if (!bSourceCurrent) return result;
 
     const qint64 nCurrentSize = getSize();
-    if (!guardedThis || (pState->nTotalSize != nCurrentSize)) return result;
+    if ((pState->nTotalSize != nCurrentSize)) return result;
 
     SHAR_UNPACK_CONTEXT *pContext = static_cast<SHAR_UNPACK_CONTEXT *>(pState->pContext);
     if ((pState->nNumberOfRecords != pContext->listEntries.count()) || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pContext->listEntries.count())) {
@@ -1010,7 +993,7 @@ XBinary::ARCHIVERECORD XSHAR::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
 
     QList<SHAR_ENTRY> verifiedEntries;
     const bool bRescanned = _scanArchive(&verifiedEntries, pPdStruct);
-    if (!guardedThis || !bRescanned || (pState->pContext != pContext) || (pState->nCurrentIndex != nExpectedIndex) || (pState->nNumberOfRecords != nExpectedCount) ||
+    if (!bRescanned || (pState->pContext != pContext) || (pState->nCurrentIndex != nExpectedIndex) || (pState->nNumberOfRecords != nExpectedCount) ||
         (verifiedEntries.count() != nExpectedCount)) {
         return ARCHIVERECORD();
     }
@@ -1019,7 +1002,7 @@ XBinary::ARCHIVERECORD XSHAR::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
     if (!_entryMatches(verified, entry)) return ARCHIVERECORD();
 
     const bool bSourceStillCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceStillCurrent || (pState->pContext != pContext) || (pState->nCurrentIndex != nExpectedIndex) ||
+    if (!bSourceStillCurrent || (pState->pContext != pContext) || (pState->nCurrentIndex != nExpectedIndex) ||
         (pState->nNumberOfRecords != nExpectedCount)) {
         return ARCHIVERECORD();
     }
@@ -1048,7 +1031,6 @@ XBinary::ARCHIVERECORD XSHAR::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
 bool XSHAR::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    QPointer<XSHAR> guardedThis(this);
     if (!operationGuard.isAcquired() || !pState || !pDevice || !isUnpackSourceCurrent(pState, pPdStruct) || devicesAlias(getDevice(), pDevice)) return false;
 
     SHAR_UNPACK_CONTEXT *pContext = static_cast<SHAR_UNPACK_CONTEXT *>(pState->pContext);
@@ -1057,7 +1039,7 @@ bool XSHAR::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     }
 
     const qint64 nCurrentSize = getSize();
-    if (!guardedThis || (pState->nTotalSize != nCurrentSize)) return false;
+    if ((pState->nTotalSize != nCurrentSize)) return false;
 
     const SHAR_ENTRY entry = pContext->listEntries.at(pState->nCurrentIndex);
     if (entry.bUnsafeTarget) {
@@ -1071,7 +1053,7 @@ bool XSHAR::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     const qint64 nCap = (nConfiguredLimit < 0) ? SHAR_MAX_DECODED : qMin(SHAR_MAX_DECODED, nConfiguredLimit);
 
     QByteArray decoded;
-    if (!_decodeMember(entry, nCap, &decoded, pPdStruct) || !guardedThis) return false;
+    if (!_decodeMember(entry, nCap, &decoded, pPdStruct)) return false;
 
     const qint64 nDecodedSize = decoded.size();
     if (!XBinary::isUnpackOutputSizeAllowed(pState->mapUnpackProperties, nDecodedSize)) return false;
@@ -1101,7 +1083,7 @@ bool XSHAR::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     if (!buffer.open(QIODevice::ReadOnly)) return false;
 
     const bool bResult = publishUnpackOutput(&buffer, pDevice, pState, pPdStruct);
-    if (!guardedThis || !bResult) return false;
+    if (!bResult) return false;
 
     pState->nCurrentOffset = 0;
     return true;
@@ -1109,17 +1091,16 @@ bool XSHAR::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
 
 bool XSHAR::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSHAR> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState || !pState->pContext) {
         return false;
     }
 
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent) return false;
+    if (!bSourceCurrent) return false;
 
     const qint64 nCurrentSize = getSize();
-    if (!guardedThis || (pState->nTotalSize != nCurrentSize)) return false;
+    if ((pState->nTotalSize != nCurrentSize)) return false;
 
     SHAR_UNPACK_CONTEXT *pContext = static_cast<SHAR_UNPACK_CONTEXT *>(pState->pContext);
     if ((pState->nNumberOfRecords != pContext->listEntries.count()) || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
@@ -1176,26 +1157,24 @@ QList<XBinary::FPART_PROP> XSHAR::getAvailableFPARTProperties()
 
 bool XSHAR::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XSHAR> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
-        if (!guardedThis || !bResult) return false;
-        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(guardedThis->XArchive::getInternalInfo(pPdStruct));
-        if (!guardedThis || !pInfo) return false;
-        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        if (!bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        if (!pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) = *pInfo;
     }
 
-    return guardedThis && bResult;
+    return bResult;
 }
 
 void *XSHAR::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XSHAR> guardedThis(this);
-    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
-    if (!guardedThis || !bHandled) return nullptr;
-    return &guardedThis->m_internalInfo;
+    const bool bHandled = handleInternalInfo(pPdStruct);
+    if (!bHandled) return nullptr;
+    return &m_internalInfo;
 }
 
 void XSHAR::setInternalInfo(void *pInternalInfo)

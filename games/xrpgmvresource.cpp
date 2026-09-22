@@ -48,11 +48,11 @@ bool isHeaderValid(const QByteArray &baHeader)
 }
 
 struct RPGMV_CANCELED {
-    const QPointer<XRpgmvResource> &owner;
-    const QPointer<QIODevice> &source;
-    const QPointer<QIODevice> &output;
+    XRpgmvResource *owner;
+    QIODevice *source;
+    QIODevice *output;
     XBinary::PDSTRUCT *pPdStruct;
-    RPGMV_CANCELED(const QPointer<XRpgmvResource> &ownerRef, const QPointer<QIODevice> &sourceRef, const QPointer<QIODevice> &outputRef,
+    RPGMV_CANCELED(XRpgmvResource *ownerRef, QIODevice *sourceRef, QIODevice *outputRef,
                    XBinary::PDSTRUCT *pPd)
         : owner(ownerRef), source(sourceRef), output(outputRef), pPdStruct(pPd)
     {
@@ -143,13 +143,12 @@ XBinary *XRpgmvResource::createInstance(QIODevice *pDevice, bool bIsImage, XADDR
 
 bool XRpgmvResource::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<XRpgmvResource> owner(this);
-    QPointer<QIODevice> source(getDevice());
+    QIODevice *source = getDevice();
     if (!source || !source->isOpen() || !source->isReadable() || source->isSequential() || !isPdStructNotCanceled(pPdStruct)) return false;
     const qint64 nTotalSize = getSize();
-    if (!owner || (nTotalSize < HeaderSize + KeySize)) return false;
+    if ((nTotalSize < HeaderSize + KeySize)) return false;
     const QByteArray baHeader = read_array_process(0, HeaderSize, pPdStruct);
-    return owner && isHeaderValid(baHeader);
+    return isHeaderValid(baHeader);
 }
 
 bool XRpgmvResource::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
@@ -200,19 +199,15 @@ QString XRpgmvResource::memberName()
 
 bool XRpgmvResource::readContext(CONTEXT *pContext, const QString &sPassword, PDSTRUCT *pPdStruct)
 {
-    QPointer<XRpgmvResource> owner(this);
-    if (!pContext || !isValid(pPdStruct) || !owner) return false;
+    if (!pContext || !isValid(pPdStruct)) return false;
     CONTEXT parsed;
     parsed.nPayloadSize = getSize() - HeaderSize;
-    if (!owner) return false;
     parsed.sMemberName = memberName();
-    if (!owner) return false;
     parsed.baKey = parseKey(sPassword);
     if (!parsed.baKey.isEmpty()) {
         parsed.sKeySource = QStringLiteral("password");
     } else {
         const QString sSystemJson = XCompanionFile::resolveInAncestors(getDevice(), QStringLiteral("data/System.json"), 4);
-        if (!owner) return false;
         if (!sSystemJson.isEmpty()) {
             parsed.baKey = readSystemJsonKey(sSystemJson);
             if (!parsed.baKey.isEmpty()) parsed.sKeySource = sSystemJson;
@@ -226,7 +221,6 @@ bool XRpgmvResource::readContext(CONTEXT *pContext, const QString &sPassword, PD
 bool XRpgmvResource::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);
-    QPointer<XRpgmvResource> owner(this);
     if (!guard.isAcquired() || !pState || ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState))) return false;
     CONTEXT *pOld = static_cast<CONTEXT *>(pState->pContext);
     releaseUnpackSource(pState);
@@ -234,10 +228,11 @@ bool XRpgmvResource::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QV
     *pState = UNPACK_STATE();
     if (!isPdStructNotCanceled(pPdStruct)) return false;
     const bool bBound = bindUnpackSource(pState, pPdStruct);
-    if (!owner || !bBound) return false;
+    if (!bBound) return false;
     CONTEXT *pContext = new (std::nothrow) CONTEXT;
     OUTPUT_POLICY policy = {};
     const QString sPassword = mapProperties.value(UNPACK_PROP_PASSWORD).toString();
+    XRpgmvResource *owner = this;
     const bool bValid = pContext && resolveUnpackOutputPolicy(mapProperties, &policy) && readContext(pContext, sPassword, pPdStruct);
     if (!owner) {
         delete pContext;
@@ -255,7 +250,6 @@ bool XRpgmvResource::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QV
     pState->nTotalSize = HeaderSize + pContext->nPayloadSize;
     pState->mapUnpackProperties = mapProperties;
     const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!owner) return false;
     if (!bFinalized) {
         pState->pContext = nullptr;
         releaseUnpackSource(pState);
@@ -269,9 +263,8 @@ bool XRpgmvResource::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QV
 XBinary::ARCHIVERECORD XRpgmvResource::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
-    QPointer<XRpgmvResource> owner(this);
     ARCHIVERECORD record = {};
-    if (!guard.isAllowed() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || !owner) return record;
+    if (!guard.isAllowed() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct)) return record;
     const CONTEXT *pContext = static_cast<const CONTEXT *>(pState->pContext);
     if ((pState->nCurrentIndex != 0) || (pState->nNumberOfRecords != 1)) return record;
     record.mapProperties.insert(FPART_PROP_ORIGINALNAME, pContext->sMemberName);
@@ -294,17 +287,17 @@ XBinary::ARCHIVERECORD XRpgmvResource::infoCurrent(UNPACK_STATE *pState, PDSTRUC
 bool XRpgmvResource::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);
-    QPointer<XRpgmvResource> owner(this);
-    QPointer<QIODevice> source(getDevice());
-    QPointer<QIODevice> output(pDevice);
-    if (!guard.isAcquired() || !pState || !pState->pContext || !source || !output || !isUnpackSourceCurrent(pState, pPdStruct) || !owner || !source ||
+    QIODevice *source = getDevice();
+    QIODevice *output = pDevice;
+    XRpgmvResource *owner = this;
+    if (!guard.isAcquired() || !pState || !pState->pContext || !source || !output || !isUnpackSourceCurrent(pState, pPdStruct) || !source ||
         !output) {
         return false;
     }
-    const bool bSupported = isUnpackOutputSupported(output.data());
-    if (!owner || !source || !output || !bSupported) return false;
-    const bool bAliases = devicesAlias(source.data(), output.data());
-    if (!owner || !source || !output || bAliases) return false;
+    const bool bSupported = isUnpackOutputSupported(output);
+    if (!source || !output || !bSupported) return false;
+    const bool bAliases = devicesAlias(source, output);
+    if (!source || !output || bAliases) return false;
     const CONTEXT *pContext = static_cast<const CONTEXT *>(pState->pContext);
     if ((pState->nCurrentIndex != 0) || (pState->nNumberOfRecords != 1)) return false;
     // No key: fail closed.  Guessing a key would only ever produce a file
@@ -351,15 +344,14 @@ bool XRpgmvResource::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDS
         return false;
     }
     if (canceled() || (stage.size() != nSize) || !stage.flush() || !stage.seek(0) || !isUnpackSourceCurrent(pState, pPdStruct) || canceled()) return false;
-    const bool bPublished = publishUnpackOutput(&stage, output.data(), pState, pPdStruct);
-    return owner && output && bPublished;
+    const bool bPublished = publishUnpackOutput(&stage, output, pState, pPdStruct);
+    return output && bPublished;
 }
 
 bool XRpgmvResource::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);
-    QPointer<XRpgmvResource> owner(this);
-    if (!guard.isAcquired() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || !owner) return false;
+    if (!guard.isAcquired() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct)) return false;
     if ((pState->nNumberOfRecords != 1) || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= 1)) return false;
     ++pState->nCurrentIndex;
     return pState->nCurrentIndex < 1;

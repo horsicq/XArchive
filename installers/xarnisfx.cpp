@@ -5,7 +5,6 @@
 
 #include "xarnisfx.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -85,10 +84,7 @@ bool XArniSFX::classifyHeader(const QByteArray &baHeader, bool *pbTerminator, qi
 // A four-byte tag is short, so most hits in an executable are rejected here.
 qint64 XArniSFX::findHeader(qint64 nFrom, qint64 nInputSize, PDSTRUCT *pPdStruct)
 {
-    QPointer<XArniSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource) return -1;
-
+    QIODevice *guardedSource = getDevice();
     char szTag[4];
     szTag[0] = 'A';
     szTag[1] = 'R';
@@ -103,12 +99,11 @@ qint64 XArniSFX::findHeader(qint64 nFrom, qint64 nInputSize, PDSTRUCT *pPdStruct
         if (!arniRangeWithin(nInputSize, nOffset, ARNI_PROBE_SIZE)) return -1;
 
         const qint64 nCandidate = find_array(nOffset, nInputSize - nOffset, szTag, 4, pPdStruct);
-        if (!guardedThis || !guardedSource) return -1;
         if (nCandidate < 0) return -1;
         if (!arniRangeWithin(nInputSize, nCandidate, ARNI_PROBE_SIZE)) return -1;
 
         const QByteArray baHeader = read_array_process(nCandidate, ARNI_PROBE_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baHeader.size() != ARNI_PROBE_SIZE)) return -1;
+        if ((baHeader.size() != ARNI_PROBE_SIZE)) return -1;
 
         bool bTerminator = false;
         qint64 nUncompressedSize = 0;
@@ -125,9 +120,8 @@ qint64 XArniSFX::findHeader(qint64 nFrom, qint64 nInputSize, PDSTRUCT *pPdStruct
 // this must never accept a walk that stops anywhere else.
 bool XArniSFX::walkChain(qint64 nStart, qint64 nInputSize, QList<MEMBER> *pListMembers, qint64 *pnChainEnd, PDSTRUCT *pPdStruct)
 {
-    QPointer<XArniSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pListMembers || !pnChainEnd || !guardedSource) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pListMembers || !pnChainEnd) return false;
 
     pListMembers->clear();
     *pnChainEnd = 0;
@@ -141,7 +135,7 @@ bool XArniSFX::walkChain(qint64 nStart, qint64 nInputSize, QList<MEMBER> *pListM
         if (!arniRangeWithin(nInputSize, nOffset, ARNI_PROBE_SIZE)) return false;
 
         const QByteArray baHeader = read_array_process(nOffset, ARNI_PROBE_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baHeader.size() != ARNI_PROBE_SIZE)) return false;
+        if ((baHeader.size() != ARNI_PROBE_SIZE)) return false;
 
         bool bTerminator = false;
         qint64 nUncompressedSize = 0;
@@ -158,7 +152,6 @@ bool XArniSFX::walkChain(qint64 nStart, qint64 nInputSize, QList<MEMBER> *pListM
         // A member always holds at least one packed byte, so the next header
         // cannot start before the byte after the data begins.
         const qint64 nNext = findHeader(nDataOffset + 1, nInputSize, pPdStruct);
-        if (!guardedThis || !guardedSource) return false;
         if (nNext <= nDataOffset) return false;
 
         MEMBER member = {};
@@ -175,9 +168,8 @@ bool XArniSFX::walkChain(qint64 nStart, qint64 nInputSize, QList<MEMBER> *pListM
 
 bool XArniSFX::locateContainer(qint64 *pnContainerOffset, PDSTRUCT *pPdStruct)
 {
-    QPointer<XArniSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pnContainerOffset || !guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pnContainerOffset || guardedSource->isSequential()) return false;
 
     const qint64 nInputSize = guardedSource->size();
     if (nInputSize < ARNI_MIN_CARRIER) return false;
@@ -185,7 +177,7 @@ bool XArniSFX::locateContainer(qint64 *pnContainerOffset, PDSTRUCT *pPdStruct)
     // The carrier is an executable.  Refusing everything else keeps the scan
     // below from being reachable for data files at all.
     const QByteArray baMZ = read_array_process(0, 2, pPdStruct);
-    if (!guardedThis || !guardedSource || (baMZ.size() != 2)) return false;
+    if ((baMZ.size() != 2)) return false;
     if ((static_cast<quint8>(baMZ.at(0)) != 'M') || (static_cast<quint8>(baMZ.at(1)) != 'Z')) return false;
 
     // The ten-byte end record is the cheapest thing that separates an ARNI
@@ -205,7 +197,6 @@ bool XArniSFX::locateContainer(qint64 *pnContainerOffset, PDSTRUCT *pPdStruct)
     szTerminator[9] = 0x0A;
 
     const qint64 nTerminator = find_array(0, nInputSize, szTerminator, 10, pPdStruct);
-    if (!guardedThis || !guardedSource) return false;
     if (nTerminator < 0) return false;
 
     QList<MEMBER> listMembers;
@@ -216,7 +207,6 @@ bool XArniSFX::locateContainer(qint64 *pnContainerOffset, PDSTRUCT *pPdStruct)
         if (!isPdStructNotCanceled(pPdStruct)) return false;
 
         const qint64 nCandidate = findHeader(nSearchOffset, nInputSize, pPdStruct);
-        if (!guardedThis || !guardedSource) return false;
         if (nCandidate < 0) break;
 
         if (walkChain(nCandidate, nInputSize, &listMembers, &nChainEnd, pPdStruct)) {
@@ -224,8 +214,6 @@ bool XArniSFX::locateContainer(qint64 *pnContainerOffset, PDSTRUCT *pPdStruct)
 
             return true;
         }
-        if (!guardedThis || !guardedSource) return false;
-
         nSearchOffset = nCandidate + 1;
     }
 
@@ -346,15 +334,13 @@ QList<QString> XArniSFX::collectNameTable(const QByteArray &baStub, qint32 nCoun
 void XArniSFX::applyNames(qint64 nContainerOffset, QList<MEMBER> *pListMembers, PDSTRUCT *pPdStruct)
 {
     if (!pListMembers) return;
-
-    QPointer<XArniSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
 
     QList<QString> listNames;
 
     if (guardedSource && (nContainerOffset > 0) && (nContainerOffset <= ARNI_MAX_NAMETABLE_SCAN)) {
         const QByteArray baStub = read_array_process(0, nContainerOffset, pPdStruct);
-        if (guardedThis && guardedSource && (baStub.size() == nContainerOffset)) {
+        if (guardedSource && (baStub.size() == nContainerOffset)) {
             listNames = collectNameTable(baStub, pListMembers->size());
         }
     }
@@ -373,25 +359,21 @@ void XArniSFX::applyNames(qint64 nContainerOffset, QList<MEMBER> *pListMembers, 
 bool XArniSFX::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
-
-    QPointer<XArniSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
 
-    if (!locateContainer(&context.nContainerOffset, pPdStruct) || !guardedThis || !guardedSource) return false;
+    if (!locateContainer(&context.nContainerOffset, pPdStruct)) return false;
 
     qint64 nChainEnd = 0;
-    if (!walkChain(context.nContainerOffset, context.nInputSize, &context.listMembers, &nChainEnd, pPdStruct) || !guardedThis || !guardedSource) {
+    if (!walkChain(context.nContainerOffset, context.nInputSize, &context.listMembers, &nChainEnd, pPdStruct)) {
         return false;
     }
     if (context.listMembers.isEmpty()) return false;
 
     applyNames(context.nContainerOffset, &context.listMembers, pPdStruct);
-    if (!guardedThis || !guardedSource) return false;
-
     // The container ends on its own end record; the resource directory and the
     // rest of the carrier's data follow it.
     context.nArchiveSize = nChainEnd;
@@ -416,7 +398,7 @@ void XArniSFX::fillRecordProperties(const MEMBER &member, QMap<FPART_PROP, QVari
 
 bool XArniSFX::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     qint64 nContainerOffset = 0;
     const bool bResult = locateContainer(&nContainerOffset, pPdStruct);
@@ -570,11 +552,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XArniSFX::getDefaultUnpackProperties()
 
 bool XArniSFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XArniSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -584,8 +565,8 @@ bool XArniSFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -599,15 +580,13 @@ bool XArniSFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
             delete pContext;
             *pState = UNPACK_STATE();
             return false;
-        }
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

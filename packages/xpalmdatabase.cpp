@@ -6,7 +6,6 @@
 #include "xpalmdatabase.h"
 
 #include <QIODevice>
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -30,7 +29,7 @@ public:
     }
 
 private:
-    QPointer<QIODevice> m_guardedDevice;
+    QIODevice *m_guardedDevice;
     qint64 m_nPosition;
 };
 
@@ -153,8 +152,7 @@ bool XPalmDatabase::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XPalmDatabase> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
     PalmPositionKeeper positionKeeper(guardedSource);
 
@@ -164,7 +162,7 @@ bool XPalmDatabase::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const QByteArray baHeader =
         read_array_process(0, PALMDB_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource ||
+    if (!guardedSource ||
         baHeader.size() != PALMDB_HEADER_SIZE) {
         return false;
     }
@@ -215,7 +213,7 @@ bool XPalmDatabase::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const QByteArray baEntries =
         read_array_process(PALMDB_HEADER_SIZE, nEntryTableSize, pPdStruct);
-    if (!guardedThis || !guardedSource ||
+    if (!guardedSource ||
         baEntries.size() != nEntryTableSize) {
         return false;
     }
@@ -312,13 +310,13 @@ bool XPalmDatabase::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     context.nArchiveSize = context.nInputSize;
     context.listEntries = listEntries;
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XPalmDatabase::isValid(PDSTRUCT *pPdStruct)
 {
     // Detection probes a device the caller still owns: snapshot and restore.
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -524,8 +522,7 @@ bool XPalmDatabase::initUnpack(UNPACK_STATE *pState,
                                const QMap<UNPACK_PROP, QVariant> &mapProperties,
                                PDSTRUCT *pPdStruct)
 {
-    QPointer<XPalmDatabase> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
@@ -534,7 +531,7 @@ bool XPalmDatabase::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) || !guardedSource ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -549,9 +546,9 @@ bool XPalmDatabase::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis ||
+    if (!parseContext(pContext, pPdStruct) ||
         !guardedSource || pContext->listEntries.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -571,16 +568,11 @@ bool XPalmDatabase::initUnpack(UNPACK_STATE *pState,
     pState->pContext = pContext;
 
     const bool bFinalized =
-        guardedThis->validateAndFinalizeUnpackSource(pState, pContext,
+        validateAndFinalizeUnpackSource(pState, pContext,
                                                      pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

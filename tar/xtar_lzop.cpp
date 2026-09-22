@@ -89,27 +89,25 @@ XBinary *XTAR_LZOP::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nMod
 
 bool XTAR_LZOP::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XTAR_LZOP> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = guardedThis->XTARCOMPRESSED::handleInternalInfo(pPdStruct);
-        if (!guardedThis || !bResult) return false;
-        XTARCOMPRESSED::INTERNAL_INFO *pInfo = static_cast<XTARCOMPRESSED::INTERNAL_INFO *>(guardedThis->XTARCOMPRESSED::getInternalInfo(pPdStruct));
-        if (!guardedThis || !pInfo) return false;
-        static_cast<XTARCOMPRESSED::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
+        bResult = XTARCOMPRESSED::handleInternalInfo(pPdStruct);
+        if (!bResult) return false;
+        XTARCOMPRESSED::INTERNAL_INFO *pInfo = static_cast<XTARCOMPRESSED::INTERNAL_INFO *>(XTARCOMPRESSED::getInternalInfo(pPdStruct));
+        if (!pInfo) return false;
+        static_cast<XTARCOMPRESSED::INTERNAL_INFO &>(m_internalInfo) = *pInfo;
     }
 
-    return guardedThis && bResult;
+    return bResult;
 }
 
 void *XTAR_LZOP::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XTAR_LZOP> guardedThis(this);
-    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
-    if (!guardedThis || !bHandled) return nullptr;
+    const bool bHandled = handleInternalInfo(pPdStruct);
+    if (!bHandled) return nullptr;
 
-    return &guardedThis->m_internalInfo;
+    return &m_internalInfo;
 }
 
 void XTAR_LZOP::setInternalInfo(void *pInternalInfo)

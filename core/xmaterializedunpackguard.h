@@ -10,8 +10,6 @@
 
 #include <QFile>
 #include <QList>
-#include <QPointer>
-
 #include "xarchive.h"
 
 // Materialized handlers decode into private memory during initUnpack(), then
@@ -29,17 +27,17 @@ public:
         // A scoped smart pointer would retain a dangling address if such a callback
         // destroys an owned device and would delete it a second time while
         // unwinding the failed bind.
-        QPointer<QIODevice> guardedDevice(pDevice);
-        QPointer<QIODevice> guardedOwnedDevice(bOwnDevice ? pDevice : nullptr);
+        QIODevice *guardedDevice = pDevice;
+        QIODevice *guardedOwnedDevice = bOwnDevice ? pDevice : nullptr;
         std::unique_ptr<XMaterializedUnpackGuard> pResult;
         try {
-            pResult.reset(new XMaterializedUnpackGuard(guardedDevice.data()));
+            pResult.reset(new XMaterializedUnpackGuard(guardedDevice));
         } catch (const std::bad_alloc &) {
-            if (guardedOwnedDevice) delete guardedOwnedDevice.data();
+            if (guardedOwnedDevice) delete guardedOwnedDevice;
             return nullptr;
         }
         if (bOwnDevice) {
-            pResult->m_ownedDevice.track(guardedOwnedDevice.data());
+            pResult->m_ownedDevice.track(guardedOwnedDevice);
         }
         if (!guardedDevice || !pResult->m_archive.bindUnpackSource(&pResult->m_state, pPdStruct)) {
             return nullptr;
@@ -98,8 +96,8 @@ private:
         {
             // QObject clears QPointer synchronously.  If a source callback
             // already destroyed the device, there is nothing left to own.
-            QIODevice *pDevice = m_pDevice.data();
-            m_pDevice.clear();
+            QIODevice *pDevice = m_pDevice;
+            m_pDevice = nullptr;
             delete pDevice;
         }
 
@@ -110,7 +108,7 @@ private:
 
     private:
         Q_DISABLE_COPY(TRACKED_DEVICE_OWNER)
-        QPointer<QIODevice> m_pDevice;
+        QIODevice *m_pDevice = nullptr;
     };
 
     explicit XMaterializedUnpackGuard(QIODevice *pDevice) : m_archive(pDevice)

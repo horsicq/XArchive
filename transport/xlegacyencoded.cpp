@@ -4,7 +4,6 @@
  */
 #include "xlegacyencoded.h"
 
-#include <QPointer>
 #include <QRegularExpression>
 #include <QtEndian>
 
@@ -357,13 +356,12 @@ bool XLegacyEncoded::decode(const QByteArray &baSource, FT fileTypeHint,
 bool XLegacyEncoded::readSource(QByteArray *pData, PDSTRUCT *pPdStruct)
 {
     if (!pData || !isPdStructNotCanceled(pPdStruct)) return false;
-    QPointer<XLegacyEncoded> guardedThis(this);
     const qint64 nSize = getSize();
-    if (!guardedThis || (nSize <= 0) || (nSize > MAX_ENCODED_SIZE) ||
+    if ((nSize <= 0) || (nSize > MAX_ENCODED_SIZE) ||
         (nSize > (std::numeric_limits<int>::max)()))
         return false;
     *pData = read_array_process(0, nSize, pPdStruct);
-    return guardedThis && (pData->size() == nSize) &&
+    return (pData->size() == nSize) &&
            isPdStructNotCanceled(pPdStruct);
 }
 
@@ -461,7 +459,6 @@ bool XLegacyEncoded::initUnpack(
     const QMap<UNPACK_PROP, QVariant> &mapProperties,
     PDSTRUCT *pPdStruct)
 {
-    QPointer<XLegacyEncoded> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
@@ -474,18 +471,18 @@ bool XLegacyEncoded::initUnpack(
     pState->pContext = nullptr;
     *pState = UNPACK_STATE();
     delete pOldContext;
-    if (!guardedThis || !bindUnpackSource(pState, pPdStruct)) return false;
+    if (!bindUnpackSource(pState, pPdStruct)) return false;
 
     QByteArray baSource;
     UNPACK_CONTEXT *pContext = new (std::nothrow) UNPACK_CONTEXT;
-    if (!pContext || !readSource(&baSource, pPdStruct) || !guardedThis ||
+    if (!pContext || !readSource(&baSource, pPdStruct) ||
         !decode(baSource, m_fileTypeHint,
                 XBinary::getDeviceFileBaseName(getDevice()),
                 &pContext->fileType, &pContext->listItems) ||
         pContext->listItems.isEmpty())
     {
         delete pContext;
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
         return false;
     }
@@ -498,7 +495,6 @@ bool XLegacyEncoded::initUnpack(
     pState->mapUnpackProperties = mapProperties;
     if (!validateAndFinalizeUnpackSource(pState, pContext, pPdStruct))
     {
-        if (!guardedThis) return false;
         pState->pContext = nullptr;
         releaseUnpackSource(pState);
         delete pContext;
@@ -511,11 +507,10 @@ bool XLegacyEncoded::initUnpack(
 XBinary::ARCHIVERECORD XLegacyEncoded::infoCurrent(
     UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XLegacyEncoded> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress,
                                           &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed() || !pState || !pState->pContext ||
-        !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis ||
+        !isUnpackSourceCurrent(pState, pPdStruct) ||
         (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords))
         return ARCHIVERECORD();
@@ -540,7 +535,6 @@ XBinary::ARCHIVERECORD XLegacyEncoded::infoCurrent(
 bool XLegacyEncoded::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
                                    PDSTRUCT *pPdStruct)
 {
-    QPointer<XLegacyEncoded> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState || !pState->pContext ||
         !pDevice || !isUnpackSourceCurrent(pState, pPdStruct) ||
@@ -549,7 +543,7 @@ bool XLegacyEncoded::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
         devicesAlias(getDevice(), pDevice))
         return false;
 
-    QPointer<QIODevice> guardedOutput(pDevice);
+    QIODevice *guardedOutput = pDevice;
     const UNPACK_CONTEXT *pContext =
         static_cast<const UNPACK_CONTEXT *>(pState->pContext);
     if (pContext->listItems.size() != pState->nNumberOfRecords)
@@ -581,22 +575,21 @@ bool XLegacyEncoded::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
     }
 
     std::unique_ptr<QIODevice> pStage(createFileBuffer(nSize, pPdStruct));
-    if (!pStage || !guardedThis || !guardedOutput ||
+    if (!pStage || !guardedOutput ||
         ((nSize > 0) && (pStage->write(item.baData) != nSize)) ||
         !pStage->seek(0) || !isUnpackSourceCurrent(pState, pPdStruct))
         return false;
-    const bool bResult = publishUnpackOutput(pStage.get(), guardedOutput.data(),
+    const bool bResult = publishUnpackOutput(pStage.get(), guardedOutput,
                                              pState, pPdStruct);
-    if (bResult && guardedThis) pState->nCurrentOffset = nSize;
-    return bResult && guardedThis;
+    if (bResult) pState->nCurrentOffset = nSize;
+    return bResult;
 }
 
 bool XLegacyEncoded::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XLegacyEncoded> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState || !pState->pContext ||
-        !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis ||
+        !isUnpackSourceCurrent(pState, pPdStruct) ||
         (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords))
         return false;

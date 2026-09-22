@@ -21,7 +21,6 @@
 #include "xzlwbarchive.h"
 
 #include <QBuffer>
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -97,8 +96,7 @@ bool XZLWBArchive::parseContext(CONTEXT *pContext, bool bWalkMembers, PDSTRUCT *
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XZLWBArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -106,7 +104,7 @@ bool XZLWBArchive::parseContext(CONTEXT *pContext, bool bWalkMembers, PDSTRUCT *
     if (context.nInputSize < ZLWB_HEADER_SIZE) return false;
 
     const QByteArray baHeader = read_array_process(0, ZLWB_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != ZLWB_HEADER_SIZE)) return false;
+    if (!guardedSource || (baHeader.size() != ZLWB_HEADER_SIZE)) return false;
     if (baHeader.left(4) != QByteArray("ZLWB", 4)) return false;
     const uchar *pHeader = (const uchar *)baHeader.constData();
     if (pHeader[4] != 0x1a) return false;
@@ -127,7 +125,7 @@ bool XZLWBArchive::parseContext(CONTEXT *pContext, bool bWalkMembers, PDSTRUCT *
             if (!zlwbRangeWithin(context.nInputSize, nPosition, ZLWB_BLOB_HEADER_SIZE)) return false;
 
             const QByteArray baBlobHeader = read_array_process(nPosition, ZLWB_BLOB_HEADER_SIZE, pPdStruct);
-            if (!guardedThis || !guardedSource || (baBlobHeader.size() != ZLWB_BLOB_HEADER_SIZE)) return false;
+            if (!guardedSource || (baBlobHeader.size() != ZLWB_BLOB_HEADER_SIZE)) return false;
             const uchar *pBlobHeader = (const uchar *)baBlobHeader.constData();
             const qint64 nBlobSize = (qint32)qFromLittleEndian<quint32>(pBlobHeader + 4);
             const qint64 nRecordSize = (qint32)qFromLittleEndian<quint32>(pBlobHeader + 8);
@@ -137,11 +135,11 @@ bool XZLWBArchive::parseContext(CONTEXT *pContext, bool bWalkMembers, PDSTRUCT *
             if (!zlwbRangeWithin(context.nInputSize, nPosition + ZLWB_BLOB_HEADER_SIZE, nBlobSize)) return false;
 
             const QByteArray baBlob = read_array_process(nPosition + ZLWB_BLOB_HEADER_SIZE, nBlobSize, pPdStruct);
-            if (!guardedThis || !guardedSource || (baBlob.size() != nBlobSize)) return false;
+            if (!guardedSource || (baBlob.size() != nBlobSize)) return false;
 
             QByteArray baRecord;
             if (!zlwbInflateRecord(baBlob, nRecordSize, &baRecord, pPdStruct)) return false;
-            if (!guardedThis || !guardedSource) return false;
+            if (!guardedSource) return false;
             const uchar *pRecord = (const uchar *)baRecord.constData();
 
             MEMBER member = {};
@@ -184,7 +182,7 @@ bool XZLWBArchive::parseContext(CONTEXT *pContext, bool bWalkMembers, PDSTRUCT *
 
 bool XZLWBArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -345,11 +343,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XZLWBArchive::getDefaultUnpackProperties()
 
 bool XZLWBArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XZLWBArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -359,8 +356,8 @@ bool XZLWBArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVar
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, true, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, true, pPdStruct) || !guardedSource) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -375,15 +372,10 @@ bool XZLWBArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVar
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

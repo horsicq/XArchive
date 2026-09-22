@@ -6,7 +6,6 @@
 #include "xigf2.h"
 
 #include <QDateTime>
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -65,16 +64,15 @@ bool XIGF2::parseContext(CONTEXT *pContext, bool bHeaderOnly, PDSTRUCT *pPdStruc
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XIGF2> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
     if (context.nInputSize < IGF2_HEADER_SIZE + IGF2_RECORD_SIZE) return false;
 
     const QByteArray baHeader = read_array_process(0, IGF2_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != IGF2_HEADER_SIZE)) return false;
+    if ((baHeader.size() != IGF2_HEADER_SIZE)) return false;
     const uchar *pHeader = reinterpret_cast<const uchar *>(baHeader.constData());
 
     if (qFromLittleEndian<quint16>(pHeader) != IGF2_MAGIC) return false;
@@ -93,7 +91,7 @@ bool XIGF2::parseContext(CONTEXT *pContext, bool bHeaderOnly, PDSTRUCT *pPdStruc
 
     // Validate the first record even in the header-only pass.
     const QByteArray baFirst = read_array_process(context.nDirectoryOffset, IGF2_RECORD_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baFirst.size() != IGF2_RECORD_SIZE)) return false;
+    if ((baFirst.size() != IGF2_RECORD_SIZE)) return false;
     if (qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(baFirst.constData())) != IGF2_RECORD_MAGIC) return false;
 
     if (bHeaderOnly) {
@@ -113,12 +111,12 @@ bool XIGF2::parseContext(CONTEXT *pContext, bool bHeaderOnly, PDSTRUCT *pPdStruc
     QList<MEMBER> listA;
     QList<MEMBER> listB;
     const bool bTerminatedA = walkDirectory(&context, &s_igf2Layouts[0], &listA, pPdStruct);
-    if (!guardedThis || !guardedSource) return false;
+    if (!guardedSource) return false;
     if (bTerminatedA) {
         context.listMembers = listA;
     } else {
         const bool bTerminatedB = walkDirectory(&context, &s_igf2Layouts[1], &listB, pPdStruct);
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
         if (bTerminatedB) {
             context.listMembers = listB;
         } else {
@@ -130,9 +128,8 @@ bool XIGF2::parseContext(CONTEXT *pContext, bool bHeaderOnly, PDSTRUCT *pPdStruc
     if (context.listMembers.isEmpty()) return false;
 
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return isPdStructNotCanceled(pPdStruct);
 }
-
 
 // Walks the record chain under one candidate layout.  Returns true only when
 // the chain ends on the 0xFFFF terminator record; whatever could be parsed is
@@ -140,8 +137,7 @@ bool XIGF2::parseContext(CONTEXT *pContext, bool bHeaderOnly, PDSTRUCT *pPdStruc
 bool XIGF2::walkDirectory(const CONTEXT *pContext, const void *pLayoutRaw, QList<MEMBER> *pListMembers, PDSTRUCT *pPdStruct)
 {
     const IGF2_LAYOUT &layout = *static_cast<const IGF2_LAYOUT *>(pLayoutRaw);
-    QPointer<XIGF2> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
 
     qint64 nPosition = pContext->nDirectoryOffset;
@@ -150,13 +146,13 @@ bool XIGF2::walkDirectory(const CONTEXT *pContext, const void *pLayoutRaw, QList
         // The terminator record is often truncated at EOF, so its tag is
         // checked before a whole record is required.
         const QByteArray baTag = read_array_process(nPosition, 4, pPdStruct);
-        if (!guardedThis || !guardedSource || (baTag.size() != 4)) return false;
+        if ((baTag.size() != 4)) return false;
         if (qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(baTag.constData()) + 2) == IGF2_END_TAG) return true;
         if (qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(baTag.constData())) != IGF2_RECORD_MAGIC) return false;
         if ((nPosition + IGF2_RECORD_SIZE) > pContext->nInputSize) return false;
 
         const QByteArray baRecord = read_array_process(nPosition, IGF2_RECORD_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baRecord.size() != IGF2_RECORD_SIZE)) return false;
+        if ((baRecord.size() != IGF2_RECORD_SIZE)) return false;
         const uchar *pRecord = reinterpret_cast<const uchar *>(baRecord.constData());
 
         const qint32 nRawSize = qFromLittleEndian<qint32>(pRecord + layout.nRawOffset);
@@ -170,7 +166,7 @@ bool XIGF2::walkDirectory(const CONTEXT *pContext, const void *pLayoutRaw, QList
         const qint64 nNameRoom = qMin<qint64>(IGF2_MAX_NAME, pContext->nInputSize - nNameOffset);
         if (nNameRoom <= 0) return false;
         const QByteArray baNameRaw = read_array_process(nNameOffset, nNameRoom, pPdStruct);
-        if (!guardedThis || !guardedSource || baNameRaw.isEmpty()) return false;
+        if (baNameRaw.isEmpty()) return false;
         const qint32 nTerminator = baNameRaw.indexOf(char(0));
         if (nTerminator <= 0) return false;
         const QByteArray baName = baNameRaw.left(nTerminator);
@@ -198,11 +194,11 @@ bool XIGF2::walkDirectory(const CONTEXT *pContext, const void *pLayoutRaw, QList
 
 bool XIGF2::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
-    const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
+    QIODevice *guardedSource = getDevice();
+    const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
     const bool bResult = parseContext(&context, true, pPdStruct);
-    if (guardedSource && (nSavedPosition >= 0)) {
+    if ((nSavedPosition >= 0)) {
         guardedSource->seek(nSavedPosition);
     }
     return bResult;
@@ -360,11 +356,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XIGF2::getDefaultUnpackProperties()
 
 bool XIGF2::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XIGF2> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -374,8 +369,8 @@ bool XIGF2::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, false, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, false, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -389,15 +384,10 @@ bool XIGF2::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

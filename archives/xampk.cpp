@@ -5,7 +5,6 @@
 
 #include "xampk.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -90,9 +89,8 @@ bool XAMPK::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XAMPK> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -100,8 +98,7 @@ bool XAMPK::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const QByteArray baHeader =
         read_array_process(0, AMPK_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        baHeader.size() != AMPK_HEADER_SIZE) {
+    if (baHeader.size() != AMPK_HEADER_SIZE) {
         return false;
     }
     const uchar *pHeader =
@@ -158,7 +155,7 @@ bool XAMPK::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (nProbeSize < AMPK_RECORD_PREFIX_SIZE) break;
         const QByteArray baProbe =
             read_array_process(nOffset, nProbeSize, pPdStruct);
-        if (!guardedThis || !guardedSource || baProbe.size() != nProbeSize) {
+        if (baProbe.size() != nProbeSize) {
             return false;
         }
         const uchar *pProbe =
@@ -274,12 +271,12 @@ bool XAMPK::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         (nTotalDataSize == static_cast<quint64>(context.nDeclaredDataSize));
 
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XAMPK::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -505,9 +502,8 @@ bool XAMPK::initUnpack(UNPACK_STATE *pState,
                        const QMap<UNPACK_PROP, QVariant> &mapProperties,
                        PDSTRUCT *pPdStruct)
 {
-    QPointer<XAMPK> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
     }
@@ -515,7 +511,7 @@ bool XAMPK::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -530,9 +526,9 @@ bool XAMPK::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource ||
+    if (!parseContext(pContext, pPdStruct) ||
         pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -551,16 +547,11 @@ bool XAMPK::initUnpack(UNPACK_STATE *pState,
     pState->pContext = pContext;
 
     const bool bFinalized =
-        guardedThis->validateAndFinalizeUnpackSource(pState, pContext,
+        validateAndFinalizeUnpackSource(pState, pContext,
                                                      pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

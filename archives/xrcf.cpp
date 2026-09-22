@@ -5,7 +5,6 @@
 
 #include "xrcf.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -226,16 +225,15 @@ bool XRCF::parseContext(CONTEXT *pContext, bool bHeaderOnly, PDSTRUCT *pPdStruct
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XRCF> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
     if (context.nInputSize < RCF_HEADER_SIZE + 2 + RCF_ENTRY_SIZE + 2) return false;
 
     const QByteArray baHeader = read_array_process(0, RCF_HEADER_SIZE + 2, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != RCF_HEADER_SIZE + 2)) return false;
+    if (baHeader.size() != RCF_HEADER_SIZE + 2) return false;
     const quint8 *pHeader = reinterpret_cast<const quint8 *>(baHeader.constData());
 
     // "\x03RCF" with 0xA5 added to each tag byte, then "\x03" "1.0", then 00 00.
@@ -249,7 +247,7 @@ bool XRCF::parseContext(CONTEXT *pContext, bool bHeaderOnly, PDSTRUCT *pPdStruct
     context.nArchiveSize = context.nInputSize;
 
     const QByteArray baCount = read_array_process(context.nInputSize - 2, 2, pPdStruct);
-    if (!guardedThis || !guardedSource || (baCount.size() != 2)) return false;
+    if (baCount.size() != 2) return false;
     const qint32 nCount = static_cast<qint32>(qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(baCount.constData())));
     if ((nCount < 1) || (nCount > RCF_MAX_MEMBERS)) return false;
 
@@ -258,7 +256,7 @@ bool XRCF::parseContext(CONTEXT *pContext, bool bHeaderOnly, PDSTRUCT *pPdStruct
     context.nDirectoryOffset = context.nInputSize - nDirectorySize;
 
     const QByteArray baDirectory = read_array_process(context.nDirectoryOffset, nDirectorySize - 2, pPdStruct);
-    if (!guardedThis || !guardedSource || (baDirectory.size() != (nDirectorySize - 2))) return false;
+    if (baDirectory.size() != (nDirectorySize - 2)) return false;
     const quint8 *pDirectory = reinterpret_cast<const quint8 *>(baDirectory.constData());
 
     // The payload extents must tile the span between the header and the
@@ -297,7 +295,7 @@ bool XRCF::parseContext(CONTEXT *pContext, bool bHeaderOnly, PDSTRUCT *pPdStruct
         if (!isPdStructNotCanceled(pPdStruct)) return false;
         MEMBER &member = listMembers[i];
         const QByteArray packed = read_array_process(member.nDataOffset, member.nPackedSize, pPdStruct);
-        if (!guardedThis || !guardedSource || (packed.size() != member.nPackedSize)) return false;
+        if (packed.size() != member.nPackedSize) return false;
         qint64 nRawSize = 0;
         if (!rcfMeasureDcl(packed, &nRawSize, pPdStruct)) return false;
         member.nRawSize = nRawSize;
@@ -305,12 +303,12 @@ bool XRCF::parseContext(CONTEXT *pContext, bool bHeaderOnly, PDSTRUCT *pPdStruct
 
     context.listMembers = listMembers;
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return isPdStructNotCanceled(pPdStruct);
 }
 
 bool XRCF::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     // The structural pass (magic, directory, exact tiling) is enough to answer
@@ -479,11 +477,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XRCF::getDefaultUnpackProperties()
 
 bool XRCF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XRCF> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -493,8 +490,8 @@ bool XRCF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, false, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, false, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -508,15 +505,10 @@ bool XRCF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

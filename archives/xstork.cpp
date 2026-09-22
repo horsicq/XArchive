@@ -5,7 +5,6 @@
 
 #include "xstork.h"
 
-#include <QPointer>
 #include <QVector>
 #include <QtEndian>
 
@@ -254,8 +253,7 @@ bool XStork::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XStork> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -263,7 +261,7 @@ bool XStork::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nInputSize < STORK_RECORD_SIZE + 3) return false;
 
     const QByteArray baAnchor = read_array_process(0, STORK_ANCHOR_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baAnchor.size() != STORK_ANCHOR_SIZE)) return false;
+    if (!guardedSource || (baAnchor.size() != STORK_ANCHOR_SIZE)) return false;
     if (memcmp(baAnchor.constData(), STORK_ANCHOR, STORK_ANCHOR_SIZE) != 0) return false;
 
     qint64 nOffset = 0;
@@ -274,7 +272,7 @@ bool XStork::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (nOffset + STORK_RECORD_SIZE > context.nInputSize) return false;
 
         const QByteArray baRecord = read_array_process(nOffset, STORK_RECORD_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baRecord.size() != STORK_RECORD_SIZE)) return false;
+        if (!guardedSource || (baRecord.size() != STORK_RECORD_SIZE)) return false;
         const uchar *pRecord = reinterpret_cast<const uchar *>(baRecord.constData());
 
         const qint32 nNameLength = static_cast<qint32>(pRecord[0]);
@@ -294,7 +292,7 @@ bool XStork::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         member.sFileName = rawNameToString(baRecord.constData() + 1, nNameLength, nIndex);
 
         const QByteArray baPacked = read_array_process(member.nDataOffset, member.nCompressedSize, pPdStruct);
-        if (!guardedThis || !guardedSource || (baPacked.size() != member.nCompressedSize)) return false;
+        if (!guardedSource || (baPacked.size() != member.nCompressedSize)) return false;
         member.nUncompressedSize = measurePayload(baPacked);
         // The very first payload is the trial decode that makes a headerless
         // format safe to claim; later members are allowed to be damaged and are
@@ -313,12 +311,12 @@ bool XStork::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     context.nArchiveSize = context.nInputSize;
     *pContext = context;
 
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XStork::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -482,11 +480,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XStork::getDefaultUnpackProperties()
 
 bool XStork::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XStork> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -496,8 +493,8 @@ bool XStork::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> 
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -511,15 +508,10 @@ bool XStork::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> 
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

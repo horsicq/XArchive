@@ -98,7 +98,7 @@ QIODevice *XVolumeSetDevice::getSegmentDevice(qint32 nIndex) const
 {
     if ((nIndex < 0) || (nIndex >= m_listSegments.size())) return nullptr;
 
-    return m_listSegments.at(nIndex).pDevice.data();
+    return m_listSegments.at(nIndex).pDevice;
 }
 
 qint64 XVolumeSetDevice::toLogicalOffset(qint32 nIndex, qint64 nOffsetInSegment) const
@@ -116,7 +116,7 @@ bool XVolumeSetDevice::aliases(QIODevice *pDevice) const
     const qint32 nNumberOfSegments = m_listSegments.size();
 
     for (qint32 i = 0; i < nNumberOfSegments; i++) {
-        QIODevice *pSegmentDevice = m_listSegments.at(i).pDevice.data();
+        QIODevice *pSegmentDevice = m_listSegments.at(i).pDevice;
         if (!pSegmentDevice) return true;
         if (XBinary::devicesAlias(pSegmentDevice, pDevice)) return true;
     }
@@ -189,7 +189,7 @@ qint64 XVolumeSetDevice::readData(char *pData, qint64 nMaxSize)
         if (nIndex < 0) return -1;
 
         const SEGMENT &segment = m_listSegments.at(nIndex);
-        QIODevice *pDevice = segment.pDevice.data();
+        QIODevice *pDevice = segment.pDevice;
         if (!pDevice || !pDevice->isOpen() || !pDevice->isReadable()) return -1;
 
         const qint64 nSegmentPosition = m_nPosition - segment.nStart;

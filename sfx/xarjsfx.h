@@ -22,7 +22,7 @@ public:
 
     struct ARJSFX_UNPACK_CONTEXT {
         QList<ARJSFX_ENTRY> listEntries;
-        QPointer<QIODevice> pOuterSourceDevice;
+        QIODevice *pOuterSourceDevice = nullptr;
         quint64 nOwnerDeviceGeneration;
         UNPACK_STATE *pOwnerState;
         qint32 nEntryIndex;
@@ -50,12 +50,6 @@ public:
     bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
     bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
-
-protected:
-    bool isDeviceReplacementAllowed() const override
-    {
-        return XSFX::isDeviceReplacementAllowed() && (!m_pArjUnpackOperationState || !*m_pArjUnpackOperationState) && m_setArjUnpackContexts.isEmpty();
-    }
 
 private:
     bool _scanArchives(QList<ARJSFX_ENTRY> *pList, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct);

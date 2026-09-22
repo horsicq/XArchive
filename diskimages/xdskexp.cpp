@@ -5,7 +5,6 @@
 
 #include "xdskexp.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <memory>
@@ -73,8 +72,7 @@ bool XDskExp::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XDskExp> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     const qint64 nFileSize = guardedSource->size();
@@ -83,12 +81,12 @@ bool XDskExp::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     CONTEXT context = {};
     context.nInputSize = nFileSize;
     const QByteArray baSignature = read_array_process(0, 2, pPdStruct);
-    if (!guardedThis || !guardedSource || baSignature.size() != 2) return false;
+    if (!guardedSource || baSignature.size() != 2) return false;
 
     if (baSignature == QByteArrayLiteral("MZ")) {
         if (nFileSize < 64) return false;
         const QByteArray baMZ = read_array_process(0, 6, pPdStruct);
-        if (!guardedThis || !guardedSource || baMZ.size() != 6) return false;
+        if (!guardedSource || baMZ.size() != 6) return false;
         const uchar *pMZ =
             reinterpret_cast<const uchar *>(baMZ.constData());
         const quint16 nLastPageBytes = qFromLittleEndian<quint16>(pMZ + 2);
@@ -118,7 +116,7 @@ bool XDskExp::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const QByteArray baHeader = read_array_process(
         context.nHeaderOffset, DSKEXP_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource ||
+    if (!guardedSource ||
         baHeader.size() != DSKEXP_HEADER_SIZE ||
         baHeader.left(2) != QByteArrayLiteral("AS")) {
         return false;
@@ -200,14 +198,14 @@ bool XDskExp::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         qint64 nCompressedSize = 0;
         context.listTracks.reserve(context.nNumberOfTracks);
         for (qint32 i = 0; i < context.nNumberOfTracks; ++i) {
-            if (!guardedThis || !guardedSource ||
+            if (!guardedSource ||
                 !isPdStructNotCanceled(pPdStruct) || nOffset < 0 ||
                 nOffset > nFileSize - 2) {
                 return false;
             }
             const QByteArray baSize =
                 read_array_process(nOffset, 2, pPdStruct);
-            if (!guardedThis || !guardedSource || baSize.size() != 2) {
+            if (!guardedSource || baSize.size() != 2) {
                 return false;
             }
             const qint32 nChunkSize = qFromLittleEndian<quint16>(
@@ -228,7 +226,7 @@ bool XDskExp::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         context.nCompressedSize = nCompressedSize;
     }
 
-    if (!guardedThis || !guardedSource ||
+    if (!guardedSource ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -541,8 +539,7 @@ bool XDskExp::initUnpack(
     const QMap<UNPACK_PROP, QVariant> &mapProperties,
     PDSTRUCT *pPdStruct)
 {
-    QPointer<XDskExp> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
@@ -551,7 +548,7 @@ bool XDskExp::initUnpack(
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) || !guardedSource ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -567,9 +564,9 @@ bool XDskExp::initUnpack(
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis ||
+    if (!parseContext(pContext, pPdStruct) ||
         !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -646,9 +643,8 @@ bool XDskExp::writeRange(qint64 nOffset, qint64 nSize,
                          QIODevice *pOutputLifetime,
                          PDSTRUCT *pPdStruct)
 {
-    QPointer<XDskExp> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    QPointer<QIODevice> guardedOutput(pOutputLifetime);
+    QIODevice *guardedSource = getDevice();
+    QIODevice *guardedOutput = pOutputLifetime;
     if (!pDirectState || !guardedSource || !guardedOutput ||
         (nOffset < 0) || (nSize < 0)) {
         return false;
@@ -656,13 +652,13 @@ bool XDskExp::writeRange(qint64 nOffset, qint64 nSize,
 
     const qint32 nBufferSize = 0x10000;
     qint64 nDone = 0;
-    while ((nDone < nSize) && guardedThis && guardedSource &&
+    while ((nDone < nSize) && guardedSource &&
            guardedOutput && isPdStructNotCanceled(pPdStruct)) {
         const qint32 nChunk = qint32(
             qMin<qint64>(nBufferSize, nSize - nDone));
         const QByteArray baData = read_array_process(
             nOffset + nDone, nChunk, pPdStruct);
-        if (!guardedThis || !guardedSource || !guardedOutput ||
+        if (!guardedSource || !guardedOutput ||
             (baData.size() != nChunk) ||
             (_writeDevice(baData.constData(), nChunk,
                           pDirectState) != nChunk)) {
@@ -677,14 +673,13 @@ bool XDskExp::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
                             PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    QPointer<XDskExp> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    QPointer<QIODevice> guardedOutput(pDevice);
+    QIODevice *guardedSource = getDevice();
+    QIODevice *guardedOutput = pDevice;
     if (!operationGuard.isAcquired() || !pState || !guardedSource ||
         !guardedOutput || pState->nCurrentIndex != 0 ||
         pState->nNumberOfRecords != 1 ||
-        !isUnpackOutputSupported(guardedOutput.data()) ||
-        devicesAlias(guardedSource.data(), guardedOutput.data()) ||
+        !isUnpackOutputSupported(guardedOutput) ||
+        devicesAlias(guardedSource, guardedOutput) ||
         !isUnpackSourceCurrent(pState, pPdStruct) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
@@ -712,14 +707,14 @@ bool XDskExp::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
 
     std::unique_ptr<QIODevice> pStage(
         createFileBuffer(pContext->nUncompressedSize, pPdStruct));
-    if (!pStage || !guardedThis || !guardedSource || !guardedOutput) {
+    if (!pStage || !guardedSource || !guardedOutput) {
         return false;
     }
 
     DATAPROCESS_STATE directState = {};
     directState.mapUnpackProperties = pState->mapUnpackProperties;
     directState.spOutputBudget = pState->spOutputBudget;
-    directState.pDeviceInput = guardedSource.data();
+    directState.pDeviceInput = guardedSource;
     directState.pDeviceOutput = pStage.get();
     directState.nInputOffset = 0;
     directState.nInputLimit = -1;
@@ -730,7 +725,7 @@ bool XDskExp::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
     if (pContext->nCompressionMethod == 0) {
         bResult = writeRange(pContext->nDataOffset,
                              pContext->nUncompressedSize, &directState,
-                             guardedOutput.data(), pPdStruct);
+                             guardedOutput, pPdStruct);
     } else {
         if (pContext->listTracks.size() !=
             pContext->nNumberOfTracks) {
@@ -741,7 +736,7 @@ bool XDskExp::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
             const TRACK_RECORD &track = pContext->listTracks.at(i);
             const qint64 nOutputOffset =
                 qint64(i) * pContext->nTrackSize;
-            if (!guardedThis || !guardedSource || !guardedOutput ||
+            if (!guardedSource || !guardedOutput ||
                 !isPdStructNotCanceled(pPdStruct) ||
                 !pStage->seek(nOutputOffset)) {
                 bResult = false;
@@ -750,7 +745,7 @@ bool XDskExp::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
             if (track.nSize == 1) {
                 const QByteArray baValue = read_array_process(
                     track.nOffset, 1, pPdStruct);
-                if (!guardedThis || !guardedSource || !guardedOutput ||
+                if (!guardedSource || !guardedOutput ||
                     baValue.size() != 1) {
                     bResult = false;
                     break;
@@ -762,10 +757,10 @@ bool XDskExp::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
                                  &directState) == baTrack.size();
             } else if (track.nSize == pContext->nTrackSize) {
                 bResult = writeRange(track.nOffset, track.nSize,
-                                     &directState, guardedOutput.data(),
+                                     &directState, guardedOutput,
                                      pPdStruct);
             } else {
-                SubDevice subDevice(guardedSource.data(), track.nOffset,
+                SubDevice subDevice(guardedSource, track.nOffset,
                                     track.nSize);
                 SubDevice outputDevice(pStage.get(), nOutputOffset,
                                        pContext->nTrackSize);
@@ -811,7 +806,7 @@ bool XDskExp::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
         }
     }
 
-    if (!bResult || !guardedThis || !guardedSource || !guardedOutput ||
+    if (!bResult || !guardedSource || !guardedOutput ||
         pStage->pos() != pContext->nUncompressedSize ||
         !isUnpackSourceCurrent(pState, pPdStruct)) {
         return false;
@@ -825,7 +820,7 @@ bool XDskExp::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
         const quint32 nCRC1 = _getCRC32(
             pStage.get(), 0x0000059d,
             _getCRC32Table_EDB88320(), pPdStruct);
-        if (!guardedThis || !guardedSource || !guardedOutput) return false;
+        if (!guardedSource || !guardedOutput) return false;
         quint32 nCRC2 = nCRC1;
         if (nCRC1 != pContext->nDataCRC) {
             nCRC2 = _getCRC32(
@@ -840,16 +835,16 @@ bool XDskExp::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
         }
     }
 
-    if (!guardedThis || !guardedSource || !guardedOutput ||
+    if (!guardedSource || !guardedOutput ||
         !isUnpackSourceCurrent(pState, pPdStruct)) {
         return false;
     }
     const bool bPublished = publishUnpackOutput(
-        pStage.get(), guardedOutput.data(), pState, pPdStruct);
-    if (bPublished && guardedThis) {
+        pStage.get(), guardedOutput, pState, pPdStruct);
+    if (bPublished) {
         pState->nCurrentOffset = pState->nTotalSize;
     }
-    return bPublished && guardedThis;
+    return bPublished;
 }
 
 bool XDskExp::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
@@ -884,25 +879,23 @@ bool XDskExp::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 bool XDskExp::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XDskExp> guardedThis(this);
     bool bResult = true;
     if (!isInternalInfoHandled()) {
-        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
-        if (!guardedThis || !bResult) return false;
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        if (!bResult) return false;
         XArchive::INTERNAL_INFO *pInfo =
             static_cast<XArchive::INTERNAL_INFO *>(
-                guardedThis->XArchive::getInternalInfo(pPdStruct));
-        if (!guardedThis || !pInfo) return false;
+                XArchive::getInternalInfo(pPdStruct));
+        if (!pInfo) return false;
         static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) = *pInfo;
     }
-    return guardedThis && bResult;
+    return bResult;
 }
 
 void *XDskExp::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XDskExp> guardedThis(this);
-    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
-    if (!guardedThis || !bHandled) return nullptr;
+    const bool bHandled = handleInternalInfo(pPdStruct);
+    if (!bHandled) return nullptr;
     return &m_internalInfo;
 }
 

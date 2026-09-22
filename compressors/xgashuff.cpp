@@ -42,26 +42,23 @@ XGasHuff::XGasHuff(QIODevice *pDevice) : XArchive(pDevice)
 bool XGasHuff::_readAndCheckHeader(quint32 *pnUncompressedSize, quint32 *pnNodeCount, quint32 *pnRootIndex, qint64 *pnTreeEndOffset, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
-
-    QPointer<XGasHuff> guardedArchive(this);
-
-    QPointer<QIODevice> guardedDevice(guardedArchive->getDevice());
-    if (!guardedArchive || !guardedDevice) return false;
+    QIODevice *guardedDevice = getDevice();
+    if (!guardedDevice) return false;
 
     // Detection probes a device the caller still owns: remember where it was
     // and put it back before returning.
     const qint64 nSavedPosition = guardedDevice->pos();
 
-    const qint64 nSize = guardedArchive->getSize();
-    if (!guardedArchive || !guardedDevice) return false;
+    const qint64 nSize = getSize();
+    if (!guardedDevice) return false;
 
     bool bResult = false;
 
     if ((nSize > (GAS_HEADER_SIZE + 2)) && (nSize <= XGasHuffDecoder::GAS_MAX_INPUT_SIZE)) {
         const qint64 nProbeSize = qMin<qint64>(nSize, GAS_PROBE_READ_SIZE);
-        const QByteArray baProbe = guardedArchive->read_array(0, (qint32)nProbeSize);
+        const QByteArray baProbe = read_array(0, (qint32)nProbeSize);
 
-        if (guardedArchive && guardedDevice && (baProbe.size() == (qint32)nProbeSize)) {
+        if (guardedDevice && (baProbe.size() == (qint32)nProbeSize)) {
             quint32 nUncompressedSize = 0;
             quint32 nNodeCount = 0;
             quint32 nRootIndex = 0;
@@ -84,7 +81,7 @@ bool XGasHuff::_readAndCheckHeader(quint32 *pnUncompressedSize, quint32 *pnNodeC
 
     if (guardedDevice) guardedDevice->seek(nSavedPosition);
 
-    return guardedArchive && guardedDevice && bResult;
+    return guardedDevice && bResult;
 }
 
 bool XGasHuff::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
@@ -383,7 +380,6 @@ QMap<XBinary::UNPACK_PROP, QVariant> XGasHuff::getDefaultUnpackProperties()
 
 bool XGasHuff::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XGasHuff> guardedArchive(this);
     bool bResult = false;
 
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
@@ -391,8 +387,8 @@ bool XGasHuff::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
         pPdStruct = &pdStructEmpty;
     }
 
-    if (pState && !m_bUnpackOperationInProgress && ((!pState->pContext && pState->baUnpackSourceToken.isEmpty()) || guardedArchive->ownsUnpackSource(pState))) {
-        if (!guardedArchive->finishUnpack(pState, nullptr) || !guardedArchive) return false;
+    if (pState && !m_bUnpackOperationInProgress && ((!pState->pContext && pState->baUnpackSourceToken.isEmpty()) || ownsUnpackSource(pState))) {
+        if (!finishUnpack(pState, nullptr)) return false;
         UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
         if (!operationGuard.isAcquired()) return false;
 
@@ -400,40 +396,37 @@ bool XGasHuff::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
             return false;
         }
 
-        const bool bBound = guardedArchive->bindUnpackSource(pState, pPdStruct);
-        if (!guardedArchive || !bBound) return false;
+        const bool bBound = bindUnpackSource(pState, pPdStruct);
+        if (!bBound) return false;
 
         quint32 nUncompressedSize = 0;
         quint32 nNodeCount = 0;
         quint32 nRootIndex = 0;
         qint64 nTreeEndOffset = 0;
 
-        const bool bValid = guardedArchive->_readAndCheckHeader(&nUncompressedSize, &nNodeCount, &nRootIndex, &nTreeEndOffset, pPdStruct);
-        if (!guardedArchive) return false;
+        const bool bValid = _readAndCheckHeader(&nUncompressedSize, &nNodeCount, &nRootIndex, &nTreeEndOffset, pPdStruct);
         if (!bValid) {
-            guardedArchive->releaseUnpackSource(pState);
+            releaseUnpackSource(pState);
             return false;
         }
 
-        const qint64 nSize = guardedArchive->getSize();
-        if (!guardedArchive) return false;
-
+        const qint64 nSize = getSize();
         GAS_UNPACK_CONTEXT *pContext = new (std::nothrow) GAS_UNPACK_CONTEXT;
         if (!pContext) {
-            guardedArchive->releaseUnpackSource(pState);
+            releaseUnpackSource(pState);
             return false;
         }
 
-        QPointer<QIODevice> guardedSource(guardedArchive->getDevice());
-        if (!guardedArchive || !guardedSource) {
-            if (guardedArchive) guardedArchive->releaseUnpackSource(pState);
+        QIODevice *guardedSource = getDevice();
+        if (!guardedSource) {
+            releaseUnpackSource(pState);
             delete pContext;
             return false;
         }
 
-        QString sName = XBinary::getDeviceFileName(guardedSource.data());
-        if (!guardedArchive || !guardedSource) {
-            if (guardedArchive) guardedArchive->releaseUnpackSource(pState);
+        QString sName = XBinary::getDeviceFileName(guardedSource);
+        if (!guardedSource) {
+            releaseUnpackSource(pState);
             delete pContext;
             return false;
         }
@@ -455,11 +448,10 @@ bool XGasHuff::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
         pState->pContext = pContext;
         pState->mapUnpackProperties = mapProperties;
 
-        bResult = guardedArchive->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-        if (!guardedArchive) return false;
+        bResult = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
         if (!bResult) {
             pState->pContext = nullptr;
-            guardedArchive->releaseUnpackSource(pState);
+            releaseUnpackSource(pState);
             delete pContext;
             *pState = UNPACK_STATE();
         }
@@ -472,11 +464,9 @@ XBinary::ARCHIVERECORD XGasHuff::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPd
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
-    QPointer<XGasHuff> guardedArchive(this);
-
     XBinary::ARCHIVERECORD result = {};
 
-    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive) {
+    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct)) {
         return result;
     }
 
@@ -501,14 +491,10 @@ bool XGasHuff::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT 
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
-    QPointer<XGasHuff> guardedArchive(this);
-
     if (!pState || !pState->pContext || !pDevice) return false;
-    QPointer<QIODevice> guardedOutput(pDevice);
-    QPointer<QIODevice> guardedSource(guardedArchive->getDevice());
-    if (!guardedOutput || !guardedSource || !guardedArchive->isUnpackOutputSupported(guardedOutput.data()) || !guardedArchive ||
-        XBinary::devicesAlias(guardedSource.data(), guardedOutput.data()) || !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    QIODevice *guardedOutput = pDevice;
+    QIODevice *guardedSource = getDevice();
+    if (!guardedOutput || !guardedSource || !isUnpackOutputSupported(guardedOutput) || XBinary::devicesAlias(guardedSource, guardedOutput) || !isUnpackSourceCurrent(pState, pPdStruct) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -518,8 +504,8 @@ bool XGasHuff::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT 
 
     GAS_UNPACK_CONTEXT *pContext = reinterpret_cast<GAS_UNPACK_CONTEXT *>(pState->pContext);
 
-    const qint64 nFileSize = guardedArchive->getSize();
-    if (!guardedArchive || !guardedSource) return false;
+    const qint64 nFileSize = getSize();
+    if (!guardedSource) return false;
 
     if ((nFileSize != pContext->nTotalSize) || (nFileSize <= GAS_HEADER_SIZE)) {
         return false;
@@ -543,9 +529,9 @@ bool XGasHuff::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT 
     }
 
     std::unique_ptr<QIODevice> pStage(XBinary::createFileBuffer(pContext->nUncompressedSize, pPdStruct));
-    if (!guardedArchive || !pStage || !guardedOutput || !guardedSource || !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive) return false;
+    if (!pStage || !guardedOutput || !guardedSource || !isUnpackSourceCurrent(pState, pPdStruct)) return false;
 
-    SubDevice sd(guardedSource.data(), 0, nFileSize);
+    SubDevice sd(guardedSource, 0, nFileSize);
 
     bool bResult = false;
 
@@ -562,24 +548,20 @@ bool XGasHuff::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT 
         state.nProcessedOffset = 0;
         state.nProcessedLimit = pContext->nUncompressedSize;
 
-        bResult = XGasHuffDecoder::decompress(&state, pPdStruct) && guardedArchive && guardedOutput && guardedSource &&
+        bResult = XGasHuffDecoder::decompress(&state, pPdStruct) && guardedOutput && guardedSource &&
                   (state.nCountOutput == pContext->nUncompressedSize);
 
         sd.close();
     }
 
-    return bResult && guardedArchive && guardedOutput && guardedSource && guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) && guardedArchive &&
-           guardedArchive->publishUnpackOutput(pStage.get(), guardedOutput.data(), pState, pPdStruct);
+    return bResult && guardedOutput && guardedSource && isUnpackSourceCurrent(pState, pPdStruct) && publishUnpackOutput(pStage.get(), guardedOutput, pState, pPdStruct);
 }
 
 bool XGasHuff::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
-    QPointer<XGasHuff> guardedArchive(this);
-
-    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive ||
-        (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
+    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }
 
@@ -592,22 +574,18 @@ bool XGasHuff::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
-    QPointer<XGasHuff> guardedArchive(this);
-
     Q_UNUSED(pPdStruct)
 
     if (!pState) {
         return false;
     }
 
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedArchive->ownsUnpackSource(pState)) return false;
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
 
     GAS_UNPACK_CONTEXT *pContext = static_cast<GAS_UNPACK_CONTEXT *>(pState->pContext);
-    guardedArchive->releaseUnpackSource(pState);
+    releaseUnpackSource(pState);
     pState->pContext = nullptr;
     delete pContext;
-    if (!guardedArchive) return false;
-
     pState->nCurrentOffset = 0;
     pState->nTotalSize = 0;
     pState->nCurrentIndex = 0;
@@ -634,27 +612,25 @@ XBinary *XGasHuff::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModu
 
 bool XGasHuff::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XGasHuff> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
-        if (!guardedThis || !bResult) return false;
-        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(guardedThis->XArchive::getInternalInfo(pPdStruct));
-        if (!guardedThis || !pInfo) return false;
-        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        if (!bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        if (!pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) = *pInfo;
     }
 
-    return guardedThis && bResult;
+    return bResult;
 }
 
 void *XGasHuff::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XGasHuff> guardedThis(this);
-    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
-    if (!guardedThis || !bHandled) return nullptr;
+    const bool bHandled = handleInternalInfo(pPdStruct);
+    if (!bHandled) return nullptr;
 
-    return &guardedThis->m_internalInfo;
+    return &m_internalInfo;
 }
 
 void XGasHuff::setInternalInfo(void *pInternalInfo)

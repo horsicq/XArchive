@@ -5,7 +5,6 @@
 
 #include "xgtu.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -84,8 +83,7 @@ bool XGTU::measureFrames(MEMBER *pMember, qint64 nInputSize,
 {
     if (!pMember) return false;
 
-    QPointer<XGTU> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
 
     qint64 nOffset = pMember->nInfoOffset + GTU_INFO_SIZE;
@@ -103,8 +101,7 @@ bool XGTU::measureFrames(MEMBER *pMember, qint64 nInputSize,
         }
         const QByteArray baFrame =
             read_array_process(nOffset, GTU_FRAME_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            (baFrame.size() != GTU_FRAME_SIZE)) {
+        if ((baFrame.size() != GTU_FRAME_SIZE)) {
             return false;
         }
         const uchar *pFrame =
@@ -135,8 +132,7 @@ bool XGTU::measureFrames(MEMBER *pMember, qint64 nInputSize,
         }
         const QByteArray baFrame =
             read_array_process(nOffset, GTU_FRAME_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            (baFrame.size() != GTU_FRAME_SIZE)) {
+        if ((baFrame.size() != GTU_FRAME_SIZE)) {
             return false;
         }
         const uchar *pFrame =
@@ -164,9 +160,8 @@ bool XGTU::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XGTU> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -174,7 +169,7 @@ bool XGTU::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     // The one and only global field: the u32 at +0 is the file's own size.
     const QByteArray baTotal = read_array_process(0, 4, pPdStruct);
-    if (!guardedThis || !guardedSource || (baTotal.size() != 4)) return false;
+    if ((baTotal.size() != 4)) return false;
     const qint64 nDeclaredSize = static_cast<qint64>(
         qFromLittleEndian<quint32>(
             reinterpret_cast<const uchar *>(baTotal.constData())));
@@ -192,8 +187,7 @@ bool XGTU::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         }
         const QByteArray baRecord =
             read_array_process(nOffset, GTU_RECORD_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            (baRecord.size() != GTU_RECORD_SIZE)) {
+        if ((baRecord.size() != GTU_RECORD_SIZE)) {
             return false;
         }
         const uchar *pRecord =
@@ -235,8 +229,7 @@ bool XGTU::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         }
         const QByteArray baEncodedName =
             read_array_process(nNameOffset, nNameSize, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            (baEncodedName.size() != nNameSize)) {
+        if ((baEncodedName.size() != nNameSize)) {
             return false;
         }
         const QByteArray baName = decodeName(baEncodedName);
@@ -252,8 +245,7 @@ bool XGTU::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         }
         const QByteArray baBlock = read_array_process(
             nBlockOffset, GTU_RECORD_SIZE + nNameSize, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            (baBlock.size() != GTU_RECORD_SIZE + nNameSize)) {
+        if ((baBlock.size() != GTU_RECORD_SIZE + nNameSize)) {
             return false;
         }
         if (baBlock.left(qint32(GTU_RECORD_SIZE)) != baRecord) return false;
@@ -275,8 +267,7 @@ bool XGTU::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         }
         const QByteArray baInfo =
             read_array_process(member.nInfoOffset, GTU_INFO_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            (baInfo.size() != GTU_INFO_SIZE)) {
+        if ((baInfo.size() != GTU_INFO_SIZE)) {
             return false;
         }
         const uchar *pInfo =
@@ -306,7 +297,7 @@ bool XGTU::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     }
 
     if (!bTerminated || context.listMembers.isEmpty()) return false;
-    if (!guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
+    if (!isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -317,11 +308,11 @@ bool XGTU::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XGTU::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
-    const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
+    QIODevice *guardedSource = getDevice();
+    const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
-    if (guardedSource && (nSavedPosition >= 0)) {
+    if ((nSavedPosition >= 0)) {
         guardedSource->seek(nSavedPosition);
     }
     return bResult;
@@ -508,9 +499,8 @@ bool XGTU::initUnpack(UNPACK_STATE *pState,
                       const QMap<UNPACK_PROP, QVariant> &mapProperties,
                       PDSTRUCT *pPdStruct)
 {
-    QPointer<XGTU> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
     }
@@ -518,8 +508,7 @@ bool XGTU::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
-        !isPdStructNotCanceled(pPdStruct)) {
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -534,9 +523,8 @@ bool XGTU::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis ||
-        !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -552,16 +540,11 @@ bool XGTU::initUnpack(UNPACK_STATE *pState,
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(
+    const bool bFinalized = validateAndFinalizeUnpackSource(
         pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

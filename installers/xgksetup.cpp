@@ -5,7 +5,6 @@
 
 #include "xgksetup.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -71,12 +70,11 @@ QString XGkSetup::sanitizeName(const QString &sRaw)
 
 bool XGkSetup::readRecord(qint64 nOffset, QString *pName, quint32 *pAttributes, qint64 *pSize, PDSTRUCT *pPdStruct)
 {
-    QPointer<XGkSetup> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pName || !pAttributes || !pSize || !guardedSource) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pName || !pAttributes || !pSize) return false;
 
     const QByteArray baRecord = read_array_process(nOffset, GKSETUP_RECORD_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baRecord.size() != GKSETUP_RECORD_SIZE)) return false;
+    if ((baRecord.size() != GKSETUP_RECORD_SIZE)) return false;
     const char *pRecord = baRecord.constData();
 
     qint64 nNameLength = 0;
@@ -105,9 +103,8 @@ bool XGkSetup::readRecord(qint64 nOffset, QString *pName, quint32 *pAttributes, 
 // and both extents to fit; that is reproduced verbatim here.
 bool XGkSetup::probePadding(qint64 nOffset, qint64 nInputSize, bool *pbHasPadding, PDSTRUCT *pPdStruct)
 {
-    QPointer<XGkSetup> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pbHasPadding || !guardedSource) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pbHasPadding) return false;
 
     *pbHasPadding = false;
     qint64 nCurrent = nOffset;
@@ -115,13 +112,13 @@ bool XGkSetup::probePadding(qint64 nOffset, qint64 nInputSize, bool *pbHasPaddin
         QString sName;
         quint32 nAttributes = 0;
         qint64 nSize = 0;
-        if (!readRecord(nCurrent, &sName, &nAttributes, &nSize, pPdStruct) || !guardedThis || !guardedSource) return true;
+        if (!readRecord(nCurrent, &sName, &nAttributes, &nSize, pPdStruct)) return true;
         const qint64 nAfterRecord = nCurrent + GKSETUP_RECORD_SIZE;
         if (!gksetupRangeWithin(nInputSize, nAfterRecord, nSize)) return true;
         if (nAfterRecord + 4 > nInputSize) return true;
 
         const QByteArray baPadding = read_array_process(nAfterRecord, 4, pPdStruct);
-        if (!guardedThis || !guardedSource || (baPadding.size() != 4)) return true;
+        if ((baPadding.size() != 4)) return true;
         if (qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(baPadding.constData())) != 0) return true;
 
         nCurrent = nAfterRecord + 4 + nSize;
@@ -134,17 +131,15 @@ bool XGkSetup::probePadding(qint64 nOffset, qint64 nInputSize, bool *pbHasPaddin
 bool XGkSetup::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
-
-    QPointer<XGkSetup> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
     if (context.nInputSize < GKSETUP_HEADER_SIZE + GKSETUP_RECORD_SIZE) return false;
 
     const QByteArray baHeader = read_array_process(0, GKSETUP_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != GKSETUP_HEADER_SIZE)) return false;
+    if ((baHeader.size() != GKSETUP_HEADER_SIZE)) return false;
     const char *pHeader = baHeader.constData();
 
     if (memcmp(pHeader, GKSETUP_BANNER, static_cast<size_t>(GKSETUP_BANNER_SIZE)) != 0) return false;
@@ -158,7 +153,7 @@ bool XGkSetup::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if ((context.nDataOffset != GKSETUP_DATAOFFSET_A) && (context.nDataOffset != GKSETUP_DATAOFFSET_B)) return false;
     if (context.nDataOffset + GKSETUP_RECORD_SIZE > context.nInputSize) return false;
 
-    if (!probePadding(context.nDataOffset, context.nInputSize, &context.bHasPadding, pPdStruct) || !guardedThis || !guardedSource) return false;
+    if (!probePadding(context.nDataOffset, context.nInputSize, &context.bHasPadding, pPdStruct)) return false;
     const qint64 nPaddingSize = context.bHasPadding ? 4 : 0;
 
     QString sCurrentPath;
@@ -171,13 +166,13 @@ bool XGkSetup::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         QString sName;
         quint32 nAttributes = 0;
         qint64 nSize = 0;
-        if (!readRecord(nCurrent, &sName, &nAttributes, &nSize, pPdStruct) || !guardedThis || !guardedSource) break;
+        if (!readRecord(nCurrent, &sName, &nAttributes, &nSize, pPdStruct)) break;
         nRecordCount++;
         qint64 nPayload = nCurrent + GKSETUP_RECORD_SIZE;
         if (nPaddingSize) {
             if (nPayload + 4 > context.nInputSize) break;
             const QByteArray baPadding = read_array_process(nPayload, 4, pPdStruct);
-            if (!guardedThis || !guardedSource || (baPadding.size() != 4)) break;
+            if ((baPadding.size() != 4)) break;
             if (qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(baPadding.constData())) != 0) break;
             nPayload += 4;
         }
@@ -218,12 +213,12 @@ bool XGkSetup::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nArchiveSize > context.nInputSize) context.nArchiveSize = context.nInputSize;
 
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XGkSetup::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -383,11 +378,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XGkSetup::getDefaultUnpackProperties()
 
 bool XGkSetup::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XGkSetup> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -397,8 +391,8 @@ bool XGkSetup::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -412,15 +406,13 @@ bool XGkSetup::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
             delete pContext;
             *pState = UNPACK_STATE();
             return false;
-        }
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

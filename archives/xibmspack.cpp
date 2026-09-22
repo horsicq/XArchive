@@ -24,8 +24,6 @@
 #include "subdevice.h"
 
 #include <QFileInfo>
-#include <QPointer>
-
 #include <new>
 
 namespace {
@@ -167,7 +165,7 @@ bool ibmsRunCodec(QIODevice *pDevice, qint64 nOffset, qint64 nSize, qint64 nDecl
     state.nProcessedOffset = 0;
     state.nProcessedLimit = -1;
 
-    QPointer<QIODevice> guardedInput(pDevice);
+    QIODevice *guardedInput = pDevice;
 
     *pbExact = XFLSDecoder::decompress(&state, pPdStruct);
 
@@ -189,10 +187,10 @@ XIBMSPack::XIBMSPack(QIODevice *pDevice)
 
 QString XIBMSPack::deriveContainerName()
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return IBMS_FALLBACK_NAME;
 
-    const QString sDeviceName = XBinary::getDeviceFileName(guardedSource.data());
+    const QString sDeviceName = XBinary::getDeviceFileName(guardedSource);
     if (sDeviceName.isEmpty()) return IBMS_FALLBACK_NAME;
 
     // The packed name is the original one with the last extension character
@@ -324,19 +322,18 @@ bool XIBMSPack::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XIBMSPack> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     const qint64 nInputSize = getSize();
-    if (!guardedThis || !guardedSource) return false;
+    if (!guardedSource) return false;
     if ((nInputSize < IBMS_MIN_FILE_SIZE) || (nInputSize > IBMS_MAX_FILE_SIZE)) return false;
 
     const QByteArray baPrefix = read_array_process(0, IBMS_CACHE_PREFIX_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || baPrefix.isEmpty()) return false;
+    if (baPrefix.isEmpty()) return false;
     if (static_cast<quint8>(baPrefix.at(0)) != IBMS_STREAM_TAG) return false;
 
-    if (m_bContextCached && (m_pContextDevice == guardedSource.data()) && (m_nContextSize == nInputSize) && (m_baContextPrefix == baPrefix)) {
+    if (m_bContextCached && (m_pContextDevice == guardedSource) && (m_nContextSize == nInputSize) && (m_baContextPrefix == baPrefix)) {
         *pContext = m_contextCache;
         return true;
     }
@@ -349,17 +346,17 @@ bool XIBMSPack::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     context.nStreamOffset = 0;
     context.nStreamSize = nInputSize;
 
-    if (!measureStream(guardedSource.data(), context.nStreamOffset, context.nStreamSize, &context.nUncompressedSize, pPdStruct)) return false;
-    if (!guardedThis || !guardedSource) return false;
+    if (!measureStream(guardedSource, context.nStreamOffset, context.nStreamSize, &context.nUncompressedSize, pPdStruct)) return false;
+    if (!guardedSource) return false;
 
     context.sFileName = deriveContainerName();
-    if (!guardedThis || !guardedSource) return false;
+    if (!guardedSource) return false;
     if (context.sFileName.isEmpty()) context.sFileName = IBMS_FALLBACK_NAME;
 
     if (!isPdStructNotCanceled(pPdStruct)) return false;
 
     m_contextCache = context;
-    m_pContextDevice = guardedSource.data();
+    m_pContextDevice = guardedSource;
     m_nContextSize = nInputSize;
     m_baContextPrefix = baPrefix;
     m_bContextCached = true;
@@ -373,13 +370,13 @@ bool XIBMSPack::isValid(PDSTRUCT *pPdStruct)
 {
     // Detection runs on a device the caller still owns: snapshot the cursor and
     // put it back whatever the outcome.
-    QPointer<QIODevice> guardedSource(getDevice());
-    const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
+    QIODevice *guardedSource = getDevice();
+    const qint64 nSavedPosition = guardedSource->pos();
 
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
 
-    if (guardedSource && (nSavedPosition >= 0)) {
+    if ((nSavedPosition >= 0)) {
         guardedSource->seek(nSavedPosition);
     }
 
@@ -548,16 +545,15 @@ QMap<XBinary::UNPACK_PROP, QVariant> XIBMSPack::getDefaultUnpackProperties()
 
 bool XIBMSPack::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XIBMSPack> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
 
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) {
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) {
         return false;
     }
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -572,8 +568,8 @@ bool XIBMSPack::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
         return false;
     }
 
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) guardedThis->releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct)) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -589,15 +585,10 @@ bool XIBMSPack::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
 
     // Binding only stages the source.  Without this finalize the listing works
     // and every extraction silently writes nothing.
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

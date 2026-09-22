@@ -69,11 +69,11 @@ bool decodePbo(const QByteArray &input, qint64 offset, qint64 packed, qint64 siz
 // Captured state for the unpack path, held by reference the way the xancient*
 // decoders in this tree carry their per-call scratch.
 struct PboCanceled {
-    const QPointer<XPboArchive> &owner;
-    const QPointer<QIODevice> &source;
-    const QPointer<QIODevice> &output;
+    XPboArchive *owner;
+    QIODevice *source;
+    QIODevice *output;
     XBinary::PDSTRUCT *progress;
-    PboCanceled(const QPointer<XPboArchive> &owner, const QPointer<QIODevice> &source, const QPointer<QIODevice> &output, XBinary::PDSTRUCT *progress)
+    PboCanceled(XPboArchive *owner, QIODevice *source, QIODevice *output, XBinary::PDSTRUCT *progress)
         : owner(owner), source(source), output(output), progress(progress) {}
     bool operator()() const { return !owner || !source || !output || !XBinary::isPdStructNotCanceled(progress); }
 };
@@ -163,14 +163,13 @@ bool XPboArchive::parse(const QByteArray &input, CONTEXT *context, PDSTRUCT *pro
 
 bool XPboArchive::readContext(CONTEXT *context, PDSTRUCT *progress)
 {
-    QPointer<XPboArchive> owner(this);
-    QPointer<QIODevice> source(getDevice());
+    QIODevice *source = getDevice();
     if (!context || !source || !source->isOpen() || !source->isReadable() || source->isSequential() || !isPdStructNotCanceled(progress)) return false;
-    if (!owner || !source) return false;
+    if (!source) return false;
     const qint64 size = source->size();
-    if (!owner || !source || size < 21 || size > MaxInput) return false;
+    if (!source || size < 21 || size > MaxInput) return false;
     const QByteArray prefix = read_array_process(0, qMin<qint64>(1045, size), progress);
-    if (!owner || !source || prefix.isEmpty()) return false;
+    if (!source || prefix.isEmpty()) return false;
     // There is no mandatory magic. A bounded plausible first record is only
     // a preflight; recognition still requires the complete table and extent.
     const qsizetype zero = prefix.indexOf(char(0));
@@ -179,7 +178,7 @@ bool XPboArchive::readContext(CONTEXT *context, PDSTRUCT *progress)
     if (zero == 0 && u32(prefix, 1) != 0x56657273) return false;
     for (qsizetype i = 0; i < zero; ++i) if (quint8(prefix.at(i)) < 0x20 || quint8(prefix.at(i)) == 0x7f) return false;
     const QByteArray input = read_array_process(0, size, progress);
-    if (!owner || !source || input.size() != size) return false;
+    if (!source || input.size() != size) return false;
     try { return parse(input, context, progress); } catch (const std::bad_alloc &) { return false; }
 }
 bool XPboArchive::isValid(PDSTRUCT *progress) { CONTEXT context; return readContext(&context, progress); }
@@ -188,15 +187,15 @@ bool XPboArchive::isValid(QIODevice *device, PDSTRUCT *progress) { XPboArchive a
 bool XPboArchive::initUnpack(UNPACK_STATE *state, const QMap<UNPACK_PROP,QVariant> &properties, PDSTRUCT *progress)
 {
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);
-    QPointer<XPboArchive> owner(this);
     if (!guard.isAcquired() || !state || ((state->pContext || !state->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(state))) return false;
     CONTEXT *old = static_cast<CONTEXT *>(state->pContext);
     releaseUnpackSource(state); delete old; *state = UNPACK_STATE();
     if (!isPdStructNotCanceled(progress)) return false;
     const bool bound = bindUnpackSource(state, progress);
-    if (!owner || !bound) return false;
+    if (!bound) return false;
     CONTEXT *context = new (std::nothrow) CONTEXT;
     OUTPUT_POLICY policy = {};
+    XPboArchive *owner = this;
     const bool valid = context && resolveUnpackOutputPolicy(properties, &policy) && readContext(context, progress);
     if (!owner) { delete context; return false; }
     if (!valid) { releaseUnpackSource(state); delete context; *state = UNPACK_STATE(); return false; }
@@ -204,7 +203,6 @@ bool XPboArchive::initUnpack(UNPACK_STATE *state, const QMap<UNPACK_PROP,QVarian
     state->nNumberOfRecords = context->members.size(); state->nCurrentIndex = 0;
     state->nTotalSize = context->input.size(); state->mapUnpackProperties = properties;
     const bool finalized = validateAndFinalizeUnpackSource(state, context, progress);
-    if (!owner) return false;
     if (!finalized) { state->pContext = nullptr; releaseUnpackSource(state); delete context; *state = UNPACK_STATE(); return false; }
     return true;
 }
@@ -212,9 +210,8 @@ bool XPboArchive::initUnpack(UNPACK_STATE *state, const QMap<UNPACK_PROP,QVarian
 XBinary::ARCHIVERECORD XPboArchive::infoCurrent(UNPACK_STATE *state, PDSTRUCT *progress)
 {
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
-    QPointer<XPboArchive> owner(this);
     ARCHIVERECORD record = {};
-    if (!guard.isAllowed() || !state || !state->pContext || !isUnpackSourceCurrent(state, progress) || !owner) return record;
+    if (!guard.isAllowed() || !state || !state->pContext || !isUnpackSourceCurrent(state, progress)) return record;
     const CONTEXT context = *static_cast<CONTEXT *>(state->pContext);
     if (state->nCurrentIndex < 0 || state->nCurrentIndex >= context.members.size() || state->nNumberOfRecords != context.members.size()) return record;
     const MEMBER member = context.members.at(qsizetype(state->nCurrentIndex));
@@ -232,13 +229,14 @@ XBinary::ARCHIVERECORD XPboArchive::infoCurrent(UNPACK_STATE *state, PDSTRUCT *p
 bool XPboArchive::unpackCurrent(UNPACK_STATE *state, QIODevice *device, PDSTRUCT *progress)
 {
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);
-    QPointer<XPboArchive> owner(this);
-    QPointer<QIODevice> source(getDevice()), output(device);
-    if (!guard.isAcquired() || !state || !state->pContext || !source || !output || !isUnpackSourceCurrent(state, progress) || !owner || !source || !output) return false;
-    const bool supported = isUnpackOutputSupported(output.data());
-    if (!owner || !source || !output || !supported) return false;
-    const bool aliases = devicesAlias(source.data(), output.data());
-    if (!owner || !source || !output || aliases) return false;
+    XPboArchive *owner = this;
+    QIODevice *source = getDevice();
+    QIODevice *output = device;
+    if (!guard.isAcquired() || !state || !state->pContext || !source || !output || !isUnpackSourceCurrent(state, progress) || !source || !output) return false;
+    const bool supported = isUnpackOutputSupported(output);
+    if (!source || !output || !supported) return false;
+    const bool aliases = devicesAlias(source, output);
+    if (!source || !output || aliases) return false;
     const CONTEXT context = *static_cast<CONTEXT *>(state->pContext);
     if (state->nCurrentIndex < 0 || state->nCurrentIndex >= context.members.size() || state->nNumberOfRecords != context.members.size()) return false;
     const MEMBER member = context.members.at(qsizetype(state->nCurrentIndex));
@@ -264,14 +262,13 @@ bool XPboArchive::unpackCurrent(UNPACK_STATE *state, QIODevice *device, PDSTRUCT
         } else if (!write(context.input.constData() + member.offset, member.size)) return false;
     } catch (const std::bad_alloc &) { return false; }
     if (canceled() || stage.size() != member.size || !stage.flush() || !stage.seek(0) || !isUnpackSourceCurrent(state, progress) || canceled()) return false;
-    const bool published = publishUnpackOutput(&stage, output.data(), state, progress);
-    return owner && output && published;
+    const bool published = publishUnpackOutput(&stage, output, state, progress);
+    return output && published;
 }
 bool XPboArchive::moveToNext(UNPACK_STATE *state, PDSTRUCT *progress)
 {
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);
-    QPointer<XPboArchive> owner(this);
-    if (!guard.isAcquired() || !state || !state->pContext || !isUnpackSourceCurrent(state, progress) || !owner) return false;
+    if (!guard.isAcquired() || !state || !state->pContext || !isUnpackSourceCurrent(state, progress)) return false;
     const qint64 count = static_cast<CONTEXT *>(state->pContext)->members.size();
     if (state->nNumberOfRecords != count || state->nCurrentIndex < 0 || state->nCurrentIndex >= count) return false;
     ++state->nCurrentIndex; return state->nCurrentIndex < count;

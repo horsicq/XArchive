@@ -4,9 +4,6 @@
  */
 
 #include "xbzip1.h"
-
-#include <QPointer>
-
 #include <new>
 
 namespace {
@@ -39,9 +36,7 @@ XBZIP1::~XBZIP1()
 bool XBZIP1::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
-
-    QPointer<XBZIP1> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -50,7 +45,7 @@ bool XBZIP1::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const QByteArray baHeader =
         read_array_process(0, BZIP1_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource ||
+    if (!guardedSource ||
         baHeader.size() != BZIP1_HEADER_SIZE) {
         return false;
     }
@@ -84,7 +79,7 @@ bool XBZIP1::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         qMin<qint64>(BZIP1_PROBE_SIZE, context.nInputSize - BZIP1_HEADER_SIZE);
     const QByteArray baProbe =
         read_array_process(BZIP1_HEADER_SIZE, nProbeSize, pPdStruct);
-    if (!guardedThis || !guardedSource || baProbe.size() != nProbeSize) {
+    if (!guardedSource || baProbe.size() != nProbeSize) {
         return false;
     }
     if (baProbe == QByteArray(static_cast<qint32>(nProbeSize), '\0')) {
@@ -98,8 +93,8 @@ bool XBZIP1::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     // thin to use as a structural terminator.
     context.nStreamOffset = 0;
     context.nStreamSize = context.nInputSize;
-    context.sFileName = XBinary::getDeviceFileBaseName(guardedSource.data());
-    if (!guardedThis || !guardedSource) return false;
+    context.sFileName = XBinary::getDeviceFileBaseName(guardedSource);
+    if (!guardedSource) return false;
 
     *pContext = context;
     return isPdStructNotCanceled(pPdStruct);
@@ -107,7 +102,7 @@ bool XBZIP1::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XBZIP1::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -406,8 +401,7 @@ bool XBZIP1::initUnpack(UNPACK_STATE *pState,
                         const QMap<UNPACK_PROP, QVariant> &mapProperties,
                         PDSTRUCT *pPdStruct)
 {
-    QPointer<XBZIP1> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
@@ -416,7 +410,7 @@ bool XBZIP1::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) || !guardedSource ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -436,8 +430,8 @@ bool XBZIP1::initUnpack(UNPACK_STATE *pState,
     // cannot be measured; the equivalent here would decode the entire payload
     // just to open a listing, and a corrupt tail would then hide the member
     // rather than fail at extraction time, where the CRC report belongs.
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -454,16 +448,11 @@ bool XBZIP1::initUnpack(UNPACK_STATE *pState,
     pState->nNumberOfRecords = 1;
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(
+    const bool bFinalized = validateAndFinalizeUnpackSource(
         pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

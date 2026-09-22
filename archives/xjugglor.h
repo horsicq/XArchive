@@ -5,7 +5,6 @@
 #ifndef XJUGGLOR_H
 #define XJUGGLOR_H
 
-#include <QPointer>
 #include <QSet>
 
 #include "xarchive.h"
@@ -27,7 +26,7 @@ public:
 
     struct UNPACK_CONTEXT {
         QList<FILE_ENTRY> listEntries;
-        QPointer<QIODevice> pSourceDevice;
+        QIODevice *pSourceDevice = nullptr;
         UNPACK_STATE *pOwnerState = nullptr;
         QByteArray baToken;
         quint64 nDeviceGeneration = 0;
@@ -65,9 +64,6 @@ public:
                     PDSTRUCT *pPdStruct = nullptr) override;
     bool finishUnpack(UNPACK_STATE *pState,
                       PDSTRUCT *pPdStruct = nullptr) override;
-
-protected:
-    bool isDeviceReplacementAllowed() const override;
 
 private:
     bool _parse(QList<FILE_ENTRY> *pEntries, qint64 *pSourceSize,

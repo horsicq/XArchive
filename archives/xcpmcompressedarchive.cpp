@@ -9,8 +9,8 @@ namespace {
 // The decoder's cancellation hook is a plain function pointer, so the state it
 // needs travels through the opaque argument instead of a capture.
 struct Cancellation {
-    QPointer<XCpmCompressedArchive> owner;
-    QPointer<QIODevice> source, output;
+    XCpmCompressedArchive *owner;
+    QIODevice *source, *output;
     XBinary::PDSTRUCT *progress;
 };
 
@@ -42,9 +42,8 @@ QString XCpmCompressedArchive::getFileFormatExtsString()
 QString XCpmCompressedArchive::getMIMEString() { return QStringLiteral("application/octet-stream"); }
 qint64 XCpmCompressedArchive::getFileFormatSize(PDSTRUCT *pPdStruct)
 {
-    QPointer<XCpmCompressedArchive> owner(this);
     const bool valid = isValid(pPdStruct);
-    return owner && valid ? getSize() : 0;
+    return valid ? getSize() : 0;
 }
 QList<QString> XCpmCompressedArchive::getSearchSignatures()
 {
@@ -59,11 +58,10 @@ XBinary *XCpmCompressedArchive::createInstance(QIODevice *pDevice, bool bIsImage
 
 bool XCpmCompressedArchive::readHeader(XCpmCrunchDecoder::Header *pHeader, PDSTRUCT *pPdStruct, qint64 *pUncompressedSize, qint64 nOutputLimit)
 {
-    QPointer<XCpmCompressedArchive> owner(this);
     const qint64 nSize = getSize();
     if (!pHeader || !isPdStructNotCanceled(pPdStruct) || nSize < 4 || nSize > static_cast<qint64>(XCpmCrunchDecoder::MaxInput)) return false;
     const QByteArray data = read_array_process(0, qMin<qint64>(nSize, 160), pPdStruct);
-    if (!owner || !XCpmCrunchDecoder::parseHeader(reinterpret_cast<const std::uint8_t *>(data.constData()), static_cast<std::size_t>(data.size()), pHeader)) return false;
+    if (!XCpmCrunchDecoder::parseHeader(reinterpret_cast<const std::uint8_t *>(data.constData()), static_cast<std::size_t>(data.size()), pHeader)) return false;
     const bool bType = (m_fileType == FT_CPM_CRUNCH && pHeader->format == XCpmCrunchDecoder::Format::Crunch) ||
                        (m_fileType == FT_CPM_LZH && pHeader->format == XCpmCrunchDecoder::Format::Crlzh) ||
                        (m_fileType == FT_UNIX_COMPACT && pHeader->format == XCpmCrunchDecoder::Format::UnixCompact);
@@ -72,11 +70,11 @@ bool XCpmCompressedArchive::readHeader(XCpmCrunchDecoder::Header *pHeader, PDSTR
     // Initialization also measures every format without retaining its output.
     if (pUncompressedSize || pHeader->format == XCpmCrunchDecoder::Format::UnixCompact) {
         const QByteArray packed = read_array_process(0, nSize, pPdStruct);
-        if (!owner || packed.size() != nSize) return false;
+        if (packed.size() != nSize) return false;
         XCpmCrunchDecoder::Result measured;
         const bool valid = XCpmCrunchDecoder::decode(reinterpret_cast<const std::uint8_t *>(packed.constData()), static_cast<std::size_t>(packed.size()),
                                                 static_cast<std::size_t>(nOutputLimit), &measured, cpmProgressCanceled, pPdStruct, true);
-        if (!owner || !valid) return false;
+        if (!valid) return false;
         if (pUncompressedSize) *pUncompressedSize = static_cast<qint64>(measured.uncompressedSize);
     }
     return isPdStructNotCanceled(pPdStruct);
@@ -95,7 +93,6 @@ bool XCpmCompressedArchive::isValid(QIODevice *pDevice, FT fileType, PDSTRUCT *p
 bool XCpmCompressedArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    QPointer<XCpmCompressedArchive> owner(this);
     if (!operationGuard.isAcquired() || !pState) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
     CONTEXT *old = static_cast<CONTEXT *>(pState->pContext);
@@ -105,7 +102,7 @@ bool XCpmCompressedArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_P
     *pState = UNPACK_STATE();
     if (!isPdStructNotCanceled(pPdStruct)) return false;
     const bool bBound = bindUnpackSource(pState, pPdStruct);
-    if (!owner || !bBound) return false;
+    if (!bBound) return false;
     OUTPUT_POLICY policy = {};
     if (!resolveUnpackOutputPolicy(mapProperties, &policy)) { releaseUnpackSource(pState); *pState = UNPACK_STATE(); return false; }
     qint64 nLimit = static_cast<qint64>(XCpmCrunchDecoder::MaxOutput);
@@ -115,7 +112,6 @@ bool XCpmCompressedArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_P
     XCpmCrunchDecoder::Header header;
     qint64 nUncompressedSize = 0;
     const bool bHeader = readHeader(&header, pPdStruct, &nUncompressedSize, nLimit);
-    if (!owner) return false;
     if (!bHeader) {
         releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
@@ -128,7 +124,6 @@ bool XCpmCompressedArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_P
     context->sFileName = QString::fromLatin1(context->header.name.data(), static_cast<int>(context->header.name.size()));
     if (context->header.format == XCpmCrunchDecoder::Format::UnixCompact) {
         context->sFileName = XBinary::getDeviceFileBaseName(getDevice());
-        if (!owner) { delete context; return false; }
         if (context->sFileName.isEmpty()) context->sFileName = QStringLiteral("data");
     }
     pState->pContext = context;
@@ -138,7 +133,6 @@ bool XCpmCompressedArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_P
     pState->nTotalSize = getSize();
     pState->mapUnpackProperties = mapProperties;
     const bool bFinalized = validateAndFinalizeUnpackSource(pState, context, pPdStruct);
-    if (!owner) return false;
     if (!bFinalized) {
         pState->pContext = nullptr;
         releaseUnpackSource(pState);
@@ -152,10 +146,9 @@ bool XCpmCompressedArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_P
 XBinary::ARCHIVERECORD XCpmCompressedArchive::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
-    QPointer<XCpmCompressedArchive> owner(this);
     ARCHIVERECORD record = {};
     if (!operationGuard.isAllowed() || !pState || !pState->pContext || pState->nCurrentIndex != 0 || pState->nNumberOfRecords != 1 ||
-        !isUnpackSourceCurrent(pState, pPdStruct) || !owner || pState->nTotalSize != getSize()) return record;
+        !isUnpackSourceCurrent(pState, pPdStruct) || pState->nTotalSize != getSize()) return record;
     const XCpmCrunchDecoder::Header &header = static_cast<CONTEXT *>(pState->pContext)->header;
     record.mapProperties.insert(FPART_PROP_ORIGINALNAME, static_cast<CONTEXT *>(pState->pContext)->sFileName);
     record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, pState->nTotalSize);
@@ -169,14 +162,13 @@ XBinary::ARCHIVERECORD XCpmCompressedArchive::infoCurrent(UNPACK_STATE *pState, 
 bool XCpmCompressedArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    QPointer<XCpmCompressedArchive> owner(this);
-    QPointer<QIODevice> source(getDevice()), output(pDevice);
-    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !source || !output || pState->nCurrentIndex != 0 || pState->nNumberOfRecords != 1 ||
-        !isUnpackSourceCurrent(pState, pPdStruct) || !owner || !source || !output) return false;
-    const bool bSupported = isUnpackOutputSupported(output.data());
-    if (!owner || !source || !output || !bSupported) return false;
-    const bool bAliases = devicesAlias(source.data(), output.data());
-    if (!owner || !source || !output || bAliases || !isPdStructNotCanceled(pPdStruct)) return false;
+    QIODevice *source = getDevice(), *output = pDevice;
+    if (!operationGuard.isAcquired() || !pState || !pState->pContext || pState->nCurrentIndex != 0 || pState->nNumberOfRecords != 1 ||
+        !isUnpackSourceCurrent(pState, pPdStruct)) return false;
+    const bool bSupported = isUnpackOutputSupported(output);
+    if (!bSupported) return false;
+    const bool bAliases = devicesAlias(source, output);
+    if (bAliases || !isPdStructNotCanceled(pPdStruct)) return false;
     const XCpmCrunchDecoder::Header header = static_cast<CONTEXT *>(pState->pContext)->header;
     const QString sFileName = static_cast<CONTEXT *>(pState->pContext)->sFileName;
     const qint64 nExpectedSize = static_cast<CONTEXT *>(pState->pContext)->nUncompressedSize;
@@ -200,8 +192,8 @@ bool XCpmCompressedArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevi
         }
     }
     const QByteArray input = read_array_process(0, nInputSize, pPdStruct);
-    if (!owner || !source || !output || input.size() != nInputSize) return false;
-    Cancellation cancellation = {owner, source, output, pPdStruct};
+    if (input.size() != nInputSize) return false;
+    Cancellation cancellation = {this, source, output, pPdStruct};
     XCpmCrunchDecoder::Result decoded;
     if (!XCpmCrunchDecoder::decode(reinterpret_cast<const std::uint8_t *>(input.constData()), static_cast<std::size_t>(input.size()),
                                static_cast<std::size_t>(nLimit), &decoded, cpmCancellationCanceled, &cancellation) || cpmCancellationCanceled(&cancellation) ||
@@ -220,9 +212,9 @@ bool XCpmCompressedArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevi
         if (_writeDevice(reinterpret_cast<const char *>(decoded.data.data() + position), count, &writeState) != count) return false;
         position += static_cast<std::size_t>(count);
     }
-    if (!owner || !source || !output || !stage.flush() || !stage.seek(0) || !isUnpackSourceCurrent(pState, pPdStruct) || !owner) return false;
-    const bool bPublished = publishUnpackOutput(&stage, output.data(), pState, pPdStruct);
-    if (!owner || !output || !bPublished) return false;
+    if (!stage.flush() || !stage.seek(0) || !isUnpackSourceCurrent(pState, pPdStruct)) return false;
+    const bool bPublished = publishUnpackOutput(&stage, output, pState, pPdStruct);
+    if (!bPublished) return false;
     pState->nCurrentOffset = static_cast<qint64>(decoded.consumed);
     return true;
 }
@@ -230,9 +222,8 @@ bool XCpmCompressedArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevi
 bool XCpmCompressedArchive::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    QPointer<XCpmCompressedArchive> owner(this);
     if (!operationGuard.isAcquired() || !pState || !pState->pContext || pState->nCurrentIndex != 0 || pState->nNumberOfRecords != 1 ||
-        !isUnpackSourceCurrent(pState, pPdStruct) || !owner) return false;
+        !isUnpackSourceCurrent(pState, pPdStruct)) return false;
     pState->nCurrentIndex = 1;
     return false;
 }

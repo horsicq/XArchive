@@ -5,7 +5,6 @@
 
 #include "xarpdp11.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -91,9 +90,8 @@ XArPdp11::~XArPdp11()
 
 bool XArPdp11::isZeroTail(qint64 nOffset, qint64 nSize, PDSTRUCT *pPdStruct)
 {
-    QPointer<XArPdp11> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || nOffset < 0 || nSize < 0) return false;
+    QIODevice *guardedSource = getDevice();
+    if (nOffset < 0 || nSize < 0) return false;
 
     qint64 nCurrent = nOffset;
     const qint64 nEnd = nOffset + nSize;
@@ -102,7 +100,7 @@ bool XArPdp11::isZeroTail(qint64 nOffset, qint64 nSize, PDSTRUCT *pPdStruct)
         const qint64 nPortion = qMin(AR_PDP11_ZERO_SCAN_CHUNK, nEnd - nCurrent);
         const QByteArray baChunk =
             read_array_process(nCurrent, nPortion, pPdStruct);
-        if (!guardedThis || !guardedSource || baChunk.size() != nPortion) {
+        if (baChunk.size() != nPortion) {
             return false;
         }
         for (qint64 i = 0; i < nPortion; i++) {
@@ -117,9 +115,8 @@ bool XArPdp11::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XArPdp11> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -129,8 +126,7 @@ bool XArPdp11::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const QByteArray baMagic =
         read_array_process(0, AR_PDP11_MAGIC_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        baMagic.size() != AR_PDP11_MAGIC_SIZE) {
+    if (baMagic.size() != AR_PDP11_MAGIC_SIZE) {
         return false;
     }
     if (qFromLittleEndian<quint16>(
@@ -153,8 +149,7 @@ bool XArPdp11::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
         const QByteArray baHeader =
             read_array_process(nOffset, AR_PDP11_HEADER_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            baHeader.size() != AR_PDP11_HEADER_SIZE) {
+        if (baHeader.size() != AR_PDP11_HEADER_SIZE) {
             return false;
         }
         const uchar *pHeader =
@@ -168,8 +163,7 @@ bool XArPdp11::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
             // emit hundreds of phantom entries named "_" on that input.
             if (context.listMembers.isEmpty() ||
                 !isZeroTail(nOffset, context.nInputSize - nOffset,
-                            pPdStruct) ||
-                !guardedThis || !guardedSource) {
+                            pPdStruct)) {
                 return false;
             }
             context.nArchiveSize = nOffset;
@@ -240,12 +234,12 @@ bool XArPdp11::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     context.nFirstMemberOffset = context.listMembers.first().nHeaderOffset;
 
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XArPdp11::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -443,9 +437,8 @@ bool XArPdp11::initUnpack(UNPACK_STATE *pState,
                           const QMap<UNPACK_PROP, QVariant> &mapProperties,
                           PDSTRUCT *pPdStruct)
 {
-    QPointer<XArPdp11> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
     }
@@ -453,7 +446,7 @@ bool XArPdp11::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -468,9 +461,9 @@ bool XArPdp11::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource ||
+    if (!parseContext(pContext, pPdStruct) ||
         pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -485,16 +478,11 @@ bool XArPdp11::initUnpack(UNPACK_STATE *pState,
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(
+    const bool bFinalized = validateAndFinalizeUnpackSource(
         pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

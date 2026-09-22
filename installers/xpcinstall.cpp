@@ -5,7 +5,6 @@
 
 #include "xpcinstall.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -71,10 +70,8 @@ XPCInstall::~XPCInstall()
 bool XPCInstall::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
-
-    QPointer<XPCInstall> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -89,8 +86,7 @@ bool XPCInstall::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         context.nInputSize - PCINSTALL_TRAILER_SIZE;
     const QByteArray baTrailer =
         read_array_process(nTrailerOffset, PCINSTALL_TRAILER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        baTrailer.size() != PCINSTALL_TRAILER_SIZE ||
+    if (baTrailer.size() != PCINSTALL_TRAILER_SIZE ||
         baTrailer.left(8) !=
             QByteArray(PCINSTALL_TRAILER_MAGIC,
                        static_cast<qint32>(sizeof(PCINSTALL_TRAILER_MAGIC)))) {
@@ -109,8 +105,7 @@ bool XPCInstall::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const QByteArray baVolumeHeader =
         read_array_process(0, PCINSTALL_VOLUME_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        baVolumeHeader.size() != PCINSTALL_VOLUME_HEADER_SIZE) {
+    if (baVolumeHeader.size() != PCINSTALL_VOLUME_HEADER_SIZE) {
         return false;
     }
     // Plain .BND volumes zero this block.  The self-extracting shape that
@@ -132,8 +127,7 @@ bool XPCInstall::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         }
         const QByteArray baRecord = read_array_process(
             nOffset, PCINSTALL_RECORD_HEADER_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            baRecord.size() != PCINSTALL_RECORD_HEADER_SIZE) {
+        if (baRecord.size() != PCINSTALL_RECORD_HEADER_SIZE) {
             return false;
         }
         const uchar *pRecord =
@@ -154,8 +148,7 @@ bool XPCInstall::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
         const QByteArray baPrologue = read_array_process(
             nMemberOffset, PCINSTALL_MEMBER_PROLOGUE_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            baPrologue.size() != PCINSTALL_MEMBER_PROLOGUE_SIZE) {
+        if (baPrologue.size() != PCINSTALL_MEMBER_PROLOGUE_SIZE) {
             return false;
         }
         const uchar *pPrologue =
@@ -196,8 +189,7 @@ bool XPCInstall::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
             if (nStoredSize < PCINSTALL_MEMBER_HEADER_SIZE) return false;
             const QByteArray baHeader = read_array_process(
                 nMemberOffset, PCINSTALL_MEMBER_HEADER_SIZE, pPdStruct);
-            if (!guardedThis || !guardedSource ||
-                baHeader.size() != PCINSTALL_MEMBER_HEADER_SIZE) {
+            if (baHeader.size() != PCINSTALL_MEMBER_HEADER_SIZE) {
                 return false;
             }
             const uchar *pHeader =
@@ -228,8 +220,7 @@ bool XPCInstall::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
                 // Raw PKWARE DCL header: literal mode 0/1, dictionary bits 4-6.
                 const QByteArray baStreamHeader =
                     read_array_process(member.nDataOffset, 2, pPdStruct);
-                if (!guardedThis || !guardedSource ||
-                    baStreamHeader.size() != 2) {
+                if (baStreamHeader.size() != 2) {
                     return false;
                 }
                 const quint8 nLiteralMode =
@@ -262,7 +253,7 @@ bool XPCInstall::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
             }
             context.nArchiveSize = context.nInputSize;
             *pContext = context;
-            return guardedThis && guardedSource &&
+            return guardedSource &&
                    isPdStructNotCanceled(pPdStruct);
         }
         if ((nNextOffset <= nOffset) ||
@@ -277,7 +268,7 @@ bool XPCInstall::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XPCInstall::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -384,22 +375,17 @@ qint64 XPCInstall::resolveUncompressedSize(const MEMBER &member,
     const QHash<qint64, qint64>::const_iterator itCached =
         m_mapUncompressedSizes.constFind(member.nDataOffset);
     if (itCached != m_mapUncompressedSizes.constEnd()) return itCached.value();
-
-    QPointer<XPCInstall> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource) return -1;
+    QIODevice *guardedSource = getDevice();
     const QByteArray baPacked =
         read_array_process(member.nDataOffset, member.nDataSize, pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        (baPacked.size() != member.nDataSize)) {
+    if ((baPacked.size() != member.nDataSize)) {
         return -1;
     }
     qint64 nConsumed = 0;
     qint64 nRawSize = 0;
     if (!XDclDecoder::scan(
             reinterpret_cast<const uchar *>(baPacked.constData()),
-            baPacked.size(), PCINSTALL_MAX_RAW_SIZE, &nConsumed, &nRawSize) ||
-        !guardedThis || !guardedSource) {
+            baPacked.size(), PCINSTALL_MAX_RAW_SIZE, &nConsumed, &nRawSize)) {
         return -1;
     }
     // The container stores no raw size and no checksum, so exact input
@@ -580,9 +566,8 @@ bool XPCInstall::initUnpack(UNPACK_STATE *pState,
                             const QMap<UNPACK_PROP, QVariant> &mapProperties,
                             PDSTRUCT *pPdStruct)
 {
-    QPointer<XPCInstall> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
     }
@@ -590,7 +575,7 @@ bool XPCInstall::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -605,9 +590,9 @@ bool XPCInstall::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource ||
+    if (!parseContext(pContext, pPdStruct) ||
         pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -624,16 +609,14 @@ bool XPCInstall::initUnpack(UNPACK_STATE *pState,
     pState->pContext = pContext;
 
     const bool bFinalized =
-        guardedThis->validateAndFinalizeUnpackSource(pState, pContext,
+        validateAndFinalizeUnpackSource(pState, pContext,
                                                      pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
+    if (!bFinalized) {
             delete pContext;
             *pState = UNPACK_STATE();
             return false;
-        }
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

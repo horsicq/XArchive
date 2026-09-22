@@ -21,8 +21,6 @@
 
 #include "xblake2sp.h"
 
-#include <QPointer>
-
 #include <algorithm>
 #include <cstring>
 
@@ -332,7 +330,7 @@ QByteArray XBlake2sp::hash(QIODevice *pDevice)
 {
     QByteArray baResult;
 
-    QPointer<QIODevice> guardedDevice(pDevice);
+    QIODevice *guardedDevice = pDevice;
     if (!guardedDevice) return baResult;
 
     const bool bReadable = guardedDevice->isReadable();

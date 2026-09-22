@@ -21,7 +21,6 @@
 #include "xtnefarchive.h"
 
 #include <QBuffer>
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -565,8 +564,7 @@ bool XTNEFArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XTNEFArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -574,7 +572,7 @@ bool XTNEFArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nInputSize < TNEF_HEADER_SIZE) return false;
 
     const QByteArray baHeader = read_array_process(0, TNEF_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != TNEF_HEADER_SIZE)) return false;
+    if (!guardedSource || (baHeader.size() != TNEF_HEADER_SIZE)) return false;
     const uchar *pHeader = (const uchar *)baHeader.constData();
     if (qFromLittleEndian<quint32>(pHeader) != TNEF_SIGNATURE) return false;
     if (qFromLittleEndian<quint16>(pHeader + 4) == 0) return false;
@@ -592,7 +590,7 @@ bool XTNEFArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (context.listMembers.size() >= TNEF_MAX_MEMBERS) break;
 
         const QByteArray baAttribute = read_array_process(nOffset, TNEF_ATTRIBUTE_HEADER_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baAttribute.size() != TNEF_ATTRIBUTE_HEADER_SIZE)) return false;
+        if (!guardedSource || (baAttribute.size() != TNEF_ATTRIBUTE_HEADER_SIZE)) return false;
         const uchar *pAttribute = (const uchar *)baAttribute.constData();
         const quint8 nLevel = pAttribute[0];
         const quint32 nAttId = qFromLittleEndian<quint32>(pAttribute + 1);
@@ -608,10 +606,10 @@ bool XTNEFArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
             const quint16 nAttName = (quint16)(nAttId & 0xffff);
             if ((nAttName == TNEF_ATT_NAME_BODY) && baPlainBody.isEmpty() && (nLength > 0) && (nLength <= TNEF_MAX_BODY_SOURCE_SIZE)) {
                 baPlainBody = read_array_process(nBodyOffset, nLength, pPdStruct);
-                if (!guardedThis || !guardedSource || (baPlainBody.size() != nLength)) return false;
+                if (!guardedSource || (baPlainBody.size() != nLength)) return false;
             } else if ((nAttName == TNEF_ATT_NAME_MAPI_PROPS) && (nLength > 0) && (nLength <= TNEF_MAX_ATTRIBUTE_SIZE)) {
                 const QByteArray baStream = read_array_process(nBodyOffset, nLength, pPdStruct);
-                if (!guardedThis || !guardedSource || (baStream.size() != nLength)) return false;
+                if (!guardedSource || (baStream.size() != nLength)) return false;
                 QByteArray baRtf;
                 QByteArray baHtml;
                 QByteArray baBody;
@@ -648,7 +646,7 @@ bool XTNEFArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (nAttId == TNEF_ATT_ATTACH_TITLE) {
             if (nLength > 0) {
                 const QByteArray baTitle = read_array_process(nBodyOffset, nLength, pPdStruct);
-                if (!guardedThis || !guardedSource || (baTitle.size() != nLength)) return false;
+                if (!guardedSource || (baTitle.size() != nLength)) return false;
                 current.sFileName = tnefLatin1UntilZero(baTitle.constData(), baTitle.size());
             }
         } else if (nAttId == TNEF_ATT_ATTACH_DATA) {
@@ -657,7 +655,7 @@ bool XTNEFArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         } else if (nAttId == TNEF_ATT_ATTACHMENT) {
             if ((nLength > 0) && (nLength <= TNEF_MAX_ATTRIBUTE_SIZE)) {
                 const QByteArray baStream = read_array_process(nBodyOffset, nLength, pPdStruct);
-                if (!guardedThis || !guardedSource || (baStream.size() != nLength)) return false;
+                if (!guardedSource || (baStream.size() != nLength)) return false;
                 qint64 nValueOffset = -1;
                 qint64 nValueSize = -1;
                 QString sLongName;
@@ -738,7 +736,7 @@ bool XTNEFArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XTNEFArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -903,11 +901,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XTNEFArchive::getDefaultUnpackProperties()
 
 bool XTNEFArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XTNEFArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -919,8 +916,8 @@ bool XTNEFArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVar
     }
     // An attachment-free message is a legitimate TNEF, so an empty member list
     // is not a parse failure here.
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -933,15 +930,10 @@ bool XTNEFArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVar
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -990,11 +982,9 @@ bool XTNEFArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTR
         return XArchive::unpackCurrent(pState, pDevice, pPdStruct);
     }
 
-    QPointer<XTNEFArchive> guardedThis(this);
-    QPointer<QIODevice> guardedOutput(pDevice);
+    QIODevice *guardedOutput = pDevice;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    if (!operationGuard.isAcquired() || !guardedOutput || !isUnpackOutputSupported(guardedOutput.data()) || !isUnpackSourceCurrent(pState, pPdStruct) ||
-        !guardedThis || !guardedOutput || !isPdStructNotCanceled(pPdStruct)) {
+    if (!operationGuard.isAcquired() || !guardedOutput || !isUnpackOutputSupported(guardedOutput) || !isUnpackSourceCurrent(pState, pPdStruct) || !guardedOutput || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
     CONTEXT *pContext = (CONTEXT *)pState->pContext;
@@ -1017,10 +1007,10 @@ bool XTNEFArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTR
     QByteArray baBody = member.baInlineData;
     QBuffer bufferBody(&baBody);
     if (!bufferBody.open(QIODevice::ReadOnly)) return false;
-    const bool bResult = publishUnpackOutput(&bufferBody, guardedOutput.data(), pState, pPdStruct);
+    const bool bResult = publishUnpackOutput(&bufferBody, guardedOutput, pState, pPdStruct);
     bufferBody.close();
 
-    return bResult && guardedThis && guardedOutput;
+    return bResult && guardedOutput;
 }
 
 bool XTNEFArchive::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)

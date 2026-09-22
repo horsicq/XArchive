@@ -123,7 +123,6 @@ XBinary *XMTree::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModule
 
 bool XMTree::_readPhysicalLine(qint64 nOffset, QByteArray *pLine, qint64 *pNextOffset, bool *pHadNewline, PDSTRUCT *pPdStruct)
 {
-    QPointer<XMTree> guardedThis(this);
     if (!pLine || !pNextOffset || !pHadNewline || (nOffset < 0) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -133,7 +132,7 @@ bool XMTree::_readPhysicalLine(qint64 nOffset, QByteArray *pLine, qint64 *pNextO
     *pHadNewline = false;
 
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || (nOffset >= nTotalSize)) return false;
+    if ((nOffset >= nTotalSize)) return false;
 
     qint64 nCurrentOffset = nOffset;
     while ((nCurrentOffset < nTotalSize) && (pLine->size() < MTREE_MAX_LINE_SIZE) && XBinary::isPdStructNotCanceled(pPdStruct)) {
@@ -141,7 +140,7 @@ bool XMTree::_readPhysicalLine(qint64 nOffset, QByteArray *pLine, qint64 *pNextO
         if (nChunkSize <= 0) return false;
 
         const QByteArray chunk = read_array_process(nCurrentOffset, nChunkSize, pPdStruct);
-        if (!guardedThis || (chunk.size() != nChunkSize)) return false;
+        if ((chunk.size() != nChunkSize)) return false;
 
         const qint32 nNewline = chunk.indexOf('\n');
         if (nNewline >= 0) {
@@ -166,7 +165,6 @@ bool XMTree::_readPhysicalLine(qint64 nOffset, QByteArray *pLine, qint64 *pNextO
 
 bool XMTree::_readLogicalLine(qint64 nOffset, QByteArray *pLine, qint64 *pNextOffset, PDSTRUCT *pPdStruct)
 {
-    QPointer<XMTree> guardedThis(this);
     if (!pLine || !pNextOffset || (nOffset < 0) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -180,7 +178,7 @@ bool XMTree::_readLogicalLine(qint64 nOffset, QByteArray *pLine, qint64 *pNextOf
         qint64 nPhysicalNext = 0;
         bool bHadNewline = false;
         const bool bRead = _readPhysicalLine(nCurrentOffset, &physicalLine, &nPhysicalNext, &bHadNewline, pPdStruct);
-        if (!guardedThis || !bRead || (nPhysicalNext <= nCurrentOffset) || ((pLine->size() + physicalLine.size()) > MTREE_MAX_LINE_SIZE)) {
+        if (!bRead || (nPhysicalNext <= nCurrentOffset) || ((pLine->size() + physicalLine.size()) > MTREE_MAX_LINE_SIZE)) {
             return false;
         }
 
@@ -504,18 +502,17 @@ bool XMTree::_makeSafePath(const QByteArray &rawName, const QString &sCurrentDir
 
 bool XMTree::_scanArchive(QList<MTREE_ENTRY> *pEntries, qint64 *pArchiveEnd, PDSTRUCT *pPdStruct)
 {
-    QPointer<XMTree> guardedThis(this);
     if (pEntries) pEntries->clear();
     if (pArchiveEnd) *pArchiveEnd = 0;
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || (nTotalSize < 6)) return false;
+    if ((nTotalSize < 6)) return false;
 
     QByteArray signatureLine;
     qint64 nOffset = 0;
     const bool bSignatureRead = _readLogicalLine(0, &signatureLine, &nOffset, pPdStruct);
-    if (!guardedThis || !bSignatureRead || (signatureLine != "#mtree") || (nOffset <= 0)) {
+    if (!bSignatureRead || (signatureLine != "#mtree") || (nOffset <= 0)) {
         return false;
     }
 
@@ -538,7 +535,7 @@ bool XMTree::_scanArchive(QList<MTREE_ENTRY> *pEntries, qint64 *pArchiveEnd, PDS
         QByteArray line;
         qint64 nNextOffset = 0;
         const bool bRead = _readLogicalLine(nLineOffset, &line, &nNextOffset, pPdStruct);
-        if (!guardedThis || !bRead || (nNextOffset <= nLineOffset) || (nNextOffset > nTotalSize)) {
+        if (!bRead || (nNextOffset <= nLineOffset) || (nNextOffset > nTotalSize)) {
             if (pEntries) pEntries->clear();
             return false;
         }
@@ -745,7 +742,6 @@ QMap<XBinary::UNPACK_PROP, QVariant> XMTree::getDefaultUnpackProperties()
 
 bool XMTree::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XMTree> guardedThis(this);
     if (m_bUnpackOperationInProgress) return false;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState) return false;
@@ -759,15 +755,14 @@ bool XMTree::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> 
     pState->pContext = nullptr;
     *pState = UNPACK_STATE();
     delete pOldContext;
-    if (!guardedThis || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!isPdStructNotCanceled(pPdStruct)) return false;
 
     const bool bBound = bindUnpackSource(pState, pPdStruct);
-    if (!guardedThis || !bBound) return false;
+    if (!bBound) return false;
     pState->mapUnpackProperties = mapProperties;
 
     QList<MTREE_ENTRY> listEntries;
     const bool bScanned = _scanArchive(&listEntries, nullptr, pPdStruct);
-    if (!guardedThis) return false;
     if (!bScanned || !isPdStructNotCanceled(pPdStruct)) {
         releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
@@ -775,7 +770,6 @@ bool XMTree::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> 
     }
 
     const qint64 nTotalSize = getSize();
-    if (!guardedThis) return false;
 
     MTREE_UNPACK_CONTEXT *pContext = new (std::nothrow) MTREE_UNPACK_CONTEXT;
     if (!pContext) {
@@ -793,7 +787,6 @@ bool XMTree::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> 
     pState->nTotalSize = nTotalSize;
 
     if (!validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
-        if (!guardedThis) return false;
         pState->pContext = nullptr;
         releaseUnpackSource(pState);
         delete pContext;
@@ -806,7 +799,6 @@ bool XMTree::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> 
 
 XBinary::ARCHIVERECORD XMTree::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XMTree> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return ARCHIVERECORD();
 
@@ -814,10 +806,10 @@ XBinary::ARCHIVERECORD XMTree::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdSt
     if (!pState || !pState->pContext) return result;
 
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent) return result;
+    if (!bSourceCurrent) return result;
 
     const qint64 nCurrentSize = getSize();
-    if (!guardedThis || (pState->nTotalSize != nCurrentSize)) return result;
+    if ((pState->nTotalSize != nCurrentSize)) return result;
 
     MTREE_UNPACK_CONTEXT *pContext = static_cast<MTREE_UNPACK_CONTEXT *>(pState->pContext);
     if ((pState->nNumberOfRecords != pContext->listEntries.count()) || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pContext->listEntries.count())) {
@@ -830,7 +822,7 @@ XBinary::ARCHIVERECORD XMTree::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdSt
 
     QList<MTREE_ENTRY> verifiedEntries;
     const bool bRescanned = _scanArchive(&verifiedEntries, nullptr, pPdStruct);
-    if (!guardedThis || !bRescanned || (pState->pContext != pContext) || (pState->nCurrentIndex != nExpectedIndex) || (pState->nNumberOfRecords != nExpectedCount) ||
+    if (!bRescanned || (pState->pContext != pContext) || (pState->nCurrentIndex != nExpectedIndex) || (pState->nNumberOfRecords != nExpectedCount) ||
         (verifiedEntries.count() != nExpectedCount)) {
         return ARCHIVERECORD();
     }
@@ -844,7 +836,7 @@ XBinary::ARCHIVERECORD XMTree::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdSt
     if (!bEntryMatches) return ARCHIVERECORD();
 
     const bool bSourceStillCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceStillCurrent || (pState->pContext != pContext) || (pState->nCurrentIndex != nExpectedIndex) ||
+    if (!bSourceStillCurrent || (pState->pContext != pContext) || (pState->nCurrentIndex != nExpectedIndex) ||
         (pState->nNumberOfRecords != nExpectedCount)) {
         return ARCHIVERECORD();
     }
@@ -881,17 +873,16 @@ XBinary::ARCHIVERECORD XMTree::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdSt
 
 bool XMTree::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XMTree> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState || !pState->pContext) {
         return false;
     }
 
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent) return false;
+    if (!bSourceCurrent) return false;
 
     const qint64 nCurrentSize = getSize();
-    if (!guardedThis || (pState->nTotalSize != nCurrentSize)) return false;
+    if ((pState->nTotalSize != nCurrentSize)) return false;
 
     MTREE_UNPACK_CONTEXT *pContext = static_cast<MTREE_UNPACK_CONTEXT *>(pState->pContext);
     if ((pState->nNumberOfRecords != pContext->listEntries.count()) || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
@@ -951,26 +942,24 @@ QList<XBinary::FPART_PROP> XMTree::getAvailableFPARTProperties()
 
 bool XMTree::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XMTree> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
-        if (!guardedThis || !bResult) return false;
-        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(guardedThis->XArchive::getInternalInfo(pPdStruct));
-        if (!guardedThis || !pInfo) return false;
-        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        if (!bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        if (!pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) = *pInfo;
     }
 
-    return guardedThis && bResult;
+    return bResult;
 }
 
 void *XMTree::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XMTree> guardedThis(this);
-    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
-    if (!guardedThis || !bHandled) return nullptr;
-    return &guardedThis->m_internalInfo;
+    const bool bHandled = handleInternalInfo(pPdStruct);
+    if (!bHandled) return nullptr;
+    return &m_internalInfo;
 }
 
 void XMTree::setInternalInfo(void *pInternalInfo)

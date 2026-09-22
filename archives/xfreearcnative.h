@@ -35,7 +35,7 @@ private:
     bool chargeMetadata(qint64 amount, qint64 liveBufferBytes = 0);
     qint64 m_memoryLimit = 0;
     qint64 m_metadataCharge = 0;
-    QPointer<QIODevice> m_device;
+    QIODevice *m_device = nullptr;
     QList<ENTRY> m_entries;
     QList<BLOCK> m_blocks;
     XBinary::OUTPUT_POLICY m_policy = {};

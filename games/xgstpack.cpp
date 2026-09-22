@@ -5,7 +5,6 @@
 
 #include "xgstpack.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <cstring>
@@ -95,8 +94,7 @@ bool XGstPack::parseContext(CONTEXT *pContext, bool bDeepCheck,
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XGstPack> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -116,7 +114,7 @@ bool XGstPack::parseContext(CONTEXT *pContext, bool bDeepCheck,
 
         const QByteArray baHeader =
             read_array_process(nOffset, GST_HEADER_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource ||
+        if (!guardedSource ||
             baHeader.size() != GST_HEADER_SIZE) {
             return false;
         }
@@ -173,7 +171,7 @@ bool XGstPack::parseContext(CONTEXT *pContext, bool bDeepCheck,
             // accepted as an archive.
             const QByteArray baPrelude =
                 read_array_process(member.nDataOffset, 2, pPdStruct);
-            if (!guardedThis || !guardedSource || baPrelude.size() != 2) {
+            if (!guardedSource || baPrelude.size() != 2) {
                 return false;
             }
             if (static_cast<quint8>(baPrelude.at(0)) >
@@ -199,7 +197,7 @@ bool XGstPack::parseContext(CONTEXT *pContext, bool bDeepCheck,
     context.nArchiveSize = context.nInputSize;
 
     if (bDeepCheck && !trialDecode(context, pPdStruct)) return false;
-    if (!guardedThis || !guardedSource) return false;
+    if (!guardedSource) return false;
 
     *pContext = context;
     return true;
@@ -207,8 +205,7 @@ bool XGstPack::parseContext(CONTEXT *pContext, bool bDeepCheck,
 
 bool XGstPack::trialDecode(const CONTEXT &context, PDSTRUCT *pPdStruct)
 {
-    QPointer<XGstPack> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
 
     const qint32 nCount = context.listMembers.size();
@@ -220,7 +217,7 @@ bool XGstPack::trialDecode(const CONTEXT &context, PDSTRUCT *pPdStruct)
 
         const QByteArray baPacked = read_array_process(
             member.nDataOffset, member.nCompressedSize, pPdStruct);
-        if (!guardedThis || !guardedSource ||
+        if (!guardedSource ||
             baPacked.size() != member.nCompressedSize) {
             return false;
         }
@@ -256,7 +253,7 @@ bool XGstPack::trialDecode(const CONTEXT &context, PDSTRUCT *pPdStruct)
 
 bool XGstPack::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, true, pPdStruct);
@@ -463,8 +460,7 @@ bool XGstPack::initUnpack(UNPACK_STATE *pState,
                           const QMap<UNPACK_PROP, QVariant> &mapProperties,
                           PDSTRUCT *pPdStruct)
 {
-    QPointer<XGstPack> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
@@ -473,7 +469,7 @@ bool XGstPack::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) || !guardedSource ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -488,9 +484,9 @@ bool XGstPack::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, false, pPdStruct) || !guardedThis ||
+    if (!parseContext(pContext, false, pPdStruct) ||
         !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -506,16 +502,11 @@ bool XGstPack::initUnpack(UNPACK_STATE *pState,
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(
+    const bool bFinalized = validateAndFinalizeUnpackSource(
         pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

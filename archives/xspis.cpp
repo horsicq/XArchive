@@ -6,7 +6,6 @@
 
 #include <QBuffer>
 #include <QDir>
-#include <QPointer>
 #include <QtEndian>
 
 #include <cstring>
@@ -134,15 +133,14 @@ bool XSPIS::parseInternalInfo(INTERNAL_INFO *pInfo, PDSTRUCT *pPdStruct)
     if (pInfo) *pInfo = INTERNAL_INFO();
     if (!pInfo || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XSPIS> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedThis || !guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!guardedSource || guardedSource->isSequential()) return false;
 
     const qint64 nFileSize = getSize();
-    if (!guardedThis || !guardedSource || (nFileSize < SPIS_HEADER_SIZE)) return false;
+    if (!guardedSource || (nFileSize < SPIS_HEADER_SIZE)) return false;
 
     const QByteArray baHeader = read_array_process(0, SPIS_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != SPIS_HEADER_SIZE) || (memcmp(baHeader.constData(), "SPIS\x1a", 5) != 0)) return false;
+    if (!guardedSource || (baHeader.size() != SPIS_HEADER_SIZE) || (memcmp(baHeader.constData(), "SPIS\x1a", 5) != 0)) return false;
 
     const METHOD headerMethod = tagMethod(baHeader.mid(5, 3));
     const quint32 nTotalRawSize = spisRead32(baHeader.constData() + 8);
@@ -165,7 +163,7 @@ bool XSPIS::parseInternalInfo(INTERNAL_INFO *pInfo, PDSTRUCT *pPdStruct)
         QByteArray baPrefix;
         const qint64 nSniffPackedSize = qMin<qint64>(nPackedSize, 512);
         const QByteArray baPackedPrefix = read_array_process(SPIS_HEADER_SIZE, nSniffPackedSize, pPdStruct);
-        if (!guardedThis || !guardedSource || (baPackedPrefix.size() != nSniffPackedSize)) return false;
+        if (!guardedSource || (baPackedPrefix.size() != nSniffPackedSize)) return false;
         if (headerMethod == METHOD_NON) {
             baPrefix = baPackedPrefix.left(SPIS_SNIFF_SIZE);
         } else if (headerMethod == METHOD_RLE) {
@@ -193,8 +191,8 @@ bool XSPIS::parseInternalInfo(INTERNAL_INFO *pInfo, PDSTRUCT *pPdStruct)
             }
         }
 
-        QString sBaseName = XBinary::fixFileName(XBinary::getDeviceFileBaseName(guardedSource.data()));
-        if (!guardedThis || !guardedSource) return false;
+        QString sBaseName = XBinary::fixFileName(XBinary::getDeviceFileBaseName(guardedSource));
+        if (!guardedSource) return false;
         if (sBaseName.isEmpty()) sBaseName = QStringLiteral("payload");
 
         MEMBER member;
@@ -229,7 +227,7 @@ bool XSPIS::parseInternalInfo(INTERNAL_INFO *pInfo, PDSTRUCT *pPdStruct)
 
             if (nFileSize - nOffset >= SPIS_HEADER_SIZE) {
                 const QByteArray baInner = read_array_process(nOffset, SPIS_HEADER_SIZE, pPdStruct);
-                if (!guardedThis || !guardedSource || (baInner.size() != SPIS_HEADER_SIZE)) return false;
+                if (!guardedSource || (baInner.size() != SPIS_HEADER_SIZE)) return false;
                 if (memcmp(baInner.constData(), "SPIS\x1a", 5) == 0) {
                     // ("SPIS\x1a" can never be mistaken for a record header: it
                     // would mean a name of 0x5053 bytes, far over the cap.)
@@ -258,7 +256,7 @@ bool XSPIS::parseInternalInfo(INTERNAL_INFO *pInfo, PDSTRUCT *pPdStruct)
 
             if (nFileSize - nOffset < SPIS_RECORD_HEADER_SIZE) return false;
             const QByteArray baRecord = read_array_process(nOffset, SPIS_RECORD_HEADER_SIZE, pPdStruct);
-            if (!guardedThis || !guardedSource || (baRecord.size() != SPIS_RECORD_HEADER_SIZE)) return false;
+            if (!guardedSource || (baRecord.size() != SPIS_RECORD_HEADER_SIZE)) return false;
 
             const quint16 nNameSize = spisRead16(baRecord.constData());
             const quint32 nDosDateTime = spisRead32(baRecord.constData() + 2);
@@ -288,7 +286,7 @@ bool XSPIS::parseInternalInfo(INTERNAL_INFO *pInfo, PDSTRUCT *pPdStruct)
             if (bTruncated && (listMembers.isEmpty() || (nAvailable <= 0))) return false;
 
             const QByteArray baName = read_array_process(nOffset + SPIS_RECORD_HEADER_SIZE, nNameSize, pPdStruct);
-            if (!guardedThis || !guardedSource || (baName.size() != nNameSize)) return false;
+            if (!guardedSource || (baName.size() != nNameSize)) return false;
             const QString sName = safeMemberName(baName);
             if (sName.isEmpty()) return false;
 
@@ -314,7 +312,7 @@ bool XSPIS::parseInternalInfo(INTERNAL_INFO *pInfo, PDSTRUCT *pPdStruct)
         if ((nOffset != nFileSize) || listMembers.isEmpty() || (nSegmentRawSum != nSegmentTotal)) return false;
     }
 
-    if (!guardedThis || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    if (!guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
     pInfo->bIsValid = true;
     pInfo->nFileSize = nFileSize;
     pInfo->nArchiveType = nArchiveType;
@@ -337,13 +335,12 @@ bool XSPIS::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 
 bool XSPIS::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XSPIS> guardedThis(this);
     if (!isInternalInfoHandled()) {
         INTERNAL_INFO info;
-        if (!parseInternalInfo(&info, pPdStruct) || !guardedThis) return false;
-        if (!XArchive::handleInternalInfo(pPdStruct) || !guardedThis) return false;
+        if (!parseInternalInfo(&info, pPdStruct)) return false;
+        if (!XArchive::handleInternalInfo(pPdStruct)) return false;
         XArchive::INTERNAL_INFO *pBase = static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
-        if (!guardedThis || !pBase) return false;
+        if (!pBase) return false;
         static_cast<XArchive::INTERNAL_INFO &>(info) = *pBase;
         m_internalInfo = info;
     }
@@ -436,7 +433,6 @@ QMap<XBinary::UNPACK_PROP, QVariant> XSPIS::getDefaultUnpackProperties()
 
 bool XSPIS::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSPIS> guardedThis(this);
     if (m_bUnpackOperationInProgress) return false;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState) return false;
@@ -447,12 +443,12 @@ bool XSPIS::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     pState->pContext = nullptr;
     *pState = UNPACK_STATE();
     delete pOldContext;
-    if (!guardedThis || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
-    if (!bindUnpackSource(pState, pPdStruct) || !guardedThis) return false;
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    if (!bindUnpackSource(pState, pPdStruct)) return false;
 
     INTERNAL_INFO info;
-    if (!parseInternalInfo(&info, pPdStruct) || !guardedThis) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseInternalInfo(&info, pPdStruct)) {
+        releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
         return false;
     }
@@ -478,11 +474,6 @@ bool XSPIS::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     pState->nTotalSize = info.nFileSize;
     pState->mapUnpackProperties = mapProperties;
     if (!validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
         pState->pContext = nullptr;
         releaseUnpackSource(pState);
         delete pContext;
@@ -523,10 +514,9 @@ XBinary::ARCHIVERECORD XSPIS::rawRecord(const MEMBER &member) const
 
 XBinary::ARCHIVERECORD XSPIS::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSPIS> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed() || !pState || !pState->pContext) return ARCHIVERECORD();
-    if (!isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis || !XBinary::isPdStructNotCanceled(pPdStruct)) return ARCHIVERECORD();
+    if (!isUnpackSourceCurrent(pState, pPdStruct) || !XBinary::isPdStructNotCanceled(pPdStruct)) return ARCHIVERECORD();
 
     SPIS_UNPACK_CONTEXT *pContext = static_cast<SPIS_UNPACK_CONTEXT *>(pState->pContext);
     if ((pState->nNumberOfRecords != pContext->info.listMembers.count()) || (pState->nCurrentIndex < 0) ||
@@ -541,13 +531,12 @@ XBinary::ARCHIVERECORD XSPIS::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
 
 bool XSPIS::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSPIS> guardedThis(this);
-    QPointer<QIODevice> guardedOutput(pDevice);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedOutput = pDevice;
+    QIODevice *guardedSource = getDevice();
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !guardedThis || !guardedOutput || !guardedSource ||
-        !isUnpackOutputSupported(guardedOutput.data()) || XBinary::devicesAlias(guardedSource.data(), guardedOutput.data()) ||
-        !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !guardedOutput || !guardedSource ||
+        !isUnpackOutputSupported(guardedOutput) || XBinary::devicesAlias(guardedSource, guardedOutput) ||
+        !isUnpackSourceCurrent(pState, pPdStruct) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -576,10 +565,10 @@ bool XSPIS::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
                 XBinary::OUTPUT_BUDGET::noteShadowRefusal(pState->spOutputBudget.data());
             }
         }
-        bEmptyResult = bEmptyResult && publishUnpackOutput(pEmptyDevice, guardedOutput.data(), pState, pPdStruct);
+        bEmptyResult = bEmptyResult && publishUnpackOutput(pEmptyDevice, guardedOutput, pState, pPdStruct);
         XBinary::freeFileBuffer(&pEmptyDevice);
-        if (bEmptyResult && guardedThis) pState->nCurrentOffset = member.nDataOffset;
-        return bEmptyResult && guardedThis && guardedOutput && guardedSource;
+        if (bEmptyResult) pState->nCurrentOffset = member.nDataOffset;
+        return bEmptyResult && guardedOutput && guardedSource;
     }
     if (member.bTruncated) {
         // The archive ends inside this member's payload.  The format
@@ -612,11 +601,11 @@ bool XSPIS::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     // re-pointed at that. Stored members are never masked.
     QByteArray baUnmasked;
     QBuffer bufferUnmasked;
-    QIODevice *pSourceDevice = guardedSource.data();
+    QIODevice *pSourceDevice = guardedSource;
     if ((member.nFlags == SPIS_FLAG_OBFUSCATED) && (member.method != METHOD_NON)) {
         if ((member.nPackedSize < 0) || (member.nPackedSize > SPIS_MAX_MEMBER_SIZE)) return false;
         baUnmasked = read_array_process(member.nDataOffset, member.nPackedSize, pPdStruct);
-        if (!guardedThis || !guardedSource || (baUnmasked.size() != member.nPackedSize)) return false;
+        if (!guardedSource || (baUnmasked.size() != member.nPackedSize)) return false;
         quint8 *pMask = (quint8 *)baUnmasked.data();
         for (qint64 i = 0; i < member.nPackedSize; ++i) {
             pMask[i] = (quint8)(pMask[i] ^ (quint8)((SPIS_FLAG_KEY >> (8 * (i & 3))) & 0xff));
@@ -628,8 +617,8 @@ bool XSPIS::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     }
 
     bool bResult = decompressor.decompressArchiveRecord(record, pSourceDevice, pWorkDevice, pState->mapUnpackProperties, pPdStruct, pState->spOutputBudget);
-    bResult = bResult && guardedThis && guardedOutput && guardedSource && (pWorkDevice->size() == member.nRawSize) &&
-              isUnpackSourceCurrent(pState, pPdStruct) && guardedThis && XBinary::isPdStructNotCanceled(pPdStruct);
+    bResult = bResult && guardedOutput && guardedSource && (pWorkDevice->size() == member.nRawSize) &&
+              isUnpackSourceCurrent(pState, pPdStruct) && XBinary::isPdStructNotCanceled(pPdStruct);
 
     quint32 nChecksum = 0;
     if (bResult) {
@@ -651,19 +640,18 @@ bool XSPIS::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     }
 
     if (bResult) {
-        bResult = guardedThis && guardedOutput && guardedSource && isUnpackSourceCurrent(pState, pPdStruct) && guardedThis &&
-                  publishUnpackOutput(pWorkDevice, guardedOutput.data(), pState, pPdStruct);
+        bResult = guardedOutput && guardedSource && isUnpackSourceCurrent(pState, pPdStruct) &&
+                  publishUnpackOutput(pWorkDevice, guardedOutput, pState, pPdStruct);
     }
     XBinary::freeFileBuffer(&pWorkDevice);
-    if (bResult && guardedThis) pState->nCurrentOffset = member.nDataOffset + member.nPackedSize;
-    return bResult && guardedThis && guardedOutput && guardedSource;
+    if (bResult) pState->nCurrentOffset = member.nDataOffset + member.nPackedSize;
+    return bResult && guardedOutput && guardedSource;
 }
 
 bool XSPIS::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSPIS> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis ||
+    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }

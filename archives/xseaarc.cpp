@@ -256,11 +256,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XSEAARC::getDefaultUnpackProperties()
 
 bool XSEAARC::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSEAARC> guardedArchive(this);
-    if (!pState || m_bUnpackOperationInProgress || ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedArchive->ownsUnpackSource(pState))) {
+    if (!pState || m_bUnpackOperationInProgress || ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState))) {
         return false;
     }
-    if (!guardedArchive->finishUnpack(pState, nullptr) || !guardedArchive) return false;
+    if (!finishUnpack(pState, nullptr)) return false;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
 
@@ -276,16 +275,12 @@ bool XSEAARC::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant>
         return false;
     }
 
-    const bool bBound = guardedArchive->bindUnpackSource(pState, pPdStruct);
-    if (!guardedArchive || !bBound) return false;
+    const bool bBound = bindUnpackSource(pState, pPdStruct);
+    if (!bBound) return false;
 
     pState->mapUnpackProperties = mapProperties;
     pState->nCurrentOffset = 0;
-    pState->nTotalSize = guardedArchive->getSize();
-    if (!guardedArchive) {
-        *pState = UNPACK_STATE();
-        return false;
-    }
+    pState->nTotalSize = getSize();
     pState->nCurrentIndex = 0;
     pState->nNumberOfRecords = 0;
     pState->pContext = nullptr;
@@ -298,11 +293,7 @@ bool XSEAARC::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant>
             break;
         }
 
-        const QByteArray baPrefix = guardedArchive->read_array(nOffset, 2);
-        if (!guardedArchive) {
-            *pState = UNPACK_STATE();
-            return false;
-        }
+        const QByteArray baPrefix = read_array(nOffset, 2);
         if (baPrefix.size() != 2) break;
         quint8 nMarker = static_cast<quint8>(baPrefix.at(0));
         quint8 nMethod = static_cast<quint8>(baPrefix.at(1));
@@ -321,11 +312,7 @@ bool XSEAARC::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant>
             break;
         }
 
-        const QByteArray baSize = guardedArchive->read_array(nOffset + 15, 4);
-        if (!guardedArchive) {
-            *pState = UNPACK_STATE();
-            return false;
-        }
+        const QByteArray baSize = read_array(nOffset + 15, 4);
         if (baSize.size() != 4) break;
         quint32 nCompressedSize = seaReadLe32(baSize, 0);
         qint64 nAvailableData = nFileSize - nOffset - nHeaderSize;
@@ -340,14 +327,10 @@ bool XSEAARC::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant>
     }
 
     if ((pState->nNumberOfRecords > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-        bResult = guardedArchive->validateAndFinalizeUnpackSource(pState, pPdStruct);
-        if (!guardedArchive) {
-            *pState = UNPACK_STATE();
-            return false;
-        }
+        bResult = validateAndFinalizeUnpackSource(pState, pPdStruct);
     }
     if (!bResult) {
-        guardedArchive->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
     }
 
@@ -358,20 +341,19 @@ XBinary::ARCHIVERECORD XSEAARC::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdS
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
-    QPointer<XSEAARC> guardedArchive(this);
 
     XBinary::ARCHIVERECORD result = {};
 
-    if (XBinary::isPdStructNotCanceled(pPdStruct) && pState && guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) && guardedArchive &&
+    if (XBinary::isPdStructNotCanceled(pPdStruct) && pState && isUnpackSourceCurrent(pState, pPdStruct) &&
         (pState->nCurrentIndex >= 0) && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
-        const QByteArray baPrefix = guardedArchive->read_array(pState->nCurrentOffset, 2);
-        if (!guardedArchive || (baPrefix.size() != 2)) {
+        const QByteArray baPrefix = read_array(pState->nCurrentOffset, 2);
+        if (baPrefix.size() != 2) {
             return XBinary::ARCHIVERECORD();
         }
         quint8 nMethod = static_cast<quint8>(baPrefix.at(1));
         qint32 nHeaderSize = _getHeaderSize(nMethod);
-        const QByteArray baHeader = guardedArchive->read_array(pState->nCurrentOffset, nHeaderSize);
-        if (!guardedArchive || (baHeader.size() != nHeaderSize)) {
+        const QByteArray baHeader = read_array(pState->nCurrentOffset, nHeaderSize);
+        if (baHeader.size() != nHeaderSize) {
             return XBinary::ARCHIVERECORD();
         }
         quint32 nCompressedSize = seaReadLe32(baHeader, 15);
@@ -430,18 +412,17 @@ bool XSEAARC::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
-    QPointer<XSEAARC> guardedArchive(this);
 
     bool bResult = false;
 
-    if (XBinary::isPdStructNotCanceled(pPdStruct) && pState && guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) && guardedArchive &&
+    if (XBinary::isPdStructNotCanceled(pPdStruct) && pState && isUnpackSourceCurrent(pState, pPdStruct) &&
         (pState->nCurrentIndex >= 0) && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
-        const QByteArray baPrefix = guardedArchive->read_array(pState->nCurrentOffset, 2);
-        if (!guardedArchive || (baPrefix.size() != 2)) return false;
+        const QByteArray baPrefix = read_array(pState->nCurrentOffset, 2);
+        if (baPrefix.size() != 2) return false;
         quint8 nMethod = static_cast<quint8>(baPrefix.at(1));
         qint32 nHeaderSize = _getHeaderSize(nMethod);
-        const QByteArray baSize = guardedArchive->read_array(pState->nCurrentOffset + 15, 4);
-        if (!guardedArchive || (baSize.size() != 4)) return false;
+        const QByteArray baSize = read_array(pState->nCurrentOffset + 15, 4);
+        if (baSize.size() != 4) return false;
         quint32 nCompressedSize = seaReadLe32(baSize, 0);
 
         pState->nCurrentOffset += (nHeaderSize + nCompressedSize);
@@ -916,27 +897,25 @@ XBinary *XSEAARC::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModul
 
 bool XSEAARC::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XSEAARC> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
-        if (!guardedThis || !bResult) return false;
-        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(guardedThis->XArchive::getInternalInfo(pPdStruct));
-        if (!guardedThis || !pInfo) return false;
-        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        if (!bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        if (!pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) = *pInfo;
     }
 
-    return guardedThis && bResult;
+    return bResult;
 }
 
 void *XSEAARC::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XSEAARC> guardedThis(this);
-    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
-    if (!guardedThis || !bHandled) return nullptr;
+    const bool bHandled = handleInternalInfo(pPdStruct);
+    if (!bHandled) return nullptr;
 
-    return &guardedThis->m_internalInfo;
+    return &m_internalInfo;
 }
 
 void XSEAARC::setInternalInfo(void *pInternalInfo)

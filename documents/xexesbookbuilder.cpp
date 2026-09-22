@@ -6,7 +6,6 @@
 #include "xexesbookbuilder.h"
 
 #include <QBuffer>
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -81,10 +80,9 @@ bool XEXESBookBuilder::checkOverlayTag(qint64 nOffset, qint64 nInputSize, char *
 {
     if (!sbookRangeWithin(nInputSize, nOffset, SBOOK_HEADER_SIZE)) return false;
 
-    QPointer<XEXESBookBuilder> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const QByteArray baHeader = read_array_process(nOffset, SBOOK_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != SBOOK_HEADER_SIZE)) return false;
+    if (!guardedSource || (baHeader.size() != SBOOK_HEADER_SIZE)) return false;
     const uchar *pHeader = (const uchar *)baHeader.constData();
 
     // a length-prefixed 5-character tag, "Sbook" or "Ebook".
@@ -97,17 +95,16 @@ bool XEXESBookBuilder::checkOverlayTag(qint64 nOffset, qint64 nInputSize, char *
 
 qint64 XEXESBookBuilder::sectionTableOverlay(qint64 nInputSize, PDSTRUCT *pPdStruct)
 {
-    QPointer<XEXESBookBuilder> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
 
     const QByteArray baDos = read_array_process(0, 0x40, pPdStruct);
-    if (!guardedThis || !guardedSource || (baDos.size() != 0x40)) return -1;
+    if (!guardedSource || (baDos.size() != 0x40)) return -1;
     if (memcmp(baDos.constData(), "MZ", 2) != 0) return -1;
     const qint64 nNtOffset = (qint64)qFromLittleEndian<quint32>((const uchar *)baDos.constData() + 0x3c);
     if (!sbookRangeWithin(nInputSize, nNtOffset, 24)) return -1;
 
     const QByteArray baNt = read_array_process(nNtOffset, 24, pPdStruct);
-    if (!guardedThis || !guardedSource || (baNt.size() != 24)) return -1;
+    if (!guardedSource || (baNt.size() != 24)) return -1;
     const uchar *pNt = (const uchar *)baNt.constData();
     if (memcmp(pNt, "PE\x00\x00", 4) != 0) return -1;
     const qint32 nNumberOfSections = (qint32)qFromLittleEndian<quint16>(pNt + 6);
@@ -119,7 +116,7 @@ qint64 XEXESBookBuilder::sectionTableOverlay(qint64 nInputSize, PDSTRUCT *pPdStr
     if (!sbookRangeWithin(nInputSize, nTableOffset, nTableSize)) return -1;
 
     const QByteArray baTable = read_array_process(nTableOffset, nTableSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baTable.size() != nTableSize)) return -1;
+    if (!guardedSource || (baTable.size() != nTableSize)) return -1;
 
     qint64 nEnd = 0;
     for (qint32 i = 0; i < nNumberOfSections; ++i) {
@@ -135,21 +132,20 @@ qint64 XEXESBookBuilder::sectionTableOverlay(qint64 nInputSize, PDSTRUCT *pPdStr
 
 qint64 XEXESBookBuilder::findOverlay(qint64 nInputSize, PDSTRUCT *pPdStruct)
 {
-    QPointer<XEXESBookBuilder> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (nInputSize < SBOOK_HEADER_SIZE + SBOOK_TAIL_SIZE) return -1;
 
     // The stub stores the overlay's own offset in the last four bytes of the
     // file so it can seek to its data at run time.
     const QByteArray baPointer = read_array_process(nInputSize - 4, 4, pPdStruct);
-    if (!guardedThis || !guardedSource || (baPointer.size() != 4)) return -1;
+    if (!guardedSource || (baPointer.size() != 4)) return -1;
     const qint64 nPointed = (qint64)qFromLittleEndian<quint32>((const uchar *)baPointer.constData());
     char cTag = 0;
     if (checkOverlayTag(nPointed, nInputSize, &cTag, pPdStruct)) return nPointed;
-    if (!guardedThis || !guardedSource) return -1;
+    if (!guardedSource) return -1;
 
     const qint64 nSectionEnd = sectionTableOverlay(nInputSize, pPdStruct);
-    if (!guardedThis || !guardedSource) return -1;
+    if (!guardedSource) return -1;
     if ((nSectionEnd > 0) && checkOverlayTag(nSectionEnd, nInputSize, &cTag, pPdStruct)) return nSectionEnd;
 
     return -1;
@@ -159,8 +155,7 @@ bool XEXESBookBuilder::measureChain(qint64 nOffset, qint64 nInputSize, qint64 *p
 {
     if (!pnCompressedSize || !pnUncompressedSize) return false;
 
-    QPointer<XEXESBookBuilder> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
 
     const qint64 nStart = nOffset;
     qint64 nProduced = 0;
@@ -170,17 +165,17 @@ bool XEXESBookBuilder::measureChain(qint64 nOffset, qint64 nInputSize, qint64 *p
         if (++nChunks > SBOOK_MAX_CHUNKS) return false;
         if (!sbookRangeWithin(nInputSize, nOffset, 4)) return false;
         const QByteArray baLength = read_array_process(nOffset, 4, pPdStruct);
-        if (!guardedThis || !guardedSource || (baLength.size() != 4)) return false;
+        if (!guardedSource || (baLength.size() != 4)) return false;
         const qint64 nPacked = (qint64)(qint32)qFromLittleEndian<quint32>((const uchar *)baLength.constData());
         nOffset += 4;
         if ((nPacked <= 0) || (nPacked > SBOOK_MAX_CHUNK_PACKED_SIZE)) return false;
         if (!sbookRangeWithin(nInputSize, nOffset, nPacked)) return false;
 
         const QByteArray baChunk = read_array_process(nOffset, nPacked, pPdStruct);
-        if (!guardedThis || !guardedSource || (baChunk.size() != nPacked)) return false;
+        if (!guardedSource || (baChunk.size() != nPacked)) return false;
         QByteArray baRaw;
         if (!sbookInflateChunk(baChunk, &baRaw, pPdStruct)) return false;
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
 
         nOffset += nPacked;
         nProduced += baRaw.size();
@@ -198,17 +193,16 @@ bool XEXESBookBuilder::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XEXESBookBuilder> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
     context.nOverlayOffset = findOverlay(context.nInputSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (context.nOverlayOffset < 0)) return false;
+    if (!guardedSource || (context.nOverlayOffset < 0)) return false;
 
     const QByteArray baHeader = read_array_process(context.nOverlayOffset, SBOOK_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != SBOOK_HEADER_SIZE)) return false;
+    if (!guardedSource || (baHeader.size() != SBOOK_HEADER_SIZE)) return false;
     context.cTagFirst = baHeader.at(4);
     context.nTotalSize = (qint64)qFromLittleEndian<quint32>((const uchar *)baHeader.constData() + 9);
     if (context.nTotalSize > SBOOK_MAX_TOTAL_SIZE) return false;
@@ -225,7 +219,7 @@ bool XEXESBookBuilder::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         }
         if (!sbookRangeWithin(context.nInputSize, nOffset, 8)) return false;
         const QByteArray baRecord = read_array_process(nOffset, 8, pPdStruct);
-        if (!guardedThis || !guardedSource || (baRecord.size() != 8)) return false;
+        if (!guardedSource || (baRecord.size() != 8)) return false;
         const uchar *pRecord = (const uchar *)baRecord.constData();
         const qint64 nCount = (qint64)qFromLittleEndian<quint32>(pRecord);
         const qint32 nNameSize = (qint32)qFromLittleEndian<quint32>(pRecord + 4);
@@ -245,7 +239,7 @@ bool XEXESBookBuilder::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
         if (!sbookRangeWithin(context.nInputSize, nOffset, nNameSize)) return false;
         const QByteArray baName = read_array_process(nOffset, nNameSize, pPdStruct);
-        if (!guardedThis || !guardedSource || (baName.size() != nNameSize)) return false;
+        if (!guardedSource || (baName.size() != nNameSize)) return false;
         nOffset += nNameSize;
         for (qint32 i = 0; i < nNameSize; ++i) {
             // The stored path is the author's own file name; a control byte
@@ -255,7 +249,7 @@ bool XEXESBookBuilder::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
         if (!sbookRangeWithin(context.nInputSize, nOffset, SBOOK_TAILWORD_SIZE)) return false;
         const QByteArray baTail = read_array_process(nOffset, SBOOK_TAILWORD_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baTail.size() != SBOOK_TAILWORD_SIZE)) return false;
+        if (!guardedSource || (baTail.size() != SBOOK_TAILWORD_SIZE)) return false;
         // The reference implementation reads these eight bytes without looking at them; the last four are
         // "EC2\0" in every known file and make the record chain self-checking.
         if (memcmp(baTail.constData() + 4, SBOOK_CODEC_TAG, 4) != 0) return false;
@@ -269,7 +263,7 @@ bool XEXESBookBuilder::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         member.sFileName = QString::fromLatin1(baName).replace(QLatin1Char('\\'), QLatin1Char('/'));
 
         if (!measureChain(nOffset, context.nInputSize, &member.nCompressedSize, &member.nUncompressedSize, pPdStruct)) return false;
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
         nOffset += member.nCompressedSize;
 
         if (context.listMembers.size() >= SBOOK_MAX_MEMBERS) return false;
@@ -280,7 +274,7 @@ bool XEXESBookBuilder::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     // The record chain is followed by the four-byte pointer back to the
     // overlay, which is the last thing in the file.
     context.nArchiveSize = qMin(context.nInputSize, nOffset + 4);
-    if (!guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     *pContext = context;
     return true;
@@ -288,21 +282,20 @@ bool XEXESBookBuilder::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XEXESBookBuilder::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<XEXESBookBuilder> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
 
     bool bResult = false;
     if (guardedSource && !guardedSource->isSequential()) {
         const qint64 nInputSize = guardedSource->size();
         const qint64 nOverlayOffset = findOverlay(nInputSize, pPdStruct);
-        if (guardedThis && (nOverlayOffset >= 0)) {
+        if ((nOverlayOffset >= 0)) {
             // The tag is matched; confirm the first record looks like a record
             // rather than inflating the whole book here.
             const qint64 nRecordOffset = nOverlayOffset + SBOOK_HEADER_SIZE;
             if (sbookRangeWithin(nInputSize, nRecordOffset, 8)) {
                 const QByteArray baRecord = read_array_process(nRecordOffset, 8, pPdStruct);
-                if (guardedThis && (baRecord.size() == 8)) {
+                if ((baRecord.size() == 8)) {
                     const uchar *pRecord = (const uchar *)baRecord.constData();
                     const qint64 nCount = (qint64)qFromLittleEndian<quint32>(pRecord);
                     const qint64 nNameSize = (qint64)qFromLittleEndian<quint32>(pRecord + 4);
@@ -310,7 +303,7 @@ bool XEXESBookBuilder::isValid(PDSTRUCT *pPdStruct)
                               sbookRangeWithin(nInputSize, nRecordOffset + 8, nNameSize + SBOOK_TAILWORD_SIZE);
                     if (bResult) {
                         const QByteArray baTail = read_array_process(nRecordOffset + 8 + nNameSize, SBOOK_TAILWORD_SIZE, pPdStruct);
-                        bResult = guardedThis && (baTail.size() == SBOOK_TAILWORD_SIZE) && (memcmp(baTail.constData() + 4, SBOOK_CODEC_TAG, 4) == 0);
+                        bResult = (baTail.size() == SBOOK_TAILWORD_SIZE) && (memcmp(baTail.constData() + 4, SBOOK_CODEC_TAG, 4) == 0);
                     }
                 }
             }
@@ -459,15 +452,14 @@ QMap<XBinary::UNPACK_PROP, QVariant> XEXESBookBuilder::getDefaultUnpackPropertie
 
 bool XEXESBookBuilder::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XEXESBookBuilder> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) {
         return false;
     }
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -481,8 +473,8 @@ bool XEXESBookBuilder::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, 
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -496,15 +488,10 @@ bool XEXESBookBuilder::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, 
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

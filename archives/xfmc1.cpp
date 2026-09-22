@@ -5,7 +5,6 @@
 
 #include "xfmc1.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -133,12 +132,11 @@ bool XFMC1::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XFMC1> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     const qint64 nInputSize = getSize();
-    if (!guardedThis || !guardedSource) return false;
+    if (!guardedSource) return false;
     if (nInputSize < FMC1_MAGIC_SIZE + FMC1_RECORD_SIZE) return false;
 
     // Cache key only.  The smallest legitimate container is 29 bytes (magic +
@@ -146,10 +144,10 @@ bool XFMC1::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     // instead of demanding a full 32 bytes.
     const qint64 nPrefixSize = qMin<qint64>(32, nInputSize);
     const QByteArray baPrefix = read_array_process(0, nPrefixSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (static_cast<qint64>(baPrefix.size()) != nPrefixSize)) return false;
+    if ((static_cast<qint64>(baPrefix.size()) != nPrefixSize)) return false;
     if (!baPrefix.startsWith(QByteArrayLiteral("FMC1"))) return false;
 
-    if (m_bContextCached && (m_pCachedDevice == guardedSource.data()) && (m_nCachedSize == nInputSize) && (m_baCachedPrefix == baPrefix)) {
+    if (m_bContextCached && (m_pCachedDevice == guardedSource) && (m_nCachedSize == nInputSize) && (m_baCachedPrefix == baPrefix)) {
         if (!m_bContextValid) return false;
         *pContext = m_context;
         return isPdStructNotCanceled(pPdStruct);
@@ -158,7 +156,7 @@ bool XFMC1::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     m_bContextCached = true;
     m_bContextValid = false;
     m_context = CONTEXT();
-    m_pCachedDevice = guardedSource.data();
+    m_pCachedDevice = guardedSource;
     m_nCachedSize = nInputSize;
     m_baCachedPrefix = baPrefix;
 
@@ -172,7 +170,7 @@ bool XFMC1::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (nOffset + FMC1_RECORD_SIZE > nInputSize) return false;
 
         const QByteArray baRecord = read_array_process(nOffset, FMC1_RECORD_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baRecord.size() != FMC1_RECORD_SIZE)) return false;
+        if ((baRecord.size() != FMC1_RECORD_SIZE)) return false;
         const char *pRecord = baRecord.constData();
         const uchar *pRaw = reinterpret_cast<const uchar *>(pRecord);
 
@@ -185,7 +183,7 @@ bool XFMC1::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (!fmc1RangeWithin(nInputSize, nDataOffset, nCompressedSize)) return false;
 
         const QByteArray baPacked = read_array_process(nDataOffset, nCompressedSize, pPdStruct);
-        if (!guardedThis || !guardedSource || (static_cast<qint64>(baPacked.size()) != nCompressedSize)) return false;
+        if ((static_cast<qint64>(baPacked.size()) != nCompressedSize)) return false;
         const qint64 nUncompressedSize = measureLzss(baPacked);
         if (nUncompressedSize <= 0) return false;
 
@@ -212,12 +210,12 @@ bool XFMC1::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     m_bContextValid = true;
     m_context = context;
     *pContext = context;
-    return guardedThis && guardedSource;
+    return guardedSource;
 }
 
 bool XFMC1::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -387,11 +385,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XFMC1::getDefaultUnpackProperties()
 
 bool XFMC1::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XFMC1> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -401,8 +398,8 @@ bool XFMC1::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -416,15 +413,10 @@ bool XFMC1::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

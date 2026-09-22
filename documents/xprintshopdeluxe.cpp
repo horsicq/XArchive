@@ -7,7 +7,6 @@
 
 #include "Algos/xdcldecoder.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -124,13 +123,12 @@ bool XPrintShopDeluxe::scanMemberSize(MEMBER *pMember, PDSTRUCT *pPdStruct)
 {
     if (!pMember || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XPrintShopDeluxe> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
 
     const QByteArray baPacked = read_array_process(
         pMember->nDataOffset, pMember->nCompressedSize, pPdStruct);
-    if (!guardedThis || !guardedSource ||
+    if (!guardedSource ||
         baPacked.size() != pMember->nCompressedSize) {
         return false;
     }
@@ -160,8 +158,7 @@ bool XPrintShopDeluxe::parseContext(CONTEXT *pContext, bool bScanSize,
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XPrintShopDeluxe> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -172,7 +169,7 @@ bool XPrintShopDeluxe::parseContext(CONTEXT *pContext, bool bScanSize,
 
     const QByteArray baHeader =
         read_array_process(0, PSD_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != PSD_HEADER_SIZE)) {
+    if (!guardedSource || (baHeader.size() != PSD_HEADER_SIZE)) {
         return false;
     }
 
@@ -200,7 +197,7 @@ bool XPrintShopDeluxe::parseContext(CONTEXT *pContext, bool bScanSize,
 
     const QByteArray baPrelude =
         read_array_process(member.nDataOffset, 2, pPdStruct);
-    if (!guardedThis || !guardedSource || (baPrelude.size() != 2) ||
+    if (!guardedSource || (baPrelude.size() != 2) ||
         !printShopIsDclPrelude(baPrelude)) {
         return false;
     }
@@ -212,18 +209,18 @@ bool XPrintShopDeluxe::parseContext(CONTEXT *pContext, bool bScanSize,
         // unknown; methodToHandleMethod() then reports it as UNKNOWN so
         // extraction refuses it instead of writing a truncated or empty file.
         scanMemberSize(&context.listMembers[0], pPdStruct);
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
     }
 
     context.nArchiveSize = context.nInputSize;
     context.nFirstMemberOffset = context.listMembers.first().nDataOffset;
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XPrintShopDeluxe::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, false, pPdStruct);
@@ -416,8 +413,7 @@ bool XPrintShopDeluxe::initUnpack(
     UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties,
     PDSTRUCT *pPdStruct)
 {
-    QPointer<XPrintShopDeluxe> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
@@ -426,7 +422,7 @@ bool XPrintShopDeluxe::initUnpack(
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) || !guardedSource ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -443,9 +439,9 @@ bool XPrintShopDeluxe::initUnpack(
     }
     // bScanSize = true: the extraction path needs the plaintext length, and the
     // container does not store it anywhere.
-    if (!parseContext(pContext, true, pPdStruct) || !guardedThis ||
+    if (!parseContext(pContext, true, pPdStruct) ||
         !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -461,16 +457,11 @@ bool XPrintShopDeluxe::initUnpack(
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(
+    const bool bFinalized = validateAndFinalizeUnpackSource(
         pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

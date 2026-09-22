@@ -8,7 +8,6 @@
 #include "zlib.h"
 
 #include <QMap>
-#include <QPointer>
 #include <QSet>
 #include <QTemporaryFile>
 #include <QtEndian>
@@ -83,8 +82,8 @@ struct Ranges {
 };
 
 struct Reader {
-    QPointer<XVirtualDiskArchive> owner;
-    QPointer<QIODevice> source;
+    XVirtualDiskArchive *owner;
+    QIODevice *source;
     XBinary::PDSTRUCT *pd;
     quint64 size = 0;
     quint64 budget = kMetadataBudget;
@@ -97,12 +96,12 @@ struct Reader {
             if (active() && n >= 0) size = quint64(n);
         }
     }
-    bool active() const { return owner && source && owner->getDevice() == source.data() && XBinary::isPdStructNotCanceled(pd); }
+    bool active() const { return owner && source && owner->getDevice() == source && XBinary::isPdStructNotCanceled(pd); }
     QByteArray read(quint64 off, quint64 len, bool metadata = true) {
         if (!active() || !span(off, len, size) || len > 4 * 1024 * 1024 || (metadata && len > budget)) return QByteArray();
         if (metadata) budget -= len;
         QByteArray a(int(len), 0);
-        const qint64 n = XBinary::read_array_process(source.data(), qint64(off), a.data(), qint64(len), pd);
+        const qint64 n = XBinary::read_array_process(source, qint64(off), a.data(), qint64(len), pd);
         if (!active() || n != qint64(len)) return QByteArray();
         return a;
     }
@@ -504,7 +503,7 @@ bool parse(Reader &r, XVirtualDiskArchive::KIND kind, DiskPlan &p) {
 }
 
 bool writeAll(QIODevice *out, const char *data, qint64 size, Reader &r) {
-    QPointer<QIODevice> guard(out);
+    QIODevice *guard = out;
     while (size > 0 && r.active() && guard) {
         qint64 n = guard->write(data, size);
         if (!guard || !r.active() || n <= 0 || n > size) return false;
@@ -611,9 +610,8 @@ public:
     void progress(XBinary::PDSTRUCT *pd) { m_pd = pd; }
 protected:
     qint64 readData(char *data, qint64 max) override {
-        QPointer<DiskDevice> self(this);
         if (!m_owner || max < 0 || !XBinary::isPdStructNotCanceled(m_pd)) return -1;
-        Reader reader(m_owner.data(), m_pd);
+        Reader reader(m_owner, m_pd);
         quint64 wanted = qMin(quint64(max), m_plan.diskSize - m_position), done = 0;
         while (done < wanted && reader.active()) {
             QVector<quint64>::const_iterator next = std::upper_bound(m_starts.cbegin(), m_starts.cend(), m_position);
@@ -625,25 +623,25 @@ protected:
             if (segment.mode == Zero) memset(data + done, 0, size_t(count));
             else if (segment.mode == Stored) {
                 QByteArray bytes = reader.read(segment.offset + relative, count, false);
-                if (!self || quint64(bytes.size()) != count) return -1;
+                if (quint64(bytes.size()) != count) return -1;
                 memcpy(data + done, bytes.constData(), size_t(count));
             } else {
                 if (m_cachedIndex != index) {
                     QByteArray input = reader.read(segment.offset, segment.inputSize, false), decoded;
-                    if (!self || !decodeCluster(segment, input, decoded, reader) || !self) return -1;
+                    if (!decodeCluster(segment, input, decoded, reader)) return -1;
                     m_cache = decoded;m_cachedIndex = index;
                 }
                 if (!span(relative, count, quint64(m_cache.size()))) return -1;
                 memcpy(data + done, m_cache.constData() + relative, size_t(count));
             }
-            if (!self || !reader.active()) return -1;
+            if (!reader.active()) return -1;
             m_position += count;done += count;
         }
-        return self && reader.active() && done == wanted ? qint64(done) : -1;
+        return reader.active() && done == wanted ? qint64(done) : -1;
     }
     qint64 writeData(const char *, qint64) override { return -1; }
 private:
-    QPointer<XVirtualDiskArchive> m_owner;
+    XVirtualDiskArchive *m_owner;
     DiskPlan m_plan;
     XBinary::PDSTRUCT *m_pd;
     QVector<quint64> m_starts;
@@ -689,23 +687,20 @@ QList<XBinary::PM_INFO> XVirtualDiskArchive::unpackImplemented() {
     return {info};
 }
 bool XVirtualDiskArchive::initUnpack(UNPACK_STATE *state, const QMap<UNPACK_PROP, QVariant> &properties, PDSTRUCT *pd) {
-    QPointer<XVirtualDiskArchive> self(this);
     if (!state || m_bUnpackOperationInProgress) return false;
-    if (!finishUnpack(state, nullptr) || !self) return false;
+    if (!finishUnpack(state, nullptr)) return false;
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);
     if (!guard.isAcquired() || !isPdStructNotCanceled(pd)) return false;
     bool bound = bindUnpackSource(state, pd);
-    if (!self || !bound) return false;
+    if (!bound) return false;
     std::unique_ptr<DiskPlan> plan(new (std::nothrow) DiskPlan);
     Reader reader(this, pd);
     bool parsed = plan && parse(reader, m_kind, *plan);
-    if (!self) return false;
     if (parsed && properties.value(UNPACK_PROP_DISK_FILESYSTEM).toBool()) {
         std::shared_ptr<Guest> guest = std::make_shared<Guest>();
         guest->raw.reset(new DiskDevice(this, *plan, pd));
         guest->archive.reset(new XNTFSArchive(getDevice(), guest->raw.get()));
         parsed = guest->raw->isOpen() && guest->archive->initUnpack(&guest->state, properties, pd);
-        if (!self) return false;
         if (parsed) plan->guest = guest;
     }
     if (!parsed) {
@@ -725,23 +720,21 @@ bool XVirtualDiskArchive::initUnpack(UNPACK_STATE *state, const QMap<UNPACK_PROP
     }
     DiskPlan *context = plan.release();
     if (!validateAndFinalizeUnpackSource(state, context, pd)) {
-        if (!self) return false;
         state->pContext = nullptr; releaseUnpackSource(state); delete context; *state = UNPACK_STATE(); return false;
     }
     return true;
 }
 XBinary::ARCHIVERECORD XVirtualDiskArchive::infoCurrent(UNPACK_STATE *state, PDSTRUCT *pd) {
-    QPointer<XVirtualDiskArchive> self(this);
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     ARCHIVERECORD record = {};
     if (!guard.isAllowed() || !state || !state->pContext || state->nCurrentIndex < 0 || state->nCurrentIndex >= state->nNumberOfRecords) return record;
     bool current = isUnpackSourceCurrent(state, pd);
-    if (!self || !current) return record;
+    if (!current) return record;
     const DiskPlan &plan = *static_cast<DiskPlan *>(state->pContext);
     if (plan.guest) {
         plan.guest->raw->progress(pd);
         record = plan.guest->archive->infoCurrent(&plan.guest->state, pd);
-        if (!self || record.mapProperties.isEmpty() || !markArchiveStreamRecord(&record, state->nCurrentIndex)) return ARCHIVERECORD();
+        if (record.mapProperties.isEmpty() || !markArchiveStreamRecord(&record, state->nCurrentIndex)) return ARCHIVERECORD();
         return record;
     }
     if (state->nCurrentIndex != 0 || state->nNumberOfRecords != 1) return record;
@@ -756,25 +749,24 @@ XBinary::ARCHIVERECORD XVirtualDiskArchive::infoCurrent(UNPACK_STATE *state, PDS
 }
 bool XVirtualDiskArchive::unpackCurrent(UNPACK_STATE *state, QIODevice *output, PDSTRUCT *pd) {
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);
-    QPointer<XVirtualDiskArchive> self(this);
-    QPointer<QIODevice> destination(output);
+    QIODevice *destination = output;
     if (!guard.isAcquired() || !state || !state->pContext || state->nCurrentIndex < 0 || state->nCurrentIndex >= state->nNumberOfRecords) return false;
     bool current = isUnpackSourceCurrent(state, pd);
-    if (!self || !current || !destination || !isUnpackOutputSupported(destination.data())) return false;
-    if (!self || !destination) return false;
-    bool aliased = devicesAlias(getDevice(), destination.data());
-    if (!self || !destination || aliased || !isPdStructNotCanceled(pd)) return false;
+    if (!current || !destination || !isUnpackOutputSupported(destination)) return false;
+    if (!destination) return false;
+    bool aliased = devicesAlias(getDevice(), destination);
+    if (!destination || aliased || !isPdStructNotCanceled(pd)) return false;
     const DiskPlan &plan = *static_cast<DiskPlan *>(state->pContext);
     if (plan.guest) {
         std::shared_ptr<Guest> guest = plan.guest;
         if (guest->state.nCurrentIndex != state->nCurrentIndex || guest->state.nNumberOfRecords != state->nNumberOfRecords) return false;
         guest->raw->progress(pd);guest->state.spOutputBudget = state->spOutputBudget;
         QTemporaryFile stage;
-        if (!stage.open() || !guest->archive->unpackCurrent(&guest->state, &stage, pd) || !self || !destination || !stage.seek(0)) return false;
+        if (!stage.open() || !guest->archive->unpackCurrent(&guest->state, &stage, pd) || !destination || !stage.seek(0)) return false;
         current = isUnpackSourceCurrent(state, pd);
-        if (!self || !current || !destination) return false;
-        bool published = publishUnpackOutput(&stage, destination.data(), state, pd);
-        if (!self || !published) return false;
+        if (!current || !destination) return false;
+        bool published = publishUnpackOutput(&stage, destination, state, pd);
+        if (!published) return false;
         state->nCurrentOffset = stage.size();return true;
     }
     if (state->nCurrentIndex != 0 || state->nNumberOfRecords != 1) return false;
@@ -790,25 +782,23 @@ bool XVirtualDiskArchive::unpackCurrent(UNPACK_STATE *state, QIODevice *output, 
     }
     Reader reader(this, pd);
     QTemporaryFile stage;
-    if (!stage.open() || !stageDisk(reader, plan, &stage) || !self || !destination || stage.size() != qint64(plan.diskSize) || !stage.seek(0)) return false;
+    if (!stage.open() || !stageDisk(reader, plan, &stage) || !destination || stage.size() != qint64(plan.diskSize) || !stage.seek(0)) return false;
     current = isUnpackSourceCurrent(state, pd);
-    if (!self || !current || !destination) return false;
-    bool published = publishUnpackOutput(&stage, destination.data(), state, pd);
-    if (!self || !published) return false;
+    if (!current || !destination) return false;
+    bool published = publishUnpackOutput(&stage, destination, state, pd);
+    if (!published) return false;
     state->nCurrentOffset = qint64(plan.diskSize);
     return true;
 }
 bool XVirtualDiskArchive::moveToNext(UNPACK_STATE *state, PDSTRUCT *pd) {
-    QPointer<XVirtualDiskArchive> self(this);
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);
     if (!guard.isAcquired() || !state || !state->pContext || state->nCurrentIndex < 0 || state->nCurrentIndex >= state->nNumberOfRecords) return false;
     bool current = isUnpackSourceCurrent(state, pd);
-    if (!self || !current) return false;
+    if (!current) return false;
     const DiskPlan &plan = *static_cast<DiskPlan *>(state->pContext);
     if (plan.guest) {
         plan.guest->raw->progress(pd);
         bool moved = plan.guest->archive->moveToNext(&plan.guest->state, pd);
-        if (!self) return false;
         state->nCurrentIndex = plan.guest->state.nCurrentIndex;return moved;
     }
     state->nCurrentIndex = 1;

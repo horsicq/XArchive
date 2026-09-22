@@ -5,8 +5,6 @@
 
 #include "xjetbbs.h"
 
-#include <QPointer>
-
 XJETBBS::XJETBBS(QIODevice *pDevice) : XLHA(pDevice)
 {
 }
@@ -39,7 +37,6 @@ bool XJETBBS::isValid(PDSTRUCT *pPdStruct)
 
     // Same contract as XLHA::isValid: the caller still owns this device, so its
     // cursor is snapshotted and restored around the probe.
-    QPointer<XJETBBS> guardedArchive(this);
     QIODevice *pSourceDevice = getDevice();
     const qint64 nSavedPos = pSourceDevice ? pSourceDevice->pos() : -1;
 
@@ -47,7 +44,7 @@ bool XJETBBS::isValid(PDSTRUCT *pPdStruct)
     // end-of-archive marker.
     if (XBinary::isPdStructNotCanceled(pPdStruct) && (getSize() >= 24)) {
         const QByteArray baPrefix = read_array(0, 22);
-        if (guardedArchive && (baPrefix.size() == 22) && _isMemberTag(baPrefix)) {
+        if ((baPrefix.size() == 22) && _isMemberTag(baPrefix)) {
             const quint8 nHeaderSize = static_cast<quint8>(baPrefix.at(0));
             const quint8 nLevel = static_cast<quint8>(baPrefix.at(20));
             // Levels 2 and 3 replace the checksum byte with part of a wider
@@ -57,8 +54,7 @@ bool XJETBBS::isValid(PDSTRUCT *pPdStruct)
             if ((nHeaderSize >= 21) && (nLevel <= 1)) {
                 const QByteArray baHeader =
                     read_array(0, 2 + static_cast<qint64>(nHeaderSize));
-                if (guardedArchive &&
-                    (baHeader.size() == (2 + static_cast<qint64>(nHeaderSize))) &&
+                if ((baHeader.size() == (2 + static_cast<qint64>(nHeaderSize))) &&
                     _isHeaderChecksumValid(baHeader)) {
                     // And the header must actually parse as a member.
                     LHA_MEMBER member = {};
@@ -72,7 +68,7 @@ bool XJETBBS::isValid(PDSTRUCT *pPdStruct)
         pSourceDevice->seek(nSavedPos);
     }
 
-    return guardedArchive && bResult;
+    return bResult;
 }
 
 bool XJETBBS::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
@@ -138,10 +134,8 @@ XBinary::ARCHIVERECORD XJETBBS::infoCurrent(UNPACK_STATE *pState,
         return result;
     }
 
-    QPointer<XJETBBS> guardedArchive(this);
     LHA_MEMBER member = {};
-    if (!pState || !_readMember(pState->nCurrentOffset, &member, pPdStruct) ||
-        !guardedArchive) {
+    if (!pState || !_readMember(pState->nCurrentOffset, &member, pPdStruct)) {
         return result;
     }
     // A symbolic link has no payload to decode; the base deliberately leaves it
@@ -165,21 +159,18 @@ QList<XBinary::FPART> XJETBBS::getFileParts(quint32 nFileParts, qint32 nLimit,
     // Re-walk the members in the same order the base does so a stream part can
     // be matched to the member it came from.  _isMemberTag rejects the "-pms-"
     // PMA SFX envelope, so the walk always starts at offset 0 here.
-    QPointer<XJETBBS> guardedArchive(this);
     QList<LHA_MEMBER> listMembers;
     qint64 nOffset = 0;
     const qint64 nFileSize = getSize();
-    while (guardedArchive && (nOffset < nFileSize) &&
+    while ((nOffset < nFileSize) &&
            XBinary::isPdStructNotCanceled(pPdStruct)) {
         LHA_MEMBER member = {};
-        if (!_readMember(nOffset, &member, pPdStruct) || !guardedArchive) break;
+        if (!_readMember(nOffset, &member, pPdStruct)) break;
         if (member.nRecordSize <= 0) break;
         listMembers.append(member);
         nOffset += member.nRecordSize;
         if (listMembers.size() > 1000000) break;
     }
-    if (!guardedArchive) return listResult;
-
     qint32 nMemberIndex = 0;
     for (qint32 i = 0; i < listResult.size(); ++i) {
         if (listResult.at(i).filePart != FILEPART_STREAM) continue;

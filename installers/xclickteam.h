@@ -6,7 +6,6 @@
 #define XCLICKTEAM_H
 
 #include <QList>
-#include <QPointer>
 #include <QSet>
 #include <QSharedPointer>
 
@@ -38,7 +37,7 @@ public:
         qint64 nCurrentOffset = 0;
         qint64 nSourceSize = 0;
         quint64 nDeviceGeneration = 0;
-        QPointer<QIODevice> pSourceDevice;
+        QIODevice *pSourceDevice = nullptr;
         UNPACK_STATE *pOwnerState = nullptr;
         QByteArray baToken;
         XMaterializedUnpackGuard *pSourceGuard = nullptr;
@@ -68,9 +67,6 @@ public:
     bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
     bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
-
-protected:
-    bool isDeviceReplacementAllowed() const override;
 
 private:
     INTERNAL_INFO _getInternalInfo(PDSTRUCT *pPdStruct);

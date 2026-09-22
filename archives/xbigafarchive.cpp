@@ -20,7 +20,6 @@
  */
 #include "xbigafarchive.h"
 
-#include <QPointer>
 #include <QSet>
 #include <QtEndian>
 
@@ -78,16 +77,15 @@ bool XBigafArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XBigafArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
     if (context.nInputSize < BIGAF_HEADER_SIZE) return false;
 
     const QByteArray baHeader = read_array_process(0, BIGAF_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != BIGAF_HEADER_SIZE)) return false;
+    if ((baHeader.size() != BIGAF_HEADER_SIZE)) return false;
     if (baHeader.left(8) != QByteArray("<bigaf>\n", 8)) return false;
 
     qint64 nFirst = 0;
@@ -104,7 +102,7 @@ bool XBigafArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         stSeen.insert(nOffset);
         if (!bigafRangeWithin(context.nInputSize, nOffset, BIGAF_MEMBER_HEADER)) return false;
         const QByteArray baEntry = read_array_process(nOffset, BIGAF_MEMBER_HEADER, pPdStruct);
-        if (!guardedThis || !guardedSource || (baEntry.size() != BIGAF_MEMBER_HEADER)) return false;
+        if ((baEntry.size() != BIGAF_MEMBER_HEADER)) return false;
 
         qint64 nSize = 0;
         qint64 nNext = 0;
@@ -116,7 +114,7 @@ bool XBigafArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (!bigafRangeWithin(context.nInputSize, nOffset + BIGAF_MEMBER_HEADER, nNameLength)) return false;
 
         const QByteArray baName = read_array_process(nOffset + BIGAF_MEMBER_HEADER, nNameLength, pPdStruct);
-        if (!guardedThis || !guardedSource || (baName.size() != nNameLength)) return false;
+        if ((baName.size() != nNameLength)) return false;
         if (!bigafIsValidName(baName)) return false;
 
         // the name is followed by a two-byte terminator and the data starts on
@@ -149,7 +147,7 @@ bool XBigafArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 bool XBigafArchive::isValid(PDSTRUCT *pPdStruct)
 {
     // getRecords-style probing displaces the caller's cursor, so snapshot it.
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -300,11 +298,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XBigafArchive::getDefaultUnpackProperties()
 
 bool XBigafArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XBigafArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -314,8 +311,8 @@ bool XBigafArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVa
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -328,15 +325,10 @@ bool XBigafArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVa
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

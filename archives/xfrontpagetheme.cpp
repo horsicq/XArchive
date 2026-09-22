@@ -5,7 +5,6 @@
 
 #include "xfrontpagetheme.h"
 
-#include <QPointer>
 
 #include <new>
 
@@ -116,9 +115,8 @@ bool XFrontPageTheme::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XFrontPageTheme> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -131,7 +129,7 @@ bool XFrontPageTheme::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         qMin<qint64>(context.nInputSize, FPT_PREAMBLE_MAX);
     const QByteArray baPreamble =
         read_array_process(0, nPreambleSize, pPdStruct);
-    if (!guardedThis || !guardedSource || baPreamble.size() != nPreambleSize) {
+    if (baPreamble.size() != nPreambleSize) {
         return false;
     }
 
@@ -163,7 +161,7 @@ bool XFrontPageTheme::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         static_cast<qint64>(nPosition) +
             nCount * static_cast<qint64>(FPT_MAX_LINE_LENGTH + 1));
     const QByteArray baProbe = read_array_process(0, nProbeSize, pPdStruct);
-    if (!guardedThis || !guardedSource || baProbe.size() != nProbeSize) {
+    if (baProbe.size() != nProbeSize) {
         return false;
     }
 
@@ -222,8 +220,7 @@ bool XFrontPageTheme::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         }
         const QByteArray baMarker =
             read_array_process(nOffset, FPT_MARKER_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            baMarker.size() != FPT_MARKER_SIZE) {
+        if (baMarker.size() != FPT_MARKER_SIZE) {
             return false;
         }
         if (baMarker != QByteArray::fromRawData(FPT_MARKER, FPT_MARKER_SIZE)) {
@@ -246,12 +243,12 @@ bool XFrontPageTheme::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     context.listMembers = listMembers;
     context.nArchiveSize = nOffset;
     *pContext = context;
-    return guardedThis && guardedSource;
+    return guardedSource;
 }
 
 bool XFrontPageTheme::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -320,7 +317,7 @@ QString XFrontPageTheme::getMIMEString()
 
 QString XFrontPageTheme::getVersion()
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, nullptr);
@@ -460,9 +457,8 @@ bool XFrontPageTheme::initUnpack(UNPACK_STATE *pState,
                                  const QMap<UNPACK_PROP, QVariant> &mapProperties,
                                  PDSTRUCT *pPdStruct)
 {
-    QPointer<XFrontPageTheme> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
     }
@@ -470,7 +466,7 @@ bool XFrontPageTheme::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -485,9 +481,9 @@ bool XFrontPageTheme::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource ||
+    if (!parseContext(pContext, pPdStruct) ||
         pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -504,15 +500,10 @@ bool XFrontPageTheme::initUnpack(UNPACK_STATE *pState,
     pState->pContext = pContext;
 
     const bool bFinalized =
-        guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+        validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

@@ -7,7 +7,6 @@
 
 #include <QtEndian>
 #include <QHash>
-#include <QPointer>
 #include <QSet>
 #if (QT_VERSION_MAJOR < 6) || defined(QT_CORE5COMPAT_LIB)
 #include <QTextCodec>  // Qt5 Compat; removed from Qt6 core
@@ -53,7 +52,7 @@ QString decodeMacName(const QByteArray &baName)
 
 struct XCompactProArchive::PARSE_CONTEXT
 {
-    QPointer<XCompactProArchive> guardedArchive;
+    XCompactProArchive *guardedArchive;
     qint64 nTotalSize;
     const QByteArray *pDataArray;
     const uchar *pData;
@@ -94,7 +93,7 @@ bool XCompactProArchive::appendFork(PARSE_CONTEXT *pContext,
                                     qint64 nOffset, qint64 nPacked,
                                     qint64 nRaw, bool bLzh)
 {
-    if (!pContext || !pContext->guardedArchive || !pContext->pEntries ||
+    if (!pContext || !pContext->pEntries ||
         !pContext->pPosition || pContext->pEntries->count() >= MAX_RECORDS)
         return false;
     QString sOutputPath = sPath;
@@ -134,8 +133,7 @@ bool XCompactProArchive::parseDirectory(PARSE_CONTEXT *pContext,
         return false;
     qint32 nRemaining = nRecords;
     while (nRemaining > 0) {
-        if (!pContext->guardedArchive ||
-            !isPdStructNotCanceled(pContext->pPdStruct) ||
+        if (!isPdStructNotCanceled(pContext->pPdStruct) ||
             !rangeWithin(pContext->nTotalSize, *pContext->pPosition, 1))
             return false;
         const qint64 nRecordOffset = *pContext->pPosition;
@@ -206,15 +204,14 @@ bool XCompactProArchive::scanFormat(QList<ENTRY> *pEntries,
                                     qint64 *pArchiveEnd,
                                     PDSTRUCT *pPdStruct)
 {
-    QPointer<XCompactProArchive> guardedThis(this);
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || nTotalSize < 15 ||
+    if (nTotalSize < 15 ||
         nTotalSize > MAX_COMPACT_PRO_PARSE_SIZE ||
         nTotalSize > (std::numeric_limits<int>::max)() ||
         !isPdStructNotCanceled(pPdStruct)) return false;
 
     const QByteArray baData = read_array_process(0, nTotalSize, pPdStruct);
-    if (!guardedThis || baData.size() != nTotalSize ||
+    if (baData.size() != nTotalSize ||
         quint8(baData.at(0)) != 1) return false;
     const uchar *pData = reinterpret_cast<const uchar *>(baData.constData());
     const qint64 nCatalogOffset = qFromBigEndian<quint32>(pData + 4);
@@ -236,7 +233,7 @@ bool XCompactProArchive::scanFormat(QList<ENTRY> *pEntries,
     QHash<QString, QString> resolvedDirectories;
     qint32 nParsedRecords = 0;
     QList<ENTRY> entries;
-    PARSE_CONTEXT parseContext = {guardedThis, nTotalSize, &baData, pData,
+    PARSE_CONTEXT parseContext = {this, nTotalSize, &baData, pData,
                                   pPdStruct, &nPosition, &nParsedRecords,
                                   &usedFiles, &usedDirectories, &nextSuffixes,
                                   &resolvedDirectories, &entries};

@@ -6,7 +6,6 @@
 
 #include "Algos/xdcldecoder.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -145,12 +144,11 @@ bool XBWFArchive::scanMemberSize(MEMBER *pMember, PDSTRUCT *pPdStruct)
 {
     if (!pMember || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XBWFArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
 
     const QByteArray baPacked = read_array_process(pMember->nDataOffset, pMember->nCompressedSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baPacked.size() != pMember->nCompressedSize)) return false;
+    if ((baPacked.size() != pMember->nCompressedSize)) return false;
 
     qint64 nConsumed = 0;
     qint64 nRawSize = 0;
@@ -175,9 +173,8 @@ bool XBWFArchive::parseContext(CONTEXT *pContext, bool bScanSizes, PDSTRUCT *pPd
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XBWFArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -190,7 +187,7 @@ bool XBWFArchive::parseContext(CONTEXT *pContext, bool bScanSizes, PDSTRUCT *pPd
         if (!bwfRangeWithin(context.nInputSize, nOffset, BWF_RECORD_HEADER_SIZE)) return false;
 
         const QByteArray baHeader = read_array_process(nOffset, BWF_RECORD_HEADER_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baHeader.size() != BWF_RECORD_HEADER_SIZE)) return false;
+        if ((baHeader.size() != BWF_RECORD_HEADER_SIZE)) return false;
 
         const uchar *pHeader = reinterpret_cast<const uchar *>(baHeader.constData());
         if (pHeader[0] != BWF_RECORD_TAG) return false;
@@ -216,7 +213,7 @@ bool XBWFArchive::parseContext(CONTEXT *pContext, bool bScanSizes, PDSTRUCT *pPd
         if (!bwfRangeWithin(context.nInputSize, member.nDataOffset, member.nCompressedSize)) return false;
 
         const QByteArray baPrelude = read_array_process(member.nDataOffset, 2, pPdStruct);
-        if (!guardedThis || !guardedSource || (baPrelude.size() != 2) || !bwfIsDclPrelude(baPrelude)) return false;
+        if ((baPrelude.size() != 2) || !bwfIsDclPrelude(baPrelude)) return false;
 
         context.listMembers.append(member);
         nOffset = member.nDataOffset + member.nCompressedSize;
@@ -236,7 +233,7 @@ bool XBWFArchive::parseContext(CONTEXT *pContext, bool bScanSizes, PDSTRUCT *pPd
     // preludes throughout, is a real decode worth paying for.  Two archives in
     // the corpus hold a single member, so the chain alone cannot be asked to
     // prove itself twice - this decode is what carries those two.
-    if (!scanMemberSize(&context.listMembers.first(), pPdStruct) || !guardedThis || !guardedSource) return false;
+    if (!scanMemberSize(&context.listMembers.first(), pPdStruct)) return false;
 
     if (bScanSizes) {
         const qint32 nCount = static_cast<qint32>(context.listMembers.size());
@@ -246,19 +243,19 @@ bool XBWFArchive::parseContext(CONTEXT *pContext, bool bScanSizes, PDSTRUCT *pPd
             // size unknown; methodToHandleMethod() then reports UNKNOWN so
             // extraction refuses it instead of writing a truncated file.
             scanMemberSize(&context.listMembers[i], pPdStruct);
-            if (!guardedThis || !guardedSource) return false;
+            if (!guardedSource) return false;
         }
     }
 
     context.nArchiveSize = nOffset;
     *pContext = context;
 
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XBWFArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, false, pPdStruct);
@@ -441,11 +438,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XBWFArchive::getDefaultUnpackProperties()
 
 bool XBWFArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XBWFArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -457,8 +453,8 @@ bool XBWFArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVari
     }
     // bScanSizes = true: extraction needs the plaintext length of every member
     // and the container does not store it.
-    if (!parseContext(pContext, true, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, true, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -472,15 +468,10 @@ bool XBWFArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVari
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

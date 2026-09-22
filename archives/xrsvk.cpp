@@ -5,7 +5,6 @@
 
 #include "xrsvk.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -64,9 +63,8 @@ bool XRSVK::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XRSVK> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -77,7 +75,7 @@ bool XRSVK::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     // Header: the container tag plus the "DATA" tag of the first block, whose
     // packed size (at +0x0c) the reference implementation's detector requires to be non-negative.
     const QByteArray baHead = read_array_process(0, 16, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHead.size() != 16)) return false;
+    if (baHead.size() != 16) return false;
     const uchar *pHead = reinterpret_cast<const uchar *>(baHead.constData());
     if (!rsvkIsTag(pHead, "RSVK") && !rsvkIsTag(pHead, "DLIB")) return false;
     if (!rsvkIsTag(pHead + 4, "DATA")) return false;
@@ -88,8 +86,7 @@ bool XRSVK::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     const QByteArray baTrailer = read_array_process(
         context.nInputSize - RSVK_TRAILER_SIZE, qint32(RSVK_TRAILER_SIZE),
         pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        (baTrailer.size() != RSVK_TRAILER_SIZE)) {
+    if (baTrailer.size() != RSVK_TRAILER_SIZE) {
         return false;
     }
     const uchar *pTrailer =
@@ -109,8 +106,7 @@ bool XRSVK::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const QByteArray baDir = read_array_process(
         context.nDirOffset, qint32(context.nDirSize), pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        (baDir.size() != qint32(context.nDirSize))) {
+    if (baDir.size() != qint32(context.nDirSize)) {
         return false;
     }
 
@@ -167,8 +163,7 @@ bool XRSVK::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
             if (nChainCursor > context.nDirOffset - 20) return false;
             const QByteArray baBlockHeader =
                 read_array_process(nChainCursor, 20, pPdStruct);
-            if (!guardedThis || !guardedSource ||
-                (baBlockHeader.size() != 20)) {
+            if (baBlockHeader.size() != 20) {
                 return false;
             }
             const uchar *pBlock =
@@ -189,14 +184,13 @@ bool XRSVK::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     }
 
     if (context.listEntries.isEmpty()) return false;
-    if (!guardedThis || !guardedSource) return false;
     *pContext = context;
     return true;
 }
 
 bool XRSVK::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -359,9 +353,8 @@ bool XRSVK::initUnpack(UNPACK_STATE *pState,
                        const QMap<UNPACK_PROP, QVariant> &mapProperties,
                        PDSTRUCT *pPdStruct)
 {
-    QPointer<XRSVK> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
     }
@@ -369,7 +362,7 @@ bool XRSVK::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -384,9 +377,9 @@ bool XRSVK::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource ||
+    if (!parseContext(pContext, pPdStruct) ||
         pContext->listEntries.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -402,16 +395,11 @@ bool XRSVK::initUnpack(UNPACK_STATE *pState,
     pState->nNumberOfRecords = pContext->listEntries.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(
+    const bool bFinalized = validateAndFinalizeUnpackSource(
         pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

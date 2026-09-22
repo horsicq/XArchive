@@ -20,7 +20,6 @@
  */
 #include "xzfsfarchive.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -56,8 +55,7 @@ bool XZFSFArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XZFSFArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -65,7 +63,7 @@ bool XZFSFArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nInputSize < ZFSF_HEADER_SIZE) return false;
 
     const QByteArray baHeader = read_array_process(0, ZFSF_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != ZFSF_HEADER_SIZE)) return false;
+    if (!guardedSource || (baHeader.size() != ZFSF_HEADER_SIZE)) return false;
     if (baHeader.left(4) != QByteArray("ZFSF", 4)) return false;
     const uchar *pHeader = (const uchar *)baHeader.constData();
 
@@ -87,7 +85,7 @@ bool XZFSFArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (!zfsfRangeWithin(context.nInputSize, nGroupOffset, 4)) return false;
 
         const QByteArray baLink = read_array_process(nGroupOffset, 4, pPdStruct);
-        if (!guardedThis || !guardedSource || (baLink.size() != 4)) return false;
+        if (!guardedSource || (baLink.size() != 4)) return false;
         const qint64 nNextGroup = (qint64)qFromLittleEndian<quint32>((const uchar *)baLink.constData());
 
         qint64 nEntryOffset = nGroupOffset + 4;
@@ -100,7 +98,7 @@ bool XZFSFArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
             if (!zfsfRangeWithin(context.nInputSize, nEntryOffset, ZFSF_ENTRY_SIZE)) return false;
 
             const QByteArray baEntry = read_array_process(nEntryOffset, ZFSF_ENTRY_SIZE, pPdStruct);
-            if (!guardedThis || !guardedSource || (baEntry.size() != ZFSF_ENTRY_SIZE)) return false;
+            if (!guardedSource || (baEntry.size() != ZFSF_ENTRY_SIZE)) return false;
             const uchar *pEntry = (const uchar *)baEntry.constData();
 
             const qint64 nDataOffset = (qint32)qFromLittleEndian<quint32>(pEntry + 0x10);
@@ -136,7 +134,7 @@ bool XZFSFArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XZFSFArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -287,11 +285,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XZFSFArchive::getDefaultUnpackProperties()
 
 bool XZFSFArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XZFSFArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -301,8 +298,8 @@ bool XZFSFArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVar
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -315,15 +312,10 @@ bool XZFSFArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVar
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

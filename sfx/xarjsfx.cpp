@@ -92,17 +92,16 @@ bool XArjSFX::_scanArchives(QList<ARJSFX_ENTRY> *pList, const QMap<UNPACK_PROP, 
 {
     if (!pList || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
     pList->clear();
-    QPointer<XArjSFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedThis || !guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!guardedSource || guardedSource->isSequential()) return false;
 
-    const INTERNAL_INFO *pInfo = static_cast<const INTERNAL_INFO *>(guardedThis->XSFX::getInternalInfo(pPdStruct));
-    if (!guardedThis || !guardedSource || !pInfo || !pInfo->bIsValid || (pInfo->arcType != FT_ARJ) || pInfo->bUseOuterDevice ||
+    const INTERNAL_INFO *pInfo = static_cast<const INTERNAL_INFO *>(XSFX::getInternalInfo(pPdStruct));
+    if (!guardedSource || !pInfo || !pInfo->bIsValid || (pInfo->arcType != FT_ARJ) || pInfo->bUseOuterDevice ||
         (pInfo->nArchiveOffset < 0) || (pInfo->nArchiveSize <= 0))
         return false;
 
     const qint64 nDeviceSize = guardedSource->size();
-    if (!guardedThis || !guardedSource || (nDeviceSize < 0) || !checkOffsetSize(pInfo->nArchiveOffset, pInfo->nArchiveSize)) return false;
+    if (!guardedSource || (nDeviceSize < 0) || !checkOffsetSize(pInfo->nArchiveOffset, pInfo->nArchiveSize)) return false;
     // A fixed horizon would recreate issue 05 for a valid archive whose next
     // payload starts beyond that horizon: the first payload would be reported
     // as a complete result. The scan is still bounded by the finite device,
@@ -115,17 +114,17 @@ bool XArjSFX::_scanArchives(QList<ARJSFX_ENTRY> *pList, const QMap<UNPACK_PROP, 
            XBinary::isPdStructNotCanceled(pPdStruct);
          ++nAttempt) {
         const qint64 nAvailable = nDeviceSize - nCandidateOffset;
-        SubDevice candidateDevice(guardedSource.data(), nCandidateOffset, nAvailable);
+        SubDevice candidateDevice(guardedSource, nCandidateOffset, nAvailable);
         qint64 nArchiveSize = 0;
         if (candidateDevice.open(QIODevice::ReadOnly)) {
             XARJ candidate(&candidateDevice);
             if (candidate.isValid(pPdStruct)) nArchiveSize = candidate.getFileFormatSize(pPdStruct);
             candidateDevice.close();
         }
-        if (!guardedThis || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+        if (!guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
         if ((nArchiveSize > 0) && (nArchiveSize <= nAvailable)) {
-            SubDevice exactDevice(guardedSource.data(), nCandidateOffset, nArchiveSize);
+            SubDevice exactDevice(guardedSource, nCandidateOffset, nArchiveSize);
             UNPACK_STATE state = {};
             qint32 nRecords = 0;
             bool bInitialized = exactDevice.open(QIODevice::ReadOnly);
@@ -137,7 +136,7 @@ bool XArjSFX::_scanArchives(QList<ARJSFX_ENTRY> *pList, const QMap<UNPACK_PROP, 
                 bInitialized = bInitialized && bFinished;
                 exactDevice.close();
             }
-            if (!guardedThis || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+            if (!guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
             if (bInitialized && (nRecords > 0)) {
                 qint64 nAccumulatedRecords = nRecords;
                 for (const ARJSFX_ENTRY &existing : *pList) nAccumulatedRecords += existing.nNumberOfRecords;
@@ -156,13 +155,13 @@ bool XArjSFX::_scanArchives(QList<ARJSFX_ENTRY> *pList, const QMap<UNPACK_PROP, 
         }
 
         if (nCandidateOffset >= nScanEnd) break;
-        nCandidateOffset = guardedThis->find_signature(nCandidateOffset, nScanEnd - nCandidateOffset, "60EA", nullptr, pPdStruct);
+        nCandidateOffset = find_signature(nCandidateOffset, nScanEnd - nCandidateOffset, "60EA", nullptr, pPdStruct);
     }
 
     // Candidate-density exhaustion is not completeness. Refuse the archive
     // instead of publishing the first 256 payloads as if they were all of it.
     if ((nAttempt >= ARJSFX_MAX_ARCHIVES) && (nCandidateOffset >= 0) && (nCandidateOffset < nScanEnd)) return false;
-    return guardedThis && guardedSource && !pList->isEmpty() && XBinary::isPdStructNotCanceled(pPdStruct);
+    return guardedSource && !pList->isEmpty() && XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
 bool XArjSFX::_releaseEntry(ARJSFX_UNPACK_CONTEXT *pContext)
@@ -185,14 +184,13 @@ bool XArjSFX::_releaseEntry(ARJSFX_UNPACK_CONTEXT *pContext)
 
 bool XArjSFX::_bindEntry(ARJSFX_UNPACK_CONTEXT *pContext, qint32 nEntryIndex, PDSTRUCT *pPdStruct)
 {
-    QPointer<XArjSFX> guardedThis(this);
     if (!pContext || (nEntryIndex < 0) || (nEntryIndex >= pContext->listEntries.count()) || !pContext->pOuterSourceDevice ||
         (pContext->pOuterSourceDevice != getDevice()) || (pContext->nOwnerDeviceGeneration != getDeviceGeneration()) ||
         !XBinary::isPdStructNotCanceled(pPdStruct) || !_releaseEntry(pContext))
         return false;
 
     const ARJSFX_ENTRY &entry = pContext->listEntries.at(nEntryIndex);
-    pContext->pSubDevice = new (std::nothrow) SubDevice(pContext->pOuterSourceDevice.data(), entry.nArchiveOffset, entry.nArchiveSize);
+    pContext->pSubDevice = new (std::nothrow) SubDevice(pContext->pOuterSourceDevice, entry.nArchiveOffset, entry.nArchiveSize);
     if (!pContext->pSubDevice || !pContext->pSubDevice->open(QIODevice::ReadOnly)) {
         delete pContext->pSubDevice;
         pContext->pSubDevice = nullptr;
@@ -201,9 +199,8 @@ bool XArjSFX::_bindEntry(ARJSFX_UNPACK_CONTEXT *pContext, qint32 nEntryIndex, PD
     pContext->pArchive = new (std::nothrow) XARJ(pContext->pSubDevice);
     const bool bInitialized = pContext->pArchive &&
                               pContext->pArchive->initUnpack(&pContext->innerState, pContext->mapUnpackProperties, pPdStruct);
-    if (!guardedThis) return false;  // The deferred owner now cleans pContext.
     if (!bInitialized || (pContext->innerState.nNumberOfRecords != entry.nNumberOfRecords)) {
-        guardedThis->_releaseEntry(pContext);
+        _releaseEntry(pContext);
         return false;
     }
     pContext->nEntryIndex = nEntryIndex;
@@ -216,7 +213,6 @@ bool XArjSFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant>
     QSharedPointer<bool> pOperationState = m_pArjUnpackOperationState;
     if (!pOperationState || *pOperationState) return false;
     QScopedValueRollback<bool> operationGuard(*pOperationState, true);
-    QPointer<XArjSFX> guardedThis(this);
 
     if (pState->pContext) {
         ARJSFX_UNPACK_CONTEXT *pOldContext = static_cast<ARJSFX_UNPACK_CONTEXT *>(pState->pContext);
@@ -226,16 +222,16 @@ bool XArjSFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant>
         const bool bFinishOK = _releaseEntry(pOldContext);
         delete pOldContext;
         *pState = UNPACK_STATE();
-        if (!guardedThis || !bFinishOK) return false;
+        if (!bFinishOK) return false;
     }
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
     *pState = UNPACK_STATE();
     pState->mapUnpackProperties = mapProperties;
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedThis || !guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!guardedSource || guardedSource->isSequential()) return false;
     QList<ARJSFX_ENTRY> listEntries;
-    if (!guardedThis->_scanArchives(&listEntries, mapProperties, pPdStruct) || !guardedThis || !guardedSource || listEntries.isEmpty()) return false;
+    if (!_scanArchives(&listEntries, mapProperties, pPdStruct) || !guardedSource || listEntries.isEmpty()) return false;
 
     qint32 nTotalRecords = 0;
     for (const ARJSFX_ENTRY &entry : listEntries) {
@@ -259,12 +255,10 @@ bool XArjSFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant>
     // progress callback deletes this object, the destructor transfers the
     // live context to the operation state's deferred cleanup owner.
     m_setArjUnpackContexts.insert(pContext);
-    if (!guardedThis->_bindEntry(pContext, 0, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) {
-            guardedThis->m_setArjUnpackContexts.remove(pContext);
-            guardedThis->_releaseEntry(pContext);
-            delete pContext;
-        }
+    if (!_bindEntry(pContext, 0, pPdStruct) || !guardedSource) {
+        m_setArjUnpackContexts.remove(pContext);
+        _releaseEntry(pContext);
+        delete pContext;
         return false;
     }
 
@@ -283,7 +277,6 @@ XBinary::ARCHIVERECORD XArjSFX::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdS
     QSharedPointer<bool> pOperationState = m_pArjUnpackOperationState;
     if (!pOperationState || *pOperationState) return result;
     QScopedValueRollback<bool> operationGuard(*pOperationState, true);
-    QPointer<XArjSFX> guardedThis(this);
     if (!pState || !pState->pContext || !pState->baUnpackSourceToken.isEmpty() || !XBinary::isPdStructNotCanceled(pPdStruct) ||
         (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords))
         return result;
@@ -294,7 +287,7 @@ XBinary::ARCHIVERECORD XArjSFX::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdS
         (pState->nCurrentIndex != (pContext->nEntryFirstRecord + pContext->innerState.nCurrentIndex)))
         return result;
     result = pContext->pArchive->infoCurrent(&pContext->innerState, pPdStruct);
-    if (!guardedThis || !m_setArjUnpackContexts.contains(pContext) || (pState->pContext != pContext)) return ARCHIVERECORD();
+    if (!m_setArjUnpackContexts.contains(pContext) || (pState->pContext != pContext)) return ARCHIVERECORD();
     const ARJSFX_ENTRY &entry = pContext->listEntries.at(pContext->nEntryIndex);
     if ((result.nStreamOffset < 0) || (entry.nArchiveOffset > ((std::numeric_limits<qint64>::max)() - result.nStreamOffset))) {
         return ARCHIVERECORD();
@@ -311,8 +304,7 @@ bool XArjSFX::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *
     QSharedPointer<bool> pOperationState = m_pArjUnpackOperationState;
     if (!pOperationState || *pOperationState) return false;
     QScopedValueRollback<bool> operationGuard(*pOperationState, true);
-    QPointer<XArjSFX> guardedThis(this);
-    QPointer<QIODevice> guardedOutput(pDevice);
+    QIODevice *guardedOutput = pDevice;
     if (!pState || !pState->pContext || !pState->baUnpackSourceToken.isEmpty() || !guardedOutput || !XBinary::isPdStructNotCanceled(pPdStruct) ||
         (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords))
         return false;
@@ -322,8 +314,8 @@ bool XArjSFX::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *
         (pState->nCurrentIndex != (pContext->nEntryFirstRecord + pContext->innerState.nCurrentIndex)))
         return false;
     pContext->innerState.spOutputBudget = pState->spOutputBudget;
-    const bool bResult = pContext->pArchive->unpackCurrent(&pContext->innerState, guardedOutput.data(), pPdStruct);
-    if (!guardedThis || !guardedOutput || !m_setArjUnpackContexts.contains(pContext) || (pState->pContext != pContext)) return false;
+    const bool bResult = pContext->pArchive->unpackCurrent(&pContext->innerState, guardedOutput, pPdStruct);
+    if (!guardedOutput || !m_setArjUnpackContexts.contains(pContext) || (pState->pContext != pContext)) return false;
     const ARJSFX_ENTRY &entry = pContext->listEntries.at(pContext->nEntryIndex);
     pState->nCurrentOffset = entry.nArchiveOffset + pContext->innerState.nCurrentOffset;
     pState->mapArchiveProperties = pContext->innerState.mapArchiveProperties;
@@ -335,7 +327,6 @@ bool XArjSFX::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     QSharedPointer<bool> pOperationState = m_pArjUnpackOperationState;
     if (!pOperationState || *pOperationState) return false;
     QScopedValueRollback<bool> operationGuard(*pOperationState, true);
-    QPointer<XArjSFX> guardedThis(this);
     if (!pState || !pState->pContext || !pState->baUnpackSourceToken.isEmpty() || !XBinary::isPdStructNotCanceled(pPdStruct) ||
         (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords))
         return false;
@@ -345,7 +336,7 @@ bool XArjSFX::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         return false;
 
     const bool bInnerNext = pContext->pArchive->moveToNext(&pContext->innerState, pPdStruct);
-    if (!guardedThis || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
     ++pState->nCurrentIndex;
     if (bInnerNext) {
         if (pState->nCurrentIndex != (pContext->nEntryFirstRecord + pContext->innerState.nCurrentIndex)) return false;
@@ -364,7 +355,7 @@ bool XArjSFX::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
     pContext->nEntryFirstRecord += completed.nNumberOfRecords;
     const qint32 nNextEntry = pContext->nEntryIndex + 1;
-    if ((pState->nCurrentIndex != pContext->nEntryFirstRecord) || !guardedThis->_bindEntry(pContext, nNextEntry, pPdStruct) || !guardedThis) return false;
+    if ((pState->nCurrentIndex != pContext->nEntryFirstRecord) || !_bindEntry(pContext, nNextEntry, pPdStruct)) return false;
     const ARJSFX_ENTRY &next = pContext->listEntries.at(nNextEntry);
     pState->nCurrentOffset = next.nArchiveOffset + pContext->innerState.nCurrentOffset;
     pState->mapArchiveProperties = pContext->innerState.mapArchiveProperties;
@@ -378,7 +369,6 @@ bool XArjSFX::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     QSharedPointer<bool> pOperationState = m_pArjUnpackOperationState;
     if (!pOperationState || *pOperationState) return false;
     QScopedValueRollback<bool> operationGuard(*pOperationState, true);
-    QPointer<XArjSFX> guardedThis(this);
     bool bResult = true;
     if (pState->pContext) {
         ARJSFX_UNPACK_CONTEXT *pContext = static_cast<ARJSFX_UNPACK_CONTEXT *>(pState->pContext);
@@ -387,7 +377,6 @@ bool XArjSFX::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         pState->pContext = nullptr;
         bResult = _releaseEntry(pContext);
         delete pContext;
-        if (!guardedThis) return false;
     }
     pState->nCurrentOffset = 0;
     pState->nTotalSize = 0;

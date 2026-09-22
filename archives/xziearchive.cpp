@@ -23,7 +23,6 @@
 #include "Algos/xziedecoder.h"
 
 #include <QFileInfo>
-#include <QPointer>
 
 #include <new>
 
@@ -44,8 +43,7 @@ bool XZIEArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XZIEArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -53,11 +51,11 @@ bool XZIEArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nInputSize < ZIE_MIN_SIZE) return false;
 
     const QByteArray baHeader = read_array_process(0, ZIE_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || ((qint64)baHeader.size() != ZIE_HEADER_SIZE)) return false;
+    if (!guardedSource || ((qint64)baHeader.size() != ZIE_HEADER_SIZE)) return false;
     if (!XZIEDecoder::isValidHeader(baHeader)) return false;
 
     const QByteArray baProbe = read_array_process(ZIE_HEADER_SIZE, 4, pPdStruct);
-    if (!guardedThis || !guardedSource || (baProbe.size() != 4)) return false;
+    if (!guardedSource || (baProbe.size() != 4)) return false;
 
     const qint64 nPayloadSize = context.nInputSize - ZIE_HEADER_SIZE;
     XZIEDecoder::METHOD method = {};
@@ -71,8 +69,8 @@ bool XZIEArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     QString sName = XZIEDecoder::fileNameFromHeader(baHeader);
     if (sName.isEmpty()) {
-        sName = QFileInfo(getDeviceFileName(guardedSource.data())).completeBaseName();
-        if (!guardedThis || !guardedSource) return false;
+        sName = QFileInfo(getDeviceFileName(guardedSource)).completeBaseName();
+        if (!guardedSource) return false;
         if (sName.isEmpty()) sName = QStringLiteral("archive");
         sName += QStringLiteral(".zip");
     }
@@ -85,7 +83,7 @@ bool XZIEArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XZIEArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -231,11 +229,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XZIEArchive::getDefaultUnpackProperties()
 
 bool XZIEArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XZIEArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -245,8 +242,8 @@ bool XZIEArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVari
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -259,15 +256,10 @@ bool XZIEArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVari
     pState->nNumberOfRecords = 1;
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

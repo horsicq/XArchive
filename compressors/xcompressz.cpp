@@ -51,16 +51,15 @@ XCompressZ::~XCompressZ()
 
 bool XCompressZ::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<XCompressZ> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    const bool bResult = isValid(guardedSource.data(), pPdStruct);
-    return guardedThis && bResult;
+    QIODevice *guardedSource = getDevice();
+    const bool bResult = isValid(guardedSource, pPdStruct);
+    return bResult;
 }
 
 bool XCompressZ::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
-    QPointer<QIODevice> guardedDevice(pDevice);
+    QIODevice *guardedDevice = pDevice;
 
     if (XBinary::isPdStructNotCanceled(pPdStruct) && guardedDevice && guardedDevice->seek(0) && guardedDevice) {
         quint8 header[3];
@@ -377,7 +376,6 @@ QMap<XBinary::UNPACK_PROP, QVariant> XCompressZ::getDefaultUnpackProperties()
 
 bool XCompressZ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XCompressZ> guardedThis(this);
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
     if (!pPdStruct) {
         pPdStruct = &pdStructEmpty;
@@ -388,24 +386,22 @@ bool XCompressZ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVaria
     }
 
     const bool bFinished = finishUnpack(pState, pPdStruct);
-    if (!guardedThis || !bFinished) {
+    if (!bFinished) {
         return false;
     }
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
 
     const bool bBound = bindUnpackSource(pState, pPdStruct);
-    if (!guardedThis || !bBound) return false;
+    if (!bBound) return false;
 
     const bool bValid = isValid(pPdStruct);
-    if (!guardedThis) return false;
     if (!bValid) {
         releaseUnpackSource(pState);
         return false;
     }
 
     const qint64 nFileSize = getSize();
-    if (!guardedThis) return false;
     qint64 nCompressedSize = 0;
     qint64 nUncompressedSize = 0;
     bool bDecompressed = false;
@@ -423,7 +419,6 @@ bool XCompressZ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVaria
             decompressState.nProcessedLimit = -1;
 
             bDecompressed = XCompressDecoder::decompress(&decompressState, pPdStruct);
-            if (!guardedThis) return false;
             if (bDecompressed) {
                 nCompressedSize = decompressState.nCountInput;
                 nUncompressedSize = decompressState.nCountOutput;
@@ -457,7 +452,6 @@ bool XCompressZ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVaria
     pState->pContext = pContext;
 
     if (!validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
-        if (!guardedThis) return false;
         pState->pContext = nullptr;
         releaseUnpackSource(pState);
         delete pContext;
@@ -470,7 +464,6 @@ bool XCompressZ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVaria
 
 XBinary::ARCHIVERECORD XCompressZ::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XCompressZ> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
 
@@ -480,7 +473,7 @@ XBinary::ARCHIVERECORD XCompressZ::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *p
         return result;
     }
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent) return result;
+    if (!bSourceCurrent) return result;
 
     if ((pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return result;
@@ -501,20 +494,19 @@ XBinary::ARCHIVERECORD XCompressZ::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *p
 
 bool XCompressZ::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    QPointer<XCompressZ> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
 
     if (!pState || !pState->pContext || !pDevice) return false;
-    QPointer<QIODevice> guardedOutput(pDevice);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedOutput = pDevice;
+    QIODevice *guardedSource = getDevice();
     if (!guardedOutput || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
-    const bool bOutputSupported = isUnpackOutputSupported(guardedOutput.data());
-    if (!guardedThis || !guardedOutput || !bOutputSupported) return false;
-    const bool bAliases = XBinary::devicesAlias(guardedSource.data(), guardedOutput.data());
-    if (!guardedThis || !guardedSource || !guardedOutput || bAliases) return false;
+    const bool bOutputSupported = isUnpackOutputSupported(guardedOutput);
+    if (!guardedOutput || !bOutputSupported) return false;
+    const bool bAliases = XBinary::devicesAlias(guardedSource, guardedOutput);
+    if (!guardedSource || !guardedOutput || bAliases) return false;
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent) return false;
+    if (!bSourceCurrent) return false;
 
     if ((pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
@@ -522,7 +514,6 @@ bool XCompressZ::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUC
 
     COMPRESSZ_UNPACK_CONTEXT *pContext = static_cast<COMPRESSZ_UNPACK_CONTEXT *>(pState->pContext);
     const qint64 nFileSize = getSize();
-    if (!guardedThis) return false;
     if ((nFileSize < 0) || (pContext->nUncompressedSize < 0) || !guardedSource ||
         !XBinary::isUnpackOutputSizeAllowed(pState->mapUnpackProperties, pContext->nUncompressedSize)) {
         return false;
@@ -540,11 +531,11 @@ bool XCompressZ::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUC
         }
     }
     std::unique_ptr<QIODevice> pStage(XBinary::createFileBuffer(pContext->nUncompressedSize, pPdStruct));
-    if (!guardedThis || !pStage || !guardedSource || !guardedOutput) return false;
+    if (!pStage || !guardedSource || !guardedOutput) return false;
     const bool bStageSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bStageSourceCurrent) return false;
+    if (!bStageSourceCurrent) return false;
 
-    SubDevice sd(guardedSource.data(), 0, nFileSize);
+    SubDevice sd(guardedSource, 0, nFileSize);
     bool bResult = false;
 
     if (sd.open(QIODevice::ReadOnly)) {
@@ -558,7 +549,6 @@ bool XCompressZ::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUC
         decompressState.nProcessedLimit = -1;
 
         bResult = XCompressDecoder::decompress(&decompressState, pPdStruct);
-        if (!guardedThis) return false;
         bResult = bResult && guardedOutput && guardedSource && (decompressState.nCountOutput == pContext->nUncompressedSize);
 
         sd.close();
@@ -566,14 +556,13 @@ bool XCompressZ::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUC
 
     if (!bResult || !guardedOutput || !guardedSource) return false;
     const bool bFinalSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bFinalSourceCurrent || !guardedOutput || !guardedSource) return false;
-    const bool bPublished = publishUnpackOutput(pStage.get(), guardedOutput.data(), pState, pPdStruct);
-    return guardedThis && bPublished;
+    if (!bFinalSourceCurrent || !guardedOutput || !guardedSource) return false;
+    const bool bPublished = publishUnpackOutput(pStage.get(), guardedOutput, pState, pPdStruct);
+    return bPublished;
 }
 
 bool XCompressZ::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XCompressZ> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
 
@@ -583,7 +572,7 @@ bool XCompressZ::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         return false;
     }
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) return false;
+    if (!bSourceCurrent || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) return false;
 
     pState->nCurrentIndex++;
 
@@ -594,7 +583,6 @@ bool XCompressZ::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 bool XCompressZ::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XCompressZ> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
 
@@ -618,7 +606,6 @@ bool XCompressZ::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     pState->mapArchiveProperties.clear();
 
     delete pContext;
-    Q_UNUSED(guardedThis)
     return true;
 }
 
@@ -655,27 +642,25 @@ XBinary *XCompressZ::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nMo
 
 bool XCompressZ::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XCompressZ> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
-        if (!guardedThis || !bResult) return false;
-        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(guardedThis->XArchive::getInternalInfo(pPdStruct));
-        if (!guardedThis || !pInfo) return false;
-        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        if (!bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        if (!pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) = *pInfo;
     }
 
-    return guardedThis && bResult;
+    return bResult;
 }
 
 void *XCompressZ::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XCompressZ> guardedThis(this);
-    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
-    if (!guardedThis || !bHandled) return nullptr;
+    const bool bHandled = handleInternalInfo(pPdStruct);
+    if (!bHandled) return nullptr;
 
-    return &guardedThis->m_internalInfo;
+    return &m_internalInfo;
 }
 
 void XCompressZ::setInternalInfo(void *pInternalInfo)

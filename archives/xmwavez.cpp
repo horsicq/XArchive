@@ -6,7 +6,6 @@
 
 #include "Algos/xcompressdecoder.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <memory>
@@ -60,33 +59,33 @@ public:
 
     bool open(OpenMode mode) override
     {
-        QPointer<QIODevice> guardedDevice(m_pDevice);
-        if (!guardedDevice || (m_nPayloadOffset < 0) || (m_nPayloadSize < 0) ||
+        QIODevice *guardedDevice = m_pDevice;
+        if ((m_nPayloadOffset < 0) || (m_nPayloadSize < 0) ||
             (mode != QIODevice::ReadOnly)) {
             return false;
         }
         const qint64 nDeviceSize = guardedDevice->size();
-        if (!guardedDevice || (nDeviceSize < 0) ||
+        if ((nDeviceSize < 0) ||
             (m_nPayloadOffset > nDeviceSize) ||
             (m_nPayloadSize > nDeviceSize - m_nPayloadOffset)) {
             return false;
         }
         const bool bOpen = guardedDevice->isOpen();
-        if (!guardedDevice || !bOpen) return false;
+        if (!bOpen) return false;
         const bool bReadable = guardedDevice->isReadable();
-        if (!guardedDevice || !bReadable) return false;
+        if (!bReadable) return false;
         const bool bSequential = guardedDevice->isSequential();
-        if (!guardedDevice || bSequential) return false;
+        if (bSequential) return false;
         return QIODevice::open(mode) && QIODevice::seek(0);
     }
 
 protected:
     qint64 readData(char *pData, qint64 nMaxSize) override
     {
-        QPointer<QIODevice> guardedDevice(m_pDevice);
+        QIODevice *guardedDevice = m_pDevice;
         const qint64 nTotal = size();
         const qint64 nPosition = pos();
-        if (!isOpen() || !isReadable() || !guardedDevice || (nMaxSize < 0) ||
+        if (!isOpen() || !isReadable() || (nMaxSize < 0) ||
             ((nMaxSize > 0) && !pData) || (nPosition < 0) ||
             (nPosition > nTotal)) {
             return -1;
@@ -108,7 +107,7 @@ protected:
             if (!guardedDevice) return -1;
             if (nBackingPosition != nAbsolute) {
                 const bool bPositioned = guardedDevice->seek(nAbsolute);
-                if (!guardedDevice || !bPositioned) return -1;
+                if (!bPositioned) return -1;
             }
             const qint64 nRead =
                 guardedDevice->read(pData + nDone, nMaxSize - nDone);
@@ -126,7 +125,7 @@ protected:
     }
 
 private:
-    QPointer<QIODevice> m_pDevice;
+    QIODevice *m_pDevice = nullptr;
     qint64 m_nPayloadOffset;
     qint64 m_nPayloadSize;
 };
@@ -200,14 +199,13 @@ bool XMwaveZ::readHeader(HEADER *pHeader, PDSTRUCT *pPdStruct)
 {
     if (!pHeader || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XMwaveZ> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const bool bSequential = guardedSource->isSequential();
-    if (!guardedThis || !guardedSource || bSequential) return false;
+    if (bSequential) return false;
 
     const qint64 nInputSize = getSize();
-    if (!guardedThis || !guardedSource || (nInputSize < MWAVEZ_MIN_SIZE)) {
+    if ((nInputSize < MWAVEZ_MIN_SIZE)) {
         return false;
     }
 
@@ -215,8 +213,7 @@ bool XMwaveZ::readHeader(HEADER *pHeader, PDSTRUCT *pPdStruct)
     // bytes of the first LZW code.
     const QByteArray baHeader =
         read_array_process(0, MWAVEZ_HEADER_SIZE + 3, pPdStruct);
-    if (!guardedThis || !guardedSource ||
-        (baHeader.size() != MWAVEZ_HEADER_SIZE + 3)) {
+    if ((baHeader.size() != MWAVEZ_HEADER_SIZE + 3)) {
         return false;
     }
     const uchar *pHeaderBytes =
@@ -271,32 +268,29 @@ bool XMwaveZ::readHeader(HEADER *pHeader, PDSTRUCT *pPdStruct)
     pHeader->nFlags = nFlags;
     pHeader->sFileName = QString::fromLatin1(baName);
 
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return isPdStructNotCanceled(pPdStruct);
 }
 
 bool XMwaveZ::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext) return false;
 
-    QPointer<XMwaveZ> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
 
     CONTEXT context = {};
-    if (!readHeader(&context.header, pPdStruct) || !guardedThis ||
-        !guardedSource) {
+    if (!readHeader(&context.header, pPdStruct)) {
         return false;
     }
 
     context.nInputSize = getSize();
-    if (!guardedThis || !guardedSource ||
-        (context.nInputSize < MWAVEZ_MIN_SIZE)) {
+    if ((context.nInputSize < MWAVEZ_MIN_SIZE)) {
         return false;
     }
     context.nStreamOffset = MWAVEZ_HEADER_SIZE;
 
     // No stored unpacked length: run the shared codec once over the whole
     // payload and take both sizes from the counters.
-    MwaveZStream stream(guardedSource.data(), MWAVEZ_HEADER_SIZE,
+    MwaveZStream stream(guardedSource, MWAVEZ_HEADER_SIZE,
                         context.nInputSize - MWAVEZ_HEADER_SIZE);
     if (!stream.open(QIODevice::ReadOnly)) return false;
 
@@ -312,7 +306,7 @@ bool XMwaveZ::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         decompressState.nProcessedLimit = -1;
 
         bResult = XCompressDecoder::decompress(&decompressState, pPdStruct);
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
 
         if (bResult) {
             // nCountInput counts the two synthetic magic bytes as well.
@@ -331,25 +325,24 @@ bool XMwaveZ::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     *pContext = context;
 
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return isPdStructNotCanceled(pPdStruct);
 }
 
 bool XMwaveZ::isValid(PDSTRUCT *pPdStruct)
 {
     // Detection probes a device the caller still owns: read_array_process
     // moves the cursor, so snapshot it and put it back.
-    QPointer<XMwaveZ> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
+    QIODevice *guardedSource = getDevice();
+    const qint64 nSavedPosition = guardedSource->pos();
 
     HEADER header = {};
     const bool bResult = readHeader(&header, pPdStruct);
 
-    if (guardedSource && (nSavedPosition >= 0)) {
+    if ((nSavedPosition >= 0)) {
         guardedSource->seek(nSavedPosition);
     }
 
-    return guardedThis && bResult;
+    return bResult;
 }
 
 bool XMwaveZ::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
@@ -551,19 +544,18 @@ bool XMwaveZ::initUnpack(UNPACK_STATE *pState,
                          const QMap<UNPACK_PROP, QVariant> &mapProperties,
                          PDSTRUCT *pPdStruct)
 {
-    QPointer<XMwaveZ> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
 
-    if (!pState || !guardedSource || m_bUnpackOperationInProgress) return false;
+    if (!pState || m_bUnpackOperationInProgress) return false;
     const bool bSequential = guardedSource->isSequential();
-    if (!guardedThis || !guardedSource || bSequential) return false;
+    if (bSequential) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
         !ownsUnpackSource(pState)) {
         return false;
     }
 
     const bool bFinished = finishUnpack(pState, nullptr);
-    if (!guardedThis || !guardedSource || !bFinished ||
+    if (!bFinished ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -572,7 +564,7 @@ bool XMwaveZ::initUnpack(UNPACK_STATE *pState,
     if (!operationGuard.isAcquired()) return false;
 
     const bool bBound = bindUnpackSource(pState, pPdStruct);
-    if (!guardedThis || !guardedSource || !bBound) return false;
+    if (!bBound) return false;
 
     CONTEXT *pContext = new (std::nothrow) CONTEXT;
     if (!pContext) {
@@ -581,8 +573,8 @@ bool XMwaveZ::initUnpack(UNPACK_STATE *pState,
     }
 
     const bool bParsed = parseContext(pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bParsed) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!bParsed) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -601,16 +593,11 @@ bool XMwaveZ::initUnpack(UNPACK_STATE *pState,
     // Binding only stages the source; without the finalize, listing works and
     // extraction silently produces nothing.
     const bool bFinalized =
-        guardedThis->validateAndFinalizeUnpackSource(pState, pContext,
+        validateAndFinalizeUnpackSource(pState, pContext,
                                                      pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -622,7 +609,6 @@ bool XMwaveZ::initUnpack(UNPACK_STATE *pState,
 XBinary::ARCHIVERECORD XMwaveZ::infoCurrent(UNPACK_STATE *pState,
                                             PDSTRUCT *pPdStruct)
 {
-    QPointer<XMwaveZ> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress,
                                           &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return ARCHIVERECORD();
@@ -631,7 +617,7 @@ XBinary::ARCHIVERECORD XMwaveZ::infoCurrent(UNPACK_STATE *pState,
         return ARCHIVERECORD();
     }
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent) return ARCHIVERECORD();
+    if (!bSourceCurrent) return ARCHIVERECORD();
 
     if ((pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
@@ -669,26 +655,25 @@ XBinary::ARCHIVERECORD XMwaveZ::infoCurrent(UNPACK_STATE *pState,
 bool XMwaveZ::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
                             PDSTRUCT *pPdStruct)
 {
-    QPointer<XMwaveZ> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
 
     if (!pState || !pState->pContext || !pDevice) return false;
 
-    QPointer<QIODevice> guardedOutput(pDevice);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedOutput || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
+    QIODevice *guardedOutput = pDevice;
+    QIODevice *guardedSource = getDevice();
+    if (!isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
-    const bool bOutputSupported = isUnpackOutputSupported(guardedOutput.data());
-    if (!guardedThis || !guardedOutput || !bOutputSupported) return false;
+    const bool bOutputSupported = isUnpackOutputSupported(guardedOutput);
+    if (!bOutputSupported) return false;
     const bool bAliases =
-        XBinary::devicesAlias(guardedSource.data(), guardedOutput.data());
-    if (!guardedThis || !guardedSource || !guardedOutput || bAliases) {
+        XBinary::devicesAlias(guardedSource, guardedOutput);
+    if (bAliases) {
         return false;
     }
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent) return false;
+    if (!bSourceCurrent) return false;
 
     if ((pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
@@ -697,7 +682,7 @@ bool XMwaveZ::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
 
     const CONTEXT *pContext = static_cast<const CONTEXT *>(pState->pContext);
     const qint64 nInputSize = getSize();
-    if (!guardedThis || !guardedSource) return false;
+    if (!guardedSource) return false;
     if ((nInputSize < MWAVEZ_MIN_SIZE) || (pContext->nUncompressedSize < 0) ||
         !XBinary::isUnpackOutputSizeAllowed(pState->mapUnpackProperties,
                                             pContext->nUncompressedSize)) {
@@ -722,11 +707,11 @@ bool XMwaveZ::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
 
     std::unique_ptr<QIODevice> pStage(
         XBinary::createFileBuffer(pContext->nUncompressedSize, pPdStruct));
-    if (!guardedThis || !pStage || !guardedSource || !guardedOutput) return false;
+    if (!pStage) return false;
     const bool bStageSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bStageSourceCurrent) return false;
+    if (!bStageSourceCurrent) return false;
 
-    MwaveZStream stream(guardedSource.data(), MWAVEZ_HEADER_SIZE,
+    MwaveZStream stream(guardedSource, MWAVEZ_HEADER_SIZE,
                         nInputSize - MWAVEZ_HEADER_SIZE);
     if (!stream.open(QIODevice::ReadOnly)) return false;
 
@@ -742,27 +727,23 @@ bool XMwaveZ::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
 
     bool bResult = XCompressDecoder::decompress(&decompressState, pPdStruct);
     stream.close();
-    if (!guardedThis) return false;
-    bResult = bResult && guardedOutput && guardedSource &&
-              (decompressState.nCountOutput == pContext->nUncompressedSize);
+    bResult = bResult && (decompressState.nCountOutput == pContext->nUncompressedSize);
 
-    if (!bResult || !guardedOutput || !guardedSource) return false;
+    if (!bResult) return false;
     const bool bFinalSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bFinalSourceCurrent || !guardedOutput ||
-        !guardedSource) {
+    if (!bFinalSourceCurrent) {
         return false;
     }
 
     const bool bPublished =
-        publishUnpackOutput(pStage.get(), guardedOutput.data(), pState,
+        publishUnpackOutput(pStage.get(), guardedOutput, pState,
                             pPdStruct);
 
-    return guardedThis && bPublished;
+    return bPublished;
 }
 
 bool XMwaveZ::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XMwaveZ> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
 
@@ -772,7 +753,7 @@ bool XMwaveZ::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
     // Guard on >= nNumberOfRecords, never on nNumberOfRecords - 1: the index
     // has to be allowed to advance past the last record or nothing lists.
-    if (!guardedThis || !bSourceCurrent || (pState->nCurrentIndex < 0) ||
+    if (!bSourceCurrent || (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }

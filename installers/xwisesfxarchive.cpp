@@ -6,7 +6,6 @@
 #include "xwisesfxarchive.h"
 
 #include <QHash>
-#include <QPointer>
 #include <QSet>
 #include <QtEndian>
 #include <limits>
@@ -212,14 +211,13 @@ bool XWiseSFXArchive::scanFormat(QList<ENTRY> *pEntries,
                                  qint64 *pArchiveEnd,
                                  PDSTRUCT *pPdStruct)
 {
-    QPointer<XWiseSFXArchive> guardedThis(this);
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || nTotalSize < 0x3000 ||
+    if (nTotalSize < 0x3000 ||
         !isPdStructNotCanceled(pPdStruct)) return false;
 
     const QByteArray baStub = read_array_process(
         0, qMin(nTotalSize, WISE_STUB_PROBE_SIZE), pPdStruct);
-    if (!guardedThis || !wiseHasStubMarker(baStub)) return false;
+    if (!wiseHasStubMarker(baStub)) return false;
 
     qint64 nOverlayOffset = -1;
     XPE pe(getDevice());
@@ -230,7 +228,7 @@ bool XWiseSFXArchive::scanFormat(QList<ENTRY> *pEntries,
         if (!ne.isValid(pPdStruct)) return false;
         nOverlayOffset = ne.getOverlayOffset(pPdStruct);
     }
-    if (!guardedThis || nOverlayOffset < 0 ||
+    if (nOverlayOffset < 0 ||
         nOverlayOffset >= nTotalSize - 8) return false;
 
     // Wise's optional ZIP mode uses absolute file offsets in the central
@@ -384,7 +382,7 @@ bool XWiseSFXArchive::scanFormat(QList<ENTRY> *pEntries,
     const QByteArray baHeaderProbe = read_array_process(
         nOverlayOffset,
         qMin<qint64>(nTotalSize - nOverlayOffset, 64 * 1024), pPdStruct);
-    if (!guardedThis || baHeaderProbe.size() < 4) return false;
+    if (baHeaderProbe.size() < 4) return false;
     for (qint64 nCandidate = nOverlayOffset;
          nCandidate < nSearchEnd && isPdStructNotCanceled(pPdStruct);
          ++nCandidate) {
@@ -404,7 +402,7 @@ bool XWiseSFXArchive::scanFormat(QList<ENTRY> *pEntries,
         firstInfo = info;
         break;
     }
-    if (!guardedThis || nFirstStreamOffset < 0) return false;
+    if (nFirstStreamOffset < 0) return false;
 
     QList<ENTRY> entries;
     QSet<QString> usedFiles;
@@ -490,7 +488,7 @@ bool XWiseSFXArchive::scanFormat(QList<ENTRY> *pEntries,
         if (bAtEOF) break;
     }
 
-    if (!guardedThis || entries.size() < 2 || nPosition != nTotalSize ||
+    if (entries.size() < 2 || nPosition != nTotalSize ||
         !isPdStructNotCanceled(pPdStruct)) return false;
     if (pEntries) *pEntries = entries;
     if (pArchiveEnd) *pArchiveEnd = nTotalSize;

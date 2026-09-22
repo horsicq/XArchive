@@ -7,7 +7,6 @@
 #include "xis14sfxarchive.h"
 
 #include <QHash>
-#include <QPointer>
 #include <QSet>
 
 namespace {
@@ -77,8 +76,7 @@ bool XIS14SFXArchive::readCString(qint64 nTotalSize, qint64 *pPosition,
                                   QByteArray *pValue,
                                   PDSTRUCT *pPdStruct)
 {
-    QPointer<XIS14SFXArchive> guardedThis(this);
-    if (!pPosition || !pValue || !guardedThis ||
+    if (!pPosition || !pValue ||
         !rangeWithin(nTotalSize, *pPosition, 1)) {
         return false;
     }
@@ -86,7 +84,7 @@ bool XIS14SFXArchive::readCString(qint64 nTotalSize, qint64 *pPosition,
                                    nTotalSize - *pPosition);
     const QByteArray baProbe = read_array_process(
         *pPosition, nProbeSize, pPdStruct);
-    if (!guardedThis || (baProbe.size() != nProbeSize)) return false;
+    if ((baProbe.size() != nProbeSize)) return false;
     const qint32 nTerminator = baProbe.indexOf('\0');
     if ((nTerminator < 1) || (nTerminator > IS14_MAX_CSTRING)) {
         return false;
@@ -104,9 +102,8 @@ bool XIS14SFXArchive::scanFormat(QList<ENTRY> *pEntries,
                                  qint64 *pArchiveEnd,
                                  PDSTRUCT *pPdStruct)
 {
-    QPointer<XIS14SFXArchive> guardedThis(this);
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || nTotalSize < 0x40 ||
+    if (nTotalSize < 0x40 ||
         !isPdStructNotCanceled(pPdStruct) || read_uint16(0) != 0x5a4dU) {
         return false;
     }
@@ -212,7 +209,7 @@ bool XIS14SFXArchive::scanFormat(QList<ENTRY> *pEntries,
         nPosition += nDataSize;
     }
 
-    if (!guardedThis || !isPdStructNotCanceled(pPdStruct) ||
+    if (!isPdStructNotCanceled(pPdStruct) ||
         entries.isEmpty() || nPosition != nTotalSize) {
         return false;
     }

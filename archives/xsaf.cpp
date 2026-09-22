@@ -5,7 +5,6 @@
 
 #include "xsaf.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -67,8 +66,7 @@ bool XSAF::parseContext(CONTEXT *pContext, bool bHeaderOnly, PDSTRUCT *pPdStruct
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XSAF> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -76,7 +74,7 @@ bool XSAF::parseContext(CONTEXT *pContext, bool bHeaderOnly, PDSTRUCT *pPdStruct
     if (context.nInputSize < SAF_LONG_BANNER + SAF_ENTRY_SIZE) return false;
 
     const QByteArray baHeader = read_array_process(0, SAF_LONG_BANNER, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != SAF_LONG_BANNER)) return false;
+    if (!guardedSource || (baHeader.size() != SAF_LONG_BANNER)) return false;
     const char *pHeader = baHeader.constData();
 
     if (memcmp(pHeader, "SAF, (c)", 8) != 0) return false;
@@ -95,7 +93,7 @@ bool XSAF::parseContext(CONTEXT *pContext, bool bHeaderOnly, PDSTRUCT *pPdStruct
     // The first member header is part of what makes the banner safe to detect
     // on, so it is always validated even in the header-only pass.
     const QByteArray baFirst = read_array_process(context.nFirstMemberOffset, SAF_ENTRY_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baFirst.size() != SAF_ENTRY_SIZE)) return false;
+    if (!guardedSource || (baFirst.size() != SAF_ENTRY_SIZE)) return false;
     {
         const uchar *pEntry = reinterpret_cast<const uchar *>(baFirst.constData());
         if (!safIsValidRawName(baFirst.constData())) return false;
@@ -114,7 +112,7 @@ bool XSAF::parseContext(CONTEXT *pContext, bool bHeaderOnly, PDSTRUCT *pPdStruct
     while ((nPosition + SAF_ENTRY_SIZE) <= context.nInputSize) {
         if (!isPdStructNotCanceled(pPdStruct)) return false;
         const QByteArray baEntry = read_array_process(nPosition, SAF_ENTRY_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baEntry.size() != SAF_ENTRY_SIZE)) return false;
+        if (!guardedSource || (baEntry.size() != SAF_ENTRY_SIZE)) return false;
         const uchar *pEntry = reinterpret_cast<const uchar *>(baEntry.constData());
         if (!safIsValidRawName(baEntry.constData())) return false;
 
@@ -145,12 +143,12 @@ bool XSAF::parseContext(CONTEXT *pContext, bool bHeaderOnly, PDSTRUCT *pPdStruct
     if (context.listMembers.isEmpty()) return false;
 
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XSAF::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, true, pPdStruct);
@@ -313,11 +311,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XSAF::getDefaultUnpackProperties()
 
 bool XSAF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSAF> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -327,8 +324,8 @@ bool XSAF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, false, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, false, pPdStruct) || !guardedSource || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -342,15 +339,10 @@ bool XSAF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

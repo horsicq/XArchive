@@ -7,7 +7,6 @@
 
 #include <QtEndian>
 #include <QHash>
-#include <QPointer>
 #include <QSet>
 
 #include <limits>
@@ -44,16 +43,15 @@ bool XPyInstallerCArchive::scanFormat(QList<ENTRY> *pEntries,
                                       qint64 *pArchiveEnd,
                                       PDSTRUCT *pPdStruct)
 {
-    QPointer<XPyInstallerCArchive> guardedThis(this);
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || nTotalSize < PYINSTALLER_COOKIE_V20_SIZE + 18 ||
+    if (nTotalSize < PYINSTALLER_COOKIE_V20_SIZE + 18 ||
         !isPdStructNotCanceled(pPdStruct)) return false;
 
     const qint64 nSearchSize = qMin(nTotalSize, PYINSTALLER_COOKIE_SEARCH_SIZE);
     const qint64 nSearchOffset = nTotalSize - nSearchSize;
     const QByteArray baTail = read_array_process(nSearchOffset, nSearchSize,
                                                  pPdStruct);
-    if (!guardedThis || baTail.size() != nSearchSize) return false;
+    if (baTail.size() != nSearchSize) return false;
     const qint32 nRelativeCookie = baTail.lastIndexOf(
         QByteArray(PYINSTALLER_COOKIE_MAGIC, 8));
     if (nRelativeCookie < 0) return false;
@@ -91,7 +89,7 @@ bool XPyInstallerCArchive::scanFormat(QList<ENTRY> *pEntries,
 
     const QByteArray baToc = read_array_process(nTocOffset, nTocSize,
                                                 pPdStruct);
-    if (!guardedThis || baToc.size() != nTocSize) return false;
+    if (baToc.size() != nTocSize) return false;
     const uchar *pToc = reinterpret_cast<const uchar *>(baToc.constData());
     qint64 nPosition = 0;
     QList<ENTRY> entries;

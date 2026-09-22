@@ -5,7 +5,6 @@
 
 #include "xgamos.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -59,16 +58,15 @@ bool XGamos::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XGamos> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
     if (context.nInputSize < GAMOS_HEADER_SIZE + GAMOS_RECORD_SIZE) return false;
 
     const QByteArray baHeader = read_array_process(0, GAMOS_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != GAMOS_HEADER_SIZE)) return false;
+    if ((baHeader.size() != GAMOS_HEADER_SIZE)) return false;
     const uchar *pHeader = (const uchar *)baHeader.constData();
 
     if (memcmp(pHeader, GAMOS_MAGIC, GAMOS_MAGIC_SIZE) != 0) return false;
@@ -82,7 +80,7 @@ bool XGamos::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (!gamosRangeWithin(context.nInputSize, context.nDirectoryOffset, context.nDirectorySize)) return false;
 
     const QByteArray baDirectory = read_array_process(context.nDirectoryOffset, context.nDirectorySize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baDirectory.size() != context.nDirectorySize)) return false;
+    if ((baDirectory.size() != context.nDirectorySize)) return false;
 
     qint64 nArchiveEnd = context.nDirectoryOffset + context.nDirectorySize;
     for (qint32 i = 0; i < nCount; ++i) {
@@ -125,7 +123,7 @@ bool XGamos::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.listMembers.first().nDataOffset != (context.nDirectoryOffset + context.nDirectorySize)) return false;
 
     context.nArchiveSize = nArchiveEnd;
-    if (!guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!isPdStructNotCanceled(pPdStruct)) return false;
 
     *pContext = context;
     return true;
@@ -133,11 +131,11 @@ bool XGamos::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XGamos::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
-    const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
+    QIODevice *guardedSource = getDevice();
+    const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
-    if (guardedSource && (nSavedPosition >= 0)) {
+    if ((nSavedPosition >= 0)) {
         guardedSource->seek(nSavedPosition);
     }
     return bResult;
@@ -287,15 +285,14 @@ QMap<XBinary::UNPACK_PROP, QVariant> XGamos::getDefaultUnpackProperties()
 
 bool XGamos::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XGamos> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) {
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) {
         return false;
     }
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -309,8 +306,8 @@ bool XGamos::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> 
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -324,15 +321,10 @@ bool XGamos::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> 
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

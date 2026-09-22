@@ -20,7 +20,6 @@
  */
 #include "xromfsarchive.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -67,8 +66,7 @@ bool XRomfsArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XRomfsArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -76,14 +74,14 @@ bool XRomfsArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nInputSize < ROMFS_HEADER_SIZE) return false;
 
     const QByteArray baHeader = read_array_process(0, ROMFS_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != ROMFS_HEADER_SIZE)) return false;
+    if (!guardedSource || (baHeader.size() != ROMFS_HEADER_SIZE)) return false;
     if (baHeader.left(8) != QByteArray("-rom1fs-")) return false;
 
     // skip the volume name to reach the root directory's first entry
     qint64 nNameEnd = 16;
     while ((nNameEnd < context.nInputSize) && (nNameEnd < (16 + ROMFS_MAX_NAME_SIZE))) {
         const QByteArray baByte = read_array_process(nNameEnd, 1, pPdStruct);
-        if (!guardedThis || !guardedSource || (baByte.size() != 1)) return false;
+        if (!guardedSource || (baByte.size() != 1)) return false;
         if (baByte.at(0) == (char)0) break;
         ++nNameEnd;
     }
@@ -106,8 +104,7 @@ bool XRomfsArchive::walkDirectory(qint64 nOffset, const QString &sPrefix, CONTEX
 {
     if (!pContext || !pstSeen || (nDepth > ROMFS_MAX_DEPTH)) return false;
 
-    QPointer<XRomfsArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
 
     qint64 nCurrent = nOffset;
     while ((nCurrent > 0) && !pstSeen->contains(nCurrent)) {
@@ -117,7 +114,7 @@ bool XRomfsArchive::walkDirectory(qint64 nOffset, const QString &sPrefix, CONTEX
         if (!romfsRangeWithin(pContext->nInputSize, nCurrent, ROMFS_FILE_HEADER)) return false;
 
         const QByteArray baEntry = read_array_process(nCurrent, ROMFS_FILE_HEADER, pPdStruct);
-        if (!guardedThis || !guardedSource || (baEntry.size() != ROMFS_FILE_HEADER)) return false;
+        if (!guardedSource || (baEntry.size() != ROMFS_FILE_HEADER)) return false;
         const uchar *pEntry = (const uchar *)baEntry.constData();
 
         const quint32 nRawNext = qFromBigEndian<quint32>(pEntry);
@@ -131,7 +128,7 @@ bool XRomfsArchive::walkDirectory(qint64 nOffset, const QString &sPrefix, CONTEX
         while (baName.size() <= ROMFS_MAX_NAME_SIZE) {
             if (nNamePosition >= pContext->nInputSize) return false;
             const QByteArray baByte = read_array_process(nNamePosition, 1, pPdStruct);
-            if (!guardedThis || !guardedSource || (baByte.size() != 1)) return false;
+            if (!guardedSource || (baByte.size() != 1)) return false;
             ++nNamePosition;
             if (baByte.at(0) == (char)0) break;
             baName.append(baByte.at(0));
@@ -167,7 +164,7 @@ bool XRomfsArchive::walkDirectory(qint64 nOffset, const QString &sPrefix, CONTEX
 bool XRomfsArchive::isValid(PDSTRUCT *pPdStruct)
 {
     // getRecords-style probing displaces the caller's cursor, so snapshot it.
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -318,11 +315,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XRomfsArchive::getDefaultUnpackProperties()
 
 bool XRomfsArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XRomfsArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -332,8 +328,8 @@ bool XRomfsArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVa
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -346,15 +342,10 @@ bool XRomfsArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVa
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

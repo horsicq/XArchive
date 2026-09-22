@@ -6,7 +6,6 @@
 #include "xis3sfxarchive.h"
 
 #include <QHash>
-#include <QPointer>
 #include <QSet>
 
 #include "../Formats/exec/xne.h"
@@ -74,9 +73,8 @@ bool XIS3SFXArchive::scanFormat(QList<ENTRY> *pEntries,
                                 qint64 *pArchiveEnd,
                                 PDSTRUCT *pPdStruct)
 {
-    QPointer<XIS3SFXArchive> guardedThis(this);
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || nTotalSize < 0x24 ||
+    if (nTotalSize < 0x24 ||
         nTotalSize > 0xffffffffLL ||
         !isPdStructNotCanceled(pPdStruct) ||
         read_uint16(0) != 0x5a4dU) {
@@ -85,7 +83,7 @@ bool XIS3SFXArchive::scanFormat(QList<ENTRY> *pEntries,
 
     const qint64 nProbeSize = qMin(nTotalSize, IS3_DESCRIPTOR_SCAN_LIMIT);
     const QByteArray baProbe = read_array_process(0, nProbeSize, pPdStruct);
-    if (!guardedThis || baProbe.size() != nProbeSize) return false;
+    if (baProbe.size() != nProbeSize) return false;
     const QByteArray baMagic(
         reinterpret_cast<const char *>(IS3_DESCRIPTOR_MAGIC),
         sizeof(IS3_DESCRIPTOR_MAGIC));
@@ -98,7 +96,7 @@ bool XIS3SFXArchive::scanFormat(QList<ENTRY> *pEntries,
     const qint64 nDataPosition = read_uint32(nDescriptorOffset + 0x08);
     const qint64 nRecordCount = read_uint32(nDescriptorOffset + 0x0c);
     const qint64 nDeclaredSize = read_uint32(nDescriptorOffset + 0x10);
-    if (!guardedThis || nDeclaredSize != nTotalSize ||
+    if (nDeclaredSize != nTotalSize ||
         nRecordCount < 1 || nRecordCount > MAX_RECORDS ||
         read_uint32(nDescriptorOffset + 0x18) != 0 ||
         nDataPosition <= nDescriptorOffset ||
@@ -108,7 +106,7 @@ bool XIS3SFXArchive::scanFormat(QList<ENTRY> *pEntries,
 
     const QByteArray baKey = read_array_process(
         nDescriptorOffset + 0x1c, sizeof(IS3_PATH_KEY), pPdStruct);
-    if (!guardedThis || baKey.size() != sizeof(IS3_PATH_KEY)) return false;
+    if (baKey.size() != sizeof(IS3_PATH_KEY)) return false;
     uchar pathKey[sizeof(IS3_PATH_KEY)] = {};
     for (qint32 i = 0; i < qint32(sizeof(IS3_PATH_KEY)); ++i) {
         pathKey[i] = static_cast<uchar>(baKey.at(i));
@@ -120,11 +118,11 @@ bool XIS3SFXArchive::scanFormat(QList<ENTRY> *pEntries,
     // authenticated descriptor supplies the table offset.
     XPE pe(getDevice());
     if (pe.isValid(pPdStruct)) {
-        if (!guardedThis || pe.getOverlayOffset(pPdStruct) != nDataPosition)
+        if (pe.getOverlayOffset(pPdStruct) != nDataPosition)
             return false;
     } else {
         XNE ne(getDevice());
-        if (!ne.isValid(pPdStruct) || !guardedThis) return false;
+        if (!ne.isValid(pPdStruct)) return false;
     }
 
     QList<ENTRY> entries;
@@ -148,7 +146,7 @@ bool XIS3SFXArchive::scanFormat(QList<ENTRY> *pEntries,
 
         const QByteArray baEncodedPath = read_array_process(
             nRecordOffset + 4, nPathSize, pPdStruct);
-        if (!guardedThis || baEncodedPath.size() != nPathSize) return false;
+        if (baEncodedPath.size() != nPathSize) return false;
         QByteArray baPath(nPathSize, Qt::Uninitialized);
         for (qint64 i = 0; i < nPathSize; ++i) {
             const quint8 nEncoded = static_cast<quint8>(baEncodedPath.at(i));
@@ -262,7 +260,7 @@ bool XIS3SFXArchive::scanFormat(QList<ENTRY> *pEntries,
                         nOuterDataOffset + 30, nLocalNameSize, pPdStruct);
                     baCentralName = read_array_process(
                         nCentralOffset + 46, nCentralNameSize, pPdStruct);
-                    bZipValid = guardedThis &&
+                    bZipValid =
                         baLocalName.size() == nLocalNameSize &&
                         baCentralName.size() == nCentralNameSize &&
                         !baLocalName.contains('\0') &&
@@ -296,7 +294,7 @@ bool XIS3SFXArchive::scanFormat(QList<ENTRY> *pEntries,
         nPosition = nOuterDataOffset + nOuterDataSize;
     }
 
-    if (!guardedThis || !isPdStructNotCanceled(pPdStruct) ||
+    if (!isPdStructNotCanceled(pPdStruct) ||
         entries.size() != nRecordCount || nPosition != nTotalSize) {
         return false;
     }

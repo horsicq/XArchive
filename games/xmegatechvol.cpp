@@ -5,7 +5,6 @@
 
 #include "xmegatechvol.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -74,8 +73,7 @@ bool XMegatechVOL::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XMegatechVOL> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -83,7 +81,7 @@ bool XMegatechVOL::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nInputSize < MEGATECH_MIN_FILE_SIZE) return false;
 
     const QByteArray baFirst = read_array_process(0, 4, pPdStruct);
-    if (!guardedThis || !guardedSource || (baFirst.size() != 4)) return false;
+    if (!guardedSource || (baFirst.size() != 4)) return false;
     const qint64 nTableSize = static_cast<qint64>(qFromLittleEndian<quint32>(
         reinterpret_cast<const uchar *>(baFirst.constData())));
     if ((nTableSize < MEGATECH_MIN_TABLE_SIZE) ||
@@ -94,7 +92,7 @@ bool XMegatechVOL::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     context.nTableSize = nTableSize;
 
     const QByteArray baTable = read_array_process(0, nTableSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baTable.size() != nTableSize)) {
+    if (!guardedSource || (baTable.size() != nTableSize)) {
         return false;
     }
     const qint32 nCount = static_cast<qint32>(nTableSize / 4);
@@ -122,7 +120,7 @@ bool XMegatechVOL::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         }
         const QByteArray baHead = read_array_process(
             nOffset, qMin<qint64>(4, nSize), pPdStruct);
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
 
         MEMBER member = {};
         member.nTableIndex = i;
@@ -135,7 +133,7 @@ bool XMegatechVOL::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     }
 
     if (context.listMembers.isEmpty()) return false;
-    if (!guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
+    if (!guardedSource || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
     *pContext = context;
@@ -144,7 +142,7 @@ bool XMegatechVOL::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XMegatechVOL::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -304,8 +302,7 @@ bool XMegatechVOL::initUnpack(UNPACK_STATE *pState,
                               const QMap<UNPACK_PROP, QVariant> &mapProperties,
                               PDSTRUCT *pPdStruct)
 {
-    QPointer<XMegatechVOL> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
@@ -314,7 +311,7 @@ bool XMegatechVOL::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) || !guardedSource ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -329,9 +326,9 @@ bool XMegatechVOL::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource ||
+    if (!parseContext(pContext, pPdStruct) || !guardedSource ||
         pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -347,16 +344,11 @@ bool XMegatechVOL::initUnpack(UNPACK_STATE *pState,
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(
+    const bool bFinalized = validateAndFinalizeUnpackSource(
         pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

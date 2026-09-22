@@ -10,7 +10,6 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
-#include <QPointer>
 #include <QtEndian>
 
 #include <limits>
@@ -33,28 +32,28 @@ bool readExactAt(QIODevice *device, qint64 offset, qint64 size,
                  QByteArray *data, XBinary::PDSTRUCT *pPdStruct)
 {
     if (data) data->clear();
-    QPointer<QIODevice> guarded(device);
-    if (!data || !guarded) return false;
+    QIODevice *guarded = device;
+    if (!data) return false;
     const bool sequential = guarded->isSequential();
-    if (!guarded || sequential) return false;
+    if (sequential) return false;
     const qint64 deviceSize = guarded->size();
-    if (!guarded || !rangeWithin(deviceSize, offset, size) ||
+    if (!rangeWithin(deviceSize, offset, size) ||
         (size > (std::numeric_limits<qint32>::max)()))
         return false;
     const bool seeked = guarded->seek(offset);
-    if (!guarded || !seeked)
+    if (!seeked)
         return false;
 
     data->resize(qint32(size));
     qint64 done = 0;
     while (done < size) {
-        if (!guarded || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
             data->clear();
             return false;
         }
         const qint64 chunk = qMin<qint64>(size - done, 64 * 1024);
         const qint64 count = guarded->read(data->data() + done, chunk);
-        if (!guarded || (count != chunk)) {
+        if ((count != chunk)) {
             data->clear();
             return false;
         }
@@ -139,19 +138,19 @@ bool XFpakArchive::readVolume(QIODevice *pDevice, const QString &sPath,
                               PDSTRUCT *pPdStruct)
 {
     if (pVolume) *pVolume = VOLUME();
-    QPointer<QIODevice> guarded(pDevice);
-    if (!pVolume || !guarded) return false;
+    QIODevice *guarded = pDevice;
+    if (!pVolume) return false;
     const bool sequential = guarded->isSequential();
-    if (!guarded || sequential ||
+    if (sequential ||
         !XBinary::isPdStructNotCanceled(pPdStruct))
         return false;
 
     const qint64 fileSize = guarded->size();
-    if (!guarded || (fileSize < 4) || (fileSize > FPAK_MAX_SIZE))
+    if ((fileSize < 4) || (fileSize > FPAK_MAX_SIZE))
         return false;
 
     QByteArray magic;
-    if (!readExactAt(guarded.data(), 0, 4, &magic, pPdStruct) || !guarded)
+    if (!readExactAt(guarded, 0, 4, &magic, pPdStruct))
         return false;
     const bool lead = magic == QByteArray("FPAK", 4);
     const bool continuation = magic == QByteArray("FPAC", 4);
@@ -164,8 +163,8 @@ bool XFpakArchive::readVolume(QIODevice *pDevice, const QString &sPath,
     qint64 totalRaw = 0;
     if (lead) {
         QByteArray header;
-        if (!readExactAt(guarded.data(), 0, FPAK_GLOBAL_HEADER_SIZE,
-                         &header, pPdStruct) || !guarded)
+        if (!readExactAt(guarded, 0, FPAK_GLOBAL_HEADER_SIZE,
+                         &header, pPdStruct))
             return false;
         version = readLE16(header, 4);
         totalPacked = readLE32(header, 6);
@@ -182,9 +181,8 @@ bool XFpakArchive::readVolume(QIODevice *pDevice, const QString &sPath,
                          descriptionSize))
             return false;
         QByteArray description;
-        if (!readExactAt(guarded.data(), FPAK_GLOBAL_HEADER_SIZE,
-                         descriptionSize, &description, pPdStruct) ||
-            !guarded || !printableAscii(description))
+        if (!readExactAt(guarded, FPAK_GLOBAL_HEADER_SIZE,
+                         descriptionSize, &description, pPdStruct) || !printableAscii(description))
             return false;
         position = FPAK_GLOBAL_HEADER_SIZE + descriptionSize;
     }
@@ -205,10 +203,9 @@ bool XFpakArchive::readVolume(QIODevice *pDevice, const QString &sPath,
 
         QByteArray fixedHeader;
         if (!malformed) {
-            if (!readExactAt(guarded.data(), position,
+            if (!readExactAt(guarded, position,
                              FPAK_SEGMENT_HEADER_SIZE, &fixedHeader,
-                             pPdStruct) ||
-                !guarded)
+                             pPdStruct))
                 return false;
             malformed = !fixedHeader.startsWith("FPPF");
         }
@@ -251,10 +248,9 @@ bool XFpakArchive::readVolume(QIODevice *pDevice, const QString &sPath,
         QByteArray nameBytes;
         QString name;
         if (!malformed) {
-            if (!readExactAt(guarded.data(),
+            if (!readExactAt(guarded,
                              position + FPAK_SEGMENT_HEADER_SIZE, nameSize,
-                             &nameBytes, pPdStruct) ||
-                !guarded)
+                             &nameBytes, pPdStruct))
                 return false;
             name = safeName(nameBytes);
             malformed = name.isEmpty();
@@ -287,7 +283,7 @@ bool XFpakArchive::readVolume(QIODevice *pDevice, const QString &sPath,
         position = segment.nDataOffset + segment.nDataSize;
     }
 
-    if (!guarded || !XBinary::isPdStructNotCanceled(pPdStruct) ||
+    if (!XBinary::isPdStructNotCanceled(pPdStruct) ||
         segments.isEmpty() || (!truncated && (position != fileSize)))
         return false;
 
@@ -368,17 +364,16 @@ bool XFpakArchive::buildContext(UNPACK_CONTEXT *pContext,
                                 PDSTRUCT *pPdStruct)
 {
     if (pContext) *pContext = UNPACK_CONTEXT();
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pContext || !guardedSource) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pContext) return false;
     const bool sequential = guardedSource->isSequential();
-    if (!guardedSource || sequential ||
+    if (sequential ||
         !XBinary::isPdStructNotCanceled(pPdStruct))
         return false;
 
     VOLUME first;
-    if (!readVolume(guardedSource.data(), QString(), false, true, &first,
-                    pPdStruct) ||
-        !guardedSource)
+    if (!readVolume(guardedSource, QString(), false, true, &first,
+                    pPdStruct))
         return false;
 
     QList<MEMBER> members;
@@ -418,7 +413,7 @@ bool XFpakArchive::buildContext(UNPACK_CONTEXT *pContext,
         if (status == ASSEMBLY_MALFORMED) return false;
 
         QString mediaBase;
-        QFile *sourceFile = qobject_cast<QFile *>(guardedSource.data());
+        QFile *sourceFile = qobject_cast<QFile *>(guardedSource);
         if (sourceFile && !sourceFile->fileName().isEmpty()) {
             const QFileInfo sourceInfo(sourceFile->fileName());
             if (sourceInfo.suffix().compare(QLatin1String("pak"),
@@ -447,7 +442,7 @@ bool XFpakArchive::buildContext(UNPACK_CONTEXT *pContext,
             const bool volumeOk = readVolume(&file, path, true, false,
                                              &next, pPdStruct);
             file.close();
-            if (!volumeOk || !guardedSource) return false;
+            if (!volumeOk) return false;
             physical += next.listSegments;
             status = assemble(physical, first.nPackedSize, first.nRawSize,
                               &complete, &partial);
@@ -471,7 +466,7 @@ bool XFpakArchive::buildContext(UNPACK_CONTEXT *pContext,
         }
     }
 
-    if (!guardedSource || members.isEmpty() ||
+    if (members.isEmpty() ||
         !XBinary::isPdStructNotCanceled(pPdStruct))
         return false;
     pContext->nSourceSize = first.nFileSize;
@@ -483,11 +478,11 @@ bool XFpakArchive::buildContext(UNPACK_CONTEXT *pContext,
 
 bool XFpakArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> source(getDevice());
+    QIODevice *source = getDevice();
     const qint64 savedPosition = source ? source->pos() : -1;
     VOLUME volume;
     const bool result = source &&
-        readVolume(source.data(), QString(), false, true, &volume,
+        readVolume(source, QString(), false, true, &volume,
                    pPdStruct);
     if (source && (savedPosition >= 0)) source->seek(savedPosition);
     return result;
@@ -549,11 +544,11 @@ QString XFpakArchive::getMIMEString()
 
 qint64 XFpakArchive::getFileFormatSize(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> source(getDevice());
+    QIODevice *source = getDevice();
     const qint64 savedPosition = source ? source->pos() : -1;
     VOLUME volume;
     const qint64 result = source &&
-                                 readVolume(source.data(), QString(), false, true,
+                                 readVolume(source, QString(), false, true,
                                             &volume, pPdStruct)
                              // where the chain actually ended, which is the
                              // whole volume unless it was cut short
@@ -570,17 +565,17 @@ XBinary::OSNAME XFpakArchive::getOsName()
 
 QString XFpakArchive::getVersion()
 {
-    QPointer<QIODevice> source(getDevice());
+    QIODevice *source = getDevice();
     if (!source) return QString();
     const bool sequential = source->isSequential();
-    if (!source || sequential) return QString();
+    if (sequential) return QString();
     const qint64 sourceSize = source->size();
-    if (!source || (sourceSize < 6)) return QString();
+    if ((sourceSize < 6)) return QString();
     const qint64 savedPosition = source->pos();
-    if (!source || (savedPosition < 0)) return QString();
+    if ((savedPosition < 0)) return QString();
     QByteArray header;
     const QString result =
-        readExactAt(source.data(), 0, 6, &header, nullptr) && source &&
+        readExactAt(source, 0, 6, &header, nullptr) && source &&
                 header.startsWith("FPAK")
             ? QString::number(readLE16(header, 4))
             : QString();
@@ -604,7 +599,6 @@ bool XFpakArchive::initUnpack(
     const QMap<UNPACK_PROP, QVariant> &mapProperties,
     PDSTRUCT *pPdStruct)
 {
-    QPointer<XFpakArchive> guardedThis(this);
     if (m_bUnpackOperationInProgress) return false;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState) return false;
@@ -617,14 +611,14 @@ bool XFpakArchive::initUnpack(
     releaseUnpackSource(pState);
     *pState = UNPACK_STATE();
     delete oldContext;
-    if (!guardedThis || !XBinary::isPdStructNotCanceled(pPdStruct) ||
-        !bindUnpackSource(pState, pPdStruct) || !guardedThis)
+    if (!XBinary::isPdStructNotCanceled(pPdStruct) ||
+        !bindUnpackSource(pState, pPdStruct))
         return false;
 
     UNPACK_CONTEXT *context = new (std::nothrow) UNPACK_CONTEXT;
-    if (!context || !buildContext(context, pPdStruct) || !guardedThis) {
+    if (!context || !buildContext(context, pPdStruct)) {
         delete context;
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
         return false;
     }
@@ -639,11 +633,6 @@ bool XFpakArchive::initUnpack(
     pState->mapUnpackProperties = mapProperties;
 
     if (!validateAndFinalizeUnpackSource(pState, context, pPdStruct)) {
-        if (!guardedThis) {
-            delete context;
-            *pState = UNPACK_STATE();
-            return false;
-        }
         pState->pContext = nullptr;
         releaseUnpackSource(pState);
         delete context;
@@ -723,11 +712,10 @@ XBinary::ARCHIVERECORD XFpakArchive::memberRecord(const MEMBER &member,
 XBinary::ARCHIVERECORD XFpakArchive::infoCurrent(UNPACK_STATE *pState,
                                                   PDSTRUCT *pPdStruct)
 {
-    QPointer<XFpakArchive> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress,
                                            &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed() || !pState || !pState->pContext ||
-        !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis ||
+        !isUnpackSourceCurrent(pState, pPdStruct) ||
         !XBinary::isPdStructNotCanceled(pPdStruct))
         return ARCHIVERECORD();
     UNPACK_CONTEXT *context =
@@ -745,8 +733,8 @@ bool XFpakArchive::readMemberData(const MEMBER &member, QByteArray *pData,
                                   PDSTRUCT *pPdStruct)
 {
     if (pData) pData->clear();
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pData || !guardedSource || member.listSegments.isEmpty() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pData || member.listSegments.isEmpty() ||
         (member.nCompressedSize < 1) ||
         (member.nCompressedSize > (std::numeric_limits<qint32>::max)()))
         return false;
@@ -754,7 +742,7 @@ bool XFpakArchive::readMemberData(const MEMBER &member, QByteArray *pData,
 
     for (const SEGMENT &segment : member.listSegments) {
         QFile sibling;
-        QIODevice *device = guardedSource.data();
+        QIODevice *device = guardedSource;
         if (!segment.sPath.isEmpty()) {
             sibling.setFileName(segment.sPath);
             if (!sibling.open(QIODevice::ReadOnly) || sibling.isSequential())
@@ -767,13 +755,13 @@ bool XFpakArchive::readMemberData(const MEMBER &member, QByteArray *pData,
         QByteArray data;
         if (!readExactAt(device, segment.nHeaderOffset,
                          segment.nHeaderSize, &header, pPdStruct) ||
-            (header != segment.baPinnedHeader) || !guardedSource)
+            (header != segment.baPinnedHeader))
             return false;
         // Reacquire the caller-owned device after the first callback-capable
         // read; a QIODevice may delete itself from a read implementation.
-        if (segment.sPath.isEmpty()) device = guardedSource.data();
+        if (segment.sPath.isEmpty()) device = guardedSource;
         if (!readExactAt(device, segment.nDataOffset, segment.nDataSize,
-                         &data, pPdStruct) || !guardedSource)
+                         &data, pPdStruct))
             return false;
         pData->append(data);
     }
@@ -785,13 +773,9 @@ bool XFpakArchive::readMemberData(const MEMBER &member, QByteArray *pData,
 bool XFpakArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
                                  PDSTRUCT *pPdStruct)
 {
-    QPointer<XFpakArchive> guardedThis(this);
-    QPointer<QIODevice> guardedOutput(pDevice);
+    QIODevice *guardedOutput = pDevice;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    if (!operationGuard.isAcquired() || !pState || !pState->pContext ||
-        !guardedOutput || !isUnpackOutputSupported(guardedOutput.data()) ||
-        !guardedThis || !isUnpackSourceCurrent(pState, pPdStruct) ||
-        !guardedThis || !guardedOutput ||
+    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !isUnpackOutputSupported(guardedOutput) || !isUnpackSourceCurrent(pState, pPdStruct) ||
         !XBinary::isPdStructNotCanceled(pPdStruct))
         return false;
 
@@ -840,8 +824,7 @@ bool XFpakArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
         return false;
 
     QByteArray packed;
-    if (!readMemberData(member, &packed, pPdStruct) || !guardedThis ||
-        !guardedOutput)
+    if (!readMemberData(member, &packed, pPdStruct))
         return false;
     QByteArray unpacked;
     qint64 consumed = 0;
@@ -850,7 +833,7 @@ bool XFpakArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
                              member.nRawSize, &unpacked, &consumed, pPdStruct);
     // Teardown and cancellation are checked before any verdict on the bytes:
     // neither is evidence that the member is bad.
-    if (!guardedThis || !guardedOutput) return false;
+    if (!guardedOutput) return false;
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
     // Past this point the reader has recognised the member's method and flags
     // and the volume walk has validated its extent, so a stream that will not
@@ -881,7 +864,7 @@ bool XFpakArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
                                         CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF,
                                         member.nCRC32, pPdStruct);
     crcDevice.close();
-    if (!guardedThis || !guardedOutput) return false;
+    if (!guardedOutput) return false;
     if (!bCrcMatched) {
         if (bCrcOpened && XBinary::isPdStructNotCanceled(pPdStruct)) {
             XBinary::setPdStructErrorString(
@@ -894,18 +877,17 @@ bool XFpakArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
     QBuffer stage(&unpacked);
     if (!stage.open(QIODevice::ReadOnly)) return false;
     const bool result = publishUnpackOutput(
-        &stage, guardedOutput.data(), pState, pPdStruct);
+        &stage, guardedOutput, pState, pPdStruct);
     stage.close();
-    return result && guardedThis && guardedOutput;
+    return result && guardedOutput;
 }
 
 bool XFpakArchive::moveToNext(UNPACK_STATE *pState,
                               PDSTRUCT *pPdStruct)
 {
-    QPointer<XFpakArchive> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState || !pState->pContext ||
-        !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis ||
+        !isUnpackSourceCurrent(pState, pPdStruct) ||
         !XBinary::isPdStructNotCanceled(pPdStruct))
         return false;
     UNPACK_CONTEXT *context =

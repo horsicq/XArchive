@@ -22,7 +22,6 @@
 
 #include "Algos/xc64wraptordecoder.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -52,20 +51,19 @@ bool XC64WraptorArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XC64WraptorArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
     if ((context.nInputSize < C64_MAGIC_SIZE) || (context.nInputSize > C64_MAX_INPUT_SIZE)) return false;
 
     const QByteArray baMagic = read_array_process(0, C64_MAGIC_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baMagic.size() != C64_MAGIC_SIZE)) return false;
+    if ((baMagic.size() != C64_MAGIC_SIZE)) return false;
     if (qFromLittleEndian<quint32>((const uchar *)baMagic.constData()) != C64_MEMBER_MAGIC) return false;
 
     const QByteArray baFile = read_array_process(0, context.nInputSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baFile.size() != context.nInputSize)) return false;
+    if ((baFile.size() != context.nInputSize)) return false;
 
     const quint8 *pData = (const quint8 *)baFile.constData();
     const qint64 nSize = baFile.size();
@@ -134,7 +132,7 @@ bool XC64WraptorArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XC64WraptorArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -285,11 +283,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XC64WraptorArchive::getDefaultUnpackPropert
 
 bool XC64WraptorArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XC64WraptorArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -299,8 +296,8 @@ bool XC64WraptorArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -313,15 +310,10 @@ bool XC64WraptorArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

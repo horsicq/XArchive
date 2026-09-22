@@ -25,7 +25,7 @@ public:
 
     struct SZDDSFX_UNPACK_CONTEXT {
         QList<SZDDSFX_ENTRY> listEntries;
-        QPointer<QIODevice> pOuterSourceDevice;
+        QIODevice *pOuterSourceDevice = nullptr;
         quint64 nOwnerDeviceGeneration;
         UNPACK_STATE *pOwnerState;
         SubDevice *pSubDevice;
@@ -51,12 +51,6 @@ public:
     bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
     bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
-
-protected:
-    bool isDeviceReplacementAllowed() const override
-    {
-        return (!m_pSzddUnpackOperationState || !*m_pSzddUnpackOperationState) && m_setSzddUnpackContexts.isEmpty();
-    }
 
 private:
     bool _scanStreams(QList<SZDDSFX_ENTRY> *pList, PDSTRUCT *pPdStruct);

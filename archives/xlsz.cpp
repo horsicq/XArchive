@@ -5,7 +5,6 @@
 
 #include "xlsz.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -162,9 +161,8 @@ bool XLSZ::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XLSZ> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -172,7 +170,7 @@ bool XLSZ::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const QByteArray baHeader =
         read_array_process(0, LSZ_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || !lszIsHeader(baHeader)) return false;
+    if (!lszIsHeader(baHeader)) return false;
 
     qint64 nOffset = LSZ_HEADER_SIZE;
     while (nOffset < context.nInputSize) {
@@ -182,8 +180,7 @@ bool XLSZ::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
         const QByteArray baRecord =
             read_array_process(nOffset, LSZ_RECORD_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource ||
-            (baRecord.size() != LSZ_RECORD_SIZE)) {
+        if ((baRecord.size() != LSZ_RECORD_SIZE)) {
             return false;
         }
 
@@ -200,7 +197,7 @@ bool XLSZ::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (member.nMethod == LSZ_METHOD_IMPLODE) {
             const QByteArray baPrelude =
                 read_array_process(member.nDataOffset, 2, pPdStruct);
-            if (!guardedThis || !guardedSource || (baPrelude.size() != 2) ||
+            if ((baPrelude.size() != 2) ||
                 !lszIsDclPrelude(baPrelude)) {
                 return false;
             }
@@ -219,16 +216,16 @@ bool XLSZ::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     context.nArchiveSize = context.nInputSize;
     context.nFirstRecordOffset = context.listMembers.first().nRecordOffset;
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return isPdStructNotCanceled(pPdStruct);
 }
 
 bool XLSZ::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
-    const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
+    QIODevice *guardedSource = getDevice();
+    const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
-    if (guardedSource && (nSavedPosition >= 0)) {
+    if ((nSavedPosition >= 0)) {
         guardedSource->seek(nSavedPosition);
     }
     return bResult;
@@ -435,9 +432,8 @@ bool XLSZ::initUnpack(UNPACK_STATE *pState,
                       const QMap<UNPACK_PROP, QVariant> &mapProperties,
                       PDSTRUCT *pPdStruct)
 {
-    QPointer<XLSZ> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() ||
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
     }
@@ -445,8 +441,7 @@ bool XLSZ::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
-        !isPdStructNotCanceled(pPdStruct)) {
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -460,9 +455,8 @@ bool XLSZ::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource ||
-        pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -478,16 +472,11 @@ bool XLSZ::initUnpack(UNPACK_STATE *pState,
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(
+    const bool bFinalized = validateAndFinalizeUnpackSource(
         pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

@@ -6,7 +6,6 @@
 #include "xardi2sfx.h"
 
 #include <QDateTime>
-#include <QPointer>
 #include <QTimeZone>
 #include <QtEndian>
 
@@ -70,15 +69,14 @@ XARDI2SFX::~XARDI2SFX()
 
 bool XARDI2SFX::readTrailer(QString *psYear, PDSTRUCT *pPdStruct)
 {
-    QPointer<XARDI2SFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!psYear || !guardedSource || guardedSource->isSequential()) return false;
 
     const qint64 nInputSize = guardedSource->size();
     if (nInputSize < ARDI2_LASTLENGTH_BACKOFF + ARDI2_MIN_BLOCK_SIZE) return false;
 
     const QByteArray baTrailer = read_array_process(nInputSize - ARDI2_TRAILER_SIZE, ARDI2_TRAILER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baTrailer.size() != ARDI2_TRAILER_SIZE)) return false;
+    if (!guardedSource || (baTrailer.size() != ARDI2_TRAILER_SIZE)) return false;
 
     const char *pData = baTrailer.constData();
     if (memcmp(pData, ARDI2_TRAILER_HEAD, ARDI2_TRAILER_HEAD_SIZE) != 0) return false;
@@ -104,8 +102,7 @@ bool XARDI2SFX::readTrailer(QString *psYear, PDSTRUCT *pPdStruct)
 // the walk meets, which is the installer's destination directory.
 bool XARDI2SFX::walkChain(QList<BLOCK> *pListBlocks, BLOCK *pPathBlock, qint64 *pnSentinelOffset, PDSTRUCT *pPdStruct)
 {
-    QPointer<XARDI2SFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pListBlocks || !pnSentinelOffset || !guardedSource) return false;
 
     const qint64 nInputSize = guardedSource->size();
@@ -120,7 +117,7 @@ bool XARDI2SFX::walkChain(QList<BLOCK> *pListBlocks, BLOCK *pPathBlock, qint64 *
         if ((nPosition < 0) || (nPosition > nInputSize - 4)) return false;
 
         const QByteArray baLength = read_array_process(nPosition, 4, pPdStruct);
-        if (!guardedThis || !guardedSource || (baLength.size() != 4)) return false;
+        if (!guardedSource || (baLength.size() != 4)) return false;
         const quint32 nLength = qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(baLength.constData()));
 
         if (nLength == ARDI2_TAG_SENTINEL) {
@@ -136,7 +133,7 @@ bool XARDI2SFX::walkChain(QList<BLOCK> *pListBlocks, BLOCK *pPathBlock, qint64 *
         if ((nTagOffset < 0) || (nTagOffset > nPosition - 4)) return false;
 
         const QByteArray baTag = read_array_process(nTagOffset, 4, pPdStruct);
-        if (!guardedThis || !guardedSource || (baTag.size() != 4)) return false;
+        if (!guardedSource || (baTag.size() != 4)) return false;
         const quint32 nTag = qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(baTag.constData()));
 
         if ((nTag == ARDI2_TAG_MEMBER_HEADER) || (nTag == ARDI2_TAG_MEMBER_DATA)) {
@@ -169,13 +166,12 @@ bool XARDI2SFX::walkChain(QList<BLOCK> *pListBlocks, BLOCK *pPathBlock, qint64 *
 // is not a plain path is discarded rather than repaired.
 bool XARDI2SFX::readInstallPath(const BLOCK &block, QString *psPath, PDSTRUCT *pPdStruct)
 {
-    QPointer<XARDI2SFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!psPath || !guardedSource) return false;
     if ((block.nTag != ARDI2_TAG_INSTALLPATH) || (block.nSize <= 4) || (block.nSize > ARDI2_MAX_HEADER_BLOCK)) return false;
 
     const QByteArray baBlock = read_array_process(block.nOffset + 4, block.nSize - 4, pPdStruct);
-    if (!guardedThis || !guardedSource || (baBlock.size() != block.nSize - 4)) return false;
+    if (!guardedSource || (baBlock.size() != block.nSize - 4)) return false;
 
     const qint32 nZero = baBlock.indexOf('\0');
     const QByteArray baText = (nZero >= 0) ? baBlock.left(nZero) : baBlock;
@@ -192,13 +188,12 @@ bool XARDI2SFX::readInstallPath(const BLOCK &block, QString *psPath, PDSTRUCT *p
 
 bool XARDI2SFX::readMemberHeader(const BLOCK &block, MEMBER *pMember, PDSTRUCT *pPdStruct)
 {
-    QPointer<XARDI2SFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pMember || !guardedSource) return false;
     if ((block.nTag != ARDI2_TAG_MEMBER_HEADER) || (block.nSize < ARDI2_MIN_HEADER_BLOCK) || (block.nSize > ARDI2_MAX_HEADER_BLOCK)) return false;
 
     const QByteArray baBlock = read_array_process(block.nOffset, block.nSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baBlock.size() != block.nSize)) return false;
+    if (!guardedSource || (baBlock.size() != block.nSize)) return false;
 
     const uchar *pData = reinterpret_cast<const uchar *>(baBlock.constData());
     if (qFromLittleEndian<quint32>(pData) != ARDI2_TAG_MEMBER_HEADER) return false;
@@ -241,28 +236,27 @@ bool XARDI2SFX::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XARDI2SFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
     context.nSentinelOffset = -1;
 
-    if (!readTrailer(&context.sTrailerYear, pPdStruct) || !guardedThis || !guardedSource) return false;
+    if (!readTrailer(&context.sTrailerYear, pPdStruct) || !guardedSource) return false;
 
     QList<BLOCK> listBlocks;
     BLOCK pathBlock = {};
-    if (!walkChain(&listBlocks, &pathBlock, &context.nSentinelOffset, pPdStruct) || !guardedThis || !guardedSource) return false;
+    if (!walkChain(&listBlocks, &pathBlock, &context.nSentinelOffset, pPdStruct) || !guardedSource) return false;
 
     // The destination directory the container states.  A carrier that does not
     // carry one is still read; the path is simply not published.
     if (pathBlock.nSize > 0) {
         QString sInstallPath;
-        if (readInstallPath(pathBlock, &sInstallPath, pPdStruct) && guardedThis && guardedSource) {
+        if (readInstallPath(pathBlock, &sInstallPath, pPdStruct) && guardedSource) {
             context.sInstallPath = sInstallPath;
         }
-        if (!guardedThis || !guardedSource) return false;
+        if (!guardedSource) return false;
     }
 
     // Every member is a header block immediately followed by its data block
@@ -283,7 +277,7 @@ bool XARDI2SFX::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (dataBlock.nSize < 4) return false;
 
         MEMBER member = {};
-        if (!readMemberHeader(headerBlock, &member, pPdStruct) || !guardedThis || !guardedSource) return false;
+        if (!readMemberHeader(headerBlock, &member, pPdStruct) || !guardedSource) return false;
 
         member.nStreamOffset = dataBlock.nOffset + 4;
         member.nStreamSize = dataBlock.nSize - 4;
@@ -345,7 +339,7 @@ qint64 XARDI2SFX::recordOffset(const CONTEXT &context, qint32 nIndex)
 
 bool XARDI2SFX::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     QString sYear;
     bool bResult = readTrailer(&sYear, pPdStruct);
@@ -514,11 +508,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XARDI2SFX::getDefaultUnpackProperties()
 
 bool XARDI2SFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XARDI2SFX> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -528,8 +521,8 @@ bool XARDI2SFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -552,15 +545,10 @@ bool XARDI2SFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

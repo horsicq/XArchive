@@ -8,7 +8,6 @@
 #include "Algos/xlofidecoder.h"
 
 #include <QFileInfo>
-#include <QPointer>
 #include <QtEndian>
 
 #include <limits>
@@ -31,9 +30,8 @@ bool XLOFI::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XLOFI> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -42,7 +40,7 @@ bool XLOFI::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     // Read the fixed part first so the index length is known before the index
     // itself is pulled in; a bogus entry count must not turn into a huge read.
     const QByteArray baFixed = read_array_process(0, LOFI_INDEX_OFFSET, pPdStruct);
-    if (!guardedThis || !guardedSource || (baFixed.size() != LOFI_INDEX_OFFSET)) return false;
+    if ((baFixed.size() != LOFI_INDEX_OFFSET)) return false;
 
     XLOFIDecoder::GEOMETRY probe = {};
     {
@@ -52,7 +50,7 @@ bool XLOFI::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         const qint64 nHeaderSize = LOFI_INDEX_OFFSET + nEntries * 8;
         if (nHeaderSize > context.nInputSize) return false;
         const QByteArray baHeader = read_array_process(0, nHeaderSize, pPdStruct);
-        if (!guardedThis || !guardedSource || (baHeader.size() != nHeaderSize)) return false;
+        if ((baHeader.size() != nHeaderSize)) return false;
         // Every other rule - the algorithm name, the geometry bounds and the
         // ascending index - lives in the decoder so the two cannot disagree.
         if (!XLOFIDecoder::parseGeometry(baHeader, context.nInputSize, &probe, nullptr)) return false;
@@ -67,21 +65,21 @@ bool XLOFI::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     // The whole-buffer decoder needs the image to fit a QByteArray.
     if (context.nImageSize > qint64((std::numeric_limits<qint32>::max)())) return false;
 
-    context.sFileName = XBinary::getDeviceFileBaseName(guardedSource.data());
+    context.sFileName = XBinary::getDeviceFileBaseName(guardedSource);
     if (context.sFileName.isEmpty()) context.sFileName = QStringLiteral("lofi_image");
     context.sFileName += QStringLiteral(".img");
 
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return isPdStructNotCanceled(pPdStruct);
 }
 
 bool XLOFI::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
-    const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
+    QIODevice *guardedSource = getDevice();
+    const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
-    if (guardedSource && (nSavedPosition >= 0)) {
+    if ((nSavedPosition >= 0)) {
         guardedSource->seek(nSavedPosition);
     }
     return bResult;
@@ -236,11 +234,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XLOFI::getDefaultUnpackProperties()
 
 bool XLOFI::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XLOFI> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -250,8 +247,8 @@ bool XLOFI::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct)) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -265,15 +262,10 @@ bool XLOFI::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     pState->nNumberOfRecords = 1;
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

@@ -20,7 +20,6 @@
  */
 #include "xztcarchive.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -64,8 +63,7 @@ bool XZTCArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XZTCArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -73,7 +71,7 @@ bool XZTCArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nInputSize < (ZTC_HEADER_SIZE + ZTC_RECORD_SIZE)) return false;
 
     const QByteArray baHeader = read_array_process(0, ZTC_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != ZTC_HEADER_SIZE)) return false;
+    if (!guardedSource || (baHeader.size() != ZTC_HEADER_SIZE)) return false;
     if (qFromLittleEndian<quint32>((const uchar *)baHeader.constData()) != ZTC_MAGIC) return false;
     context.nVolume = qFromLittleEndian<quint16>((const uchar *)baHeader.constData() + 8);
 
@@ -84,7 +82,7 @@ bool XZTCArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (context.listMembers.size() >= ZTC_MAX_MEMBERS) return false;
 
         const QByteArray baRecord = read_array_process(nOffset, ZTC_RECORD_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baRecord.size() != ZTC_RECORD_SIZE)) return false;
+        if (!guardedSource || (baRecord.size() != ZTC_RECORD_SIZE)) return false;
         const uchar *pRecord = (const uchar *)baRecord.constData();
 
         const qint64 nUncompressed = (qint32)qFromLittleEndian<quint32>(pRecord);
@@ -99,10 +97,10 @@ bool XZTCArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (!ztcRangeWithin(context.nInputSize, nOffset, nNameSize + ZTC_RECORD_OVERHEAD)) return false;
 
         const QByteArray baName = read_array_process(nOffset + ZTC_RECORD_SIZE, nNameSize, pPdStruct);
-        if (!guardedThis || !guardedSource || (baName.size() != nNameSize)) return false;
+        if (!guardedSource || (baName.size() != nNameSize)) return false;
 
         const QByteArray baCheck = read_array_process(nOffset + ZTC_RECORD_SIZE + nNameSize, 4, pPdStruct);
-        if (!guardedThis || !guardedSource || (baCheck.size() != 4)) return false;
+        if (!guardedSource || (baCheck.size() != 4)) return false;
 
         quint32 nWanted = (quint32)pRecord[0] + (quint32)pRecord[0x0c];
         for (qint32 i = 0; i < baName.size(); ++i) {
@@ -142,7 +140,7 @@ bool XZTCArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XZTCArchive::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
@@ -303,11 +301,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XZTCArchive::getDefaultUnpackProperties()
 
 bool XZTCArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XZTCArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -317,8 +314,8 @@ bool XZTCArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVari
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -331,15 +328,10 @@ bool XZTCArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVari
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

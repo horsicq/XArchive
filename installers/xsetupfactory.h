@@ -21,7 +21,6 @@
 #ifndef XSETUPFACTORY_H
 #define XSETUPFACTORY_H
 
-#include <QPointer>
 #include <QSet>
 
 #include "xbinary.h"
@@ -52,7 +51,7 @@ public:
 
     struct UNPACK_CONTEXT {
         QList<FILE_ENTRY> listEntries;
-        QPointer<QIODevice> pSourceDevice;
+        QIODevice *pSourceDevice = nullptr;
         UNPACK_STATE *pOwnerState = nullptr;
         QByteArray baToken;
         quint64 nDeviceGeneration = 0;
@@ -81,9 +80,6 @@ public:
     bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
     bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
-
-protected:
-    bool isDeviceReplacementAllowed() const override;
 
 private:
     bool _scanEngine(QList<ENGINE_ENTRY> *pEntries, qint64 *pnPayloadOffset, qint64 *pnSourceSize, bool *pbIs64, QString *psVersion,

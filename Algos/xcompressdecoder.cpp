@@ -416,8 +416,8 @@ private:
 bool XCompressDecoder::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pState || !pState->pDeviceInput || !pState->pDeviceOutput || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
-    QPointer<QIODevice> input(pState->pDeviceInput);
-    QPointer<QIODevice> destination(pState->pDeviceOutput);
+    QIODevice *input = pState->pDeviceInput;
+    QIODevice *destination = pState->pDeviceOutput;
     bool bLegacyNineBitWidth = false;
     // Historical compress -b9 writers can switch to ten-bit codes while their
     // dictionary remains limited to 512 entries. Modern writers also produce

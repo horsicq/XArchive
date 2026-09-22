@@ -21,7 +21,6 @@
 #include "xsolarispackage.h"
 
 #include <QDateTime>
-#include <QPointer>
 
 #include <cstring>
 #include <new>
@@ -162,14 +161,13 @@ QString XSolarisPackage::normalizeName(const QByteArray &baName, bool *pbOk)
 
 bool XSolarisPackage::readRawHeader(qint64 nOffset, qint64 nInputSize, RAWHEADER *pHeader, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSolarisPackage> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pHeader || !guardedSource) return false;
 
     if (!rangeWithin(nInputSize, nOffset, 6)) return false;
 
     const QByteArray baMagic = read_array_process(nOffset, 6, pPdStruct);
-    if (!guardedThis || !guardedSource || (baMagic.size() != 6)) return false;
+    if (!guardedSource || (baMagic.size() != 6)) return false;
 
     const CPIO_DIALECT dialect = classifyMagic(baMagic.constData());
     if (dialect == CPIO_DIALECT_UNKNOWN) return false;
@@ -191,7 +189,7 @@ bool XSolarisPackage::readRawHeader(qint64 nOffset, qint64 nInputSize, RAWHEADER
     if (!rangeWithin(nInputSize, nOffset, nHeaderSize)) return false;
 
     const QByteArray baHeader = read_array_process(nOffset, nHeaderSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != nHeaderSize)) return false;
+    if (!guardedSource || (baHeader.size() != nHeaderSize)) return false;
 
     quint64 nMode = 0;
     quint64 nUID = 0;
@@ -259,7 +257,7 @@ bool XSolarisPackage::readRawHeader(qint64 nOffset, qint64 nInputSize, RAWHEADER
     if (!rangeWithin(nInputSize, nNamePos, nNameRead + nNameSkip)) return false;
 
     const QByteArray baName = read_array_process(nNamePos, nNameRead, pPdStruct);
-    if (!guardedThis || !guardedSource || (baName.size() != nNameRead)) return false;
+    if (!guardedSource || (baName.size() != nNameRead)) return false;
 
     bool bNameOk = false;
     const QString sFileName = normalizeName(baName, &bNameOk);
@@ -288,8 +286,7 @@ bool XSolarisPackage::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XSolarisPackage> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -300,7 +297,7 @@ bool XSolarisPackage::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nInputSize < (SOLPKG_HEADER_BLOCK_SIZE + SOLPKG_BINARY_HEADER_SIZE)) return false;
 
     const QByteArray baHeaderBlock = read_array_process(0, SOLPKG_HEADER_BLOCK_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeaderBlock.size() != SOLPKG_HEADER_BLOCK_SIZE)) return false;
+    if (!guardedSource || (baHeaderBlock.size() != SOLPKG_HEADER_BLOCK_SIZE)) return false;
     if (std::memcmp(baHeaderBlock.constData(), SOLPKG_MAGIC, static_cast<size_t>(SOLPKG_MAGIC_SIZE)) != 0) return false;
 
     // "<pkgabbrev> <nparts> <nblocks>\n" - informational only.  It is published
@@ -329,7 +326,7 @@ bool XSolarisPackage::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
             RAWHEADER header = {};
             if (!readRawHeader(nOffset, context.nInputSize, &header, pPdStruct)) break;
-            if (!guardedThis || !guardedSource) return false;
+            if (!guardedSource) return false;
 
             bAnyHeader = true;
             nRecordsInPart++;
@@ -387,7 +384,7 @@ bool XSolarisPackage::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (nOffset >= context.nInputSize) break;
     }
 
-    if (!guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
     // A datastream whose first cpio archive does not even start with a legal
     // cpio magic is not something this class can decode, magic or no magic.
     if (!bAnyHeader) return false;
@@ -405,7 +402,7 @@ bool XSolarisPackage::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XSolarisPackage::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
 
     CONTEXT context = {};
@@ -596,15 +593,14 @@ QMap<XBinary::UNPACK_PROP, QVariant> XSolarisPackage::getDefaultUnpackProperties
 
 bool XSolarisPackage::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSolarisPackage> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) {
         return false;
     }
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -619,8 +615,8 @@ bool XSolarisPackage::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, Q
         return false;
     }
 
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -637,15 +633,10 @@ bool XSolarisPackage::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, Q
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

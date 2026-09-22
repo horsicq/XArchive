@@ -21,7 +21,6 @@
 #include "xearefpack.h"
 
 #include <QFileInfo>
-#include <QPointer>
 
 #include <new>
 
@@ -46,10 +45,9 @@ XEARefPack::XEARefPack(QIODevice *pDevice) : XArchive(pDevice)
 
 QString XEARefPack::deriveMemberName()
 {
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource) return REFPACK_FALLBACK_NAME;
+    QIODevice *guardedSource = getDevice();
 
-    const QString sDeviceName = XBinary::getDeviceFileName(guardedSource.data());
+    const QString sDeviceName = XBinary::getDeviceFileName(guardedSource);
     if (sDeviceName.isEmpty()) return REFPACK_FALLBACK_NAME;
 
     // RefPack stores no name of its own.  The payload keeps the container's
@@ -64,9 +62,8 @@ bool XEARefPack::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XEARefPack> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -77,7 +74,7 @@ bool XEARefPack::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     // four-byte packed size plus a four-byte unpacked size).
     const qint64 nHeaderRead = (context.nInputSize < 10) ? context.nInputSize : 10;
     const QByteArray baHeader = read_array_process(0, nHeaderRead, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != nHeaderRead)) return false;
+    if ((baHeader.size() != nHeaderRead)) return false;
 
     XEARefPackDecoder::HEADER header = {};
     if (!XEARefPackDecoder::readHeader(baHeader.constData(), baHeader.size(), context.nInputSize, &header)) {
@@ -97,7 +94,7 @@ bool XEARefPack::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     const qint64 nSampleSize = bFull ? context.nInputSize : REFPACK_PARTIAL_PROBE_INPUT;
 
     const QByteArray baSample = read_array_process(0, nSampleSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baSample.size() != nSampleSize)) return false;
+    if ((baSample.size() != nSampleSize)) return false;
 
     const qint64 nProduceLimit = bFull ? 0 : REFPACK_PARTIAL_PROBE_OUTPUT;
     qint64 nProduced = 0;
@@ -114,7 +111,6 @@ bool XEARefPack::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     }
 
     context.sFileName = deriveMemberName();
-    if (!guardedThis || !guardedSource) return false;
 
     *pContext = context;
 
@@ -125,15 +121,13 @@ bool XEARefPack::isValid(PDSTRUCT *pPdStruct)
 {
     // The probe runs on a device the caller still owns: remember where its
     // cursor was and put it back, whatever the outcome.
-    QPointer<QIODevice> guardedSource(getDevice());
-    const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
+    QIODevice *guardedSource = getDevice();
+    const qint64 nSavedPosition = guardedSource->pos();
 
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
 
-    if (guardedSource && (nSavedPosition >= 0)) {
-        guardedSource->seek(nSavedPosition);
-    }
+    guardedSource->seek(nSavedPosition);
 
     return bResult;
 }
@@ -208,15 +202,13 @@ QString XEARefPack::getVersion()
     // it is the only thing that distinguishes one container form from another.
     // Like isValid(), this touches a device the caller owns; put the cursor
     // back where it was.
-    QPointer<QIODevice> guardedSource(getDevice());
-    const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
+    QIODevice *guardedSource = getDevice();
+    const qint64 nSavedPosition = guardedSource->pos();
 
     CONTEXT context = {};
     const bool bParsed = parseContext(&context, nullptr);
 
-    if (guardedSource && (nSavedPosition >= 0)) {
-        guardedSource->seek(nSavedPosition);
-    }
+    guardedSource->seek(nSavedPosition);
 
     if (!bParsed) return QString();
 
@@ -323,16 +315,15 @@ QMap<XBinary::UNPACK_PROP, QVariant> XEARefPack::getDefaultUnpackProperties()
 
 bool XEARefPack::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XEARefPack> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
 
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) {
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) {
         return false;
     }
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -347,8 +338,8 @@ bool XEARefPack::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVaria
         return false;
     }
 
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource) {
-        if (guardedThis) guardedThis->releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct)) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -364,15 +355,10 @@ bool XEARefPack::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVaria
 
     // Binding only stages the source; without this finalize the listing would
     // work and every extraction would silently produce nothing.
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

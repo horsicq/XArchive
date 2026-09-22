@@ -8,7 +8,6 @@
 #include "Algos/xinfogramespakdecoder.h"
 
 #include <QHash>
-#include <QPointer>
 #include <QtEndian>
 
 #include <cstring>
@@ -62,7 +61,7 @@ const qint64 PAK_STEP_PROBE =
 class DevicePositionRestore
 {
 public:
-    DevicePositionRestore(const QPointer<QIODevice> &pDevice, qint64 nPosition)
+    DevicePositionRestore(QIODevice *pDevice, qint64 nPosition)
         : m_pDevice(pDevice), m_nPosition(nPosition)
     {
     }
@@ -74,7 +73,7 @@ public:
 private:
     DevicePositionRestore(const DevicePositionRestore &);
     DevicePositionRestore &operator=(const DevicePositionRestore &);
-    QPointer<QIODevice> m_pDevice;
+    QIODevice *m_pDevice;
     qint64 m_nPosition;
 };
 
@@ -120,8 +119,7 @@ XInfogramesPak::~XInfogramesPak()
 
 bool XInfogramesPak::trialDecode(const ENTRY &entry, PDSTRUCT *pPdStruct)
 {
-    QPointer<XInfogramesPak> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return false;
     if ((entry.nUncompressedSize <= 0) ||
         (entry.nUncompressedSize > PAK_MAX_UNCOMPRESSED_SIZE)) {
@@ -140,7 +138,7 @@ bool XInfogramesPak::trialDecode(const ENTRY &entry, PDSTRUCT *pPdStruct)
     if (entry.nMethod == PAK_METHOD_IMPLODE) {
         const QByteArray baPacked = read_array_process(
             entry.nDataOffset, entry.nCompressedSize, pPdStruct);
-        if (guardedThis && guardedSource &&
+        if (guardedSource &&
             (baPacked.size() == entry.nCompressedSize)) {
             QByteArray baUnpacked;
             qint64 nConsumed = 0;
@@ -153,9 +151,9 @@ bool XInfogramesPak::trialDecode(const ENTRY &entry, PDSTRUCT *pPdStruct)
     } else if (entry.nMethod == PAK_METHOD_DEFLATE) {
         XDecompress decompressor;
         const QByteArray baUnpacked = decompressor.decomressToByteArray(
-            guardedSource.data(), entry.nDataOffset, entry.nCompressedSize,
+            guardedSource, entry.nDataOffset, entry.nCompressedSize,
             HANDLE_METHOD_DEFLATE, pPdStruct);
-        bResult = guardedThis && guardedSource &&
+        bResult = guardedSource &&
                   (qint64(baUnpacked.size()) == entry.nUncompressedSize);
     }
 
@@ -169,8 +167,7 @@ bool XInfogramesPak::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XInfogramesPak> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     // Parsing only ever reads, and every caller - detection included - still
@@ -183,7 +180,7 @@ bool XInfogramesPak::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nInputSize < PAK_MIN_FILE_SIZE) return false;
 
     const QByteArray baPrefix = read_array_process(0, 8, pPdStruct);
-    if (!guardedThis || !guardedSource || (baPrefix.size() != 8)) return false;
+    if (!guardedSource || (baPrefix.size() != 8)) return false;
     const uchar *pPrefix = reinterpret_cast<const uchar *>(baPrefix.constData());
     // Slot 0 is a hard zero in every known archive.  It is the only fixed byte
     // pattern this headerless format has, so it stays a reject, not a warning.
@@ -201,7 +198,7 @@ bool XInfogramesPak::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if ((nSlotCount - 1) > PAK_MAX_ENTRIES) return false;
 
     const QByteArray baTable = read_array_process(0, nTableSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baTable.size() != nTableSize)) {
+    if (!guardedSource || (baTable.size() != nTableSize)) {
         return false;
     }
     const uchar *pTable = reinterpret_cast<const uchar *>(baTable.constData());
@@ -247,7 +244,7 @@ bool XInfogramesPak::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
             qMin<qint64>(PAK_STEP_PROBE, context.nInputSize - nPosition);
         const QByteArray baProbe =
             read_array_process(nPosition, nProbeSize, pPdStruct);
-        if (!guardedThis || !guardedSource || (baProbe.size() != nProbeSize)) {
+        if (!guardedSource || (baProbe.size() != nProbeSize)) {
             return false;
         }
         const uchar *pProbe =
@@ -412,7 +409,7 @@ bool XInfogramesPak::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         }
     }
 
-    if (!guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) {
+    if (!guardedSource || !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
     *pContext = context;
@@ -421,7 +418,7 @@ bool XInfogramesPak::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
 bool XInfogramesPak::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -496,7 +493,7 @@ QString XInfogramesPak::getVersion()
 
 qint64 XInfogramesPak::getFileFormatSize(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const qint64 nResult =
@@ -678,8 +675,7 @@ bool XInfogramesPak::initUnpack(UNPACK_STATE *pState,
                                 const QMap<UNPACK_PROP, QVariant> &mapProperties,
                                 PDSTRUCT *pPdStruct)
 {
-    QPointer<XInfogramesPak> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
@@ -688,7 +684,7 @@ bool XInfogramesPak::initUnpack(UNPACK_STATE *pState,
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) || !guardedSource ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -703,9 +699,9 @@ bool XInfogramesPak::initUnpack(UNPACK_STATE *pState,
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource ||
+    if (!parseContext(pContext, pPdStruct) || !guardedSource ||
         pContext->listEntries.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -723,15 +719,10 @@ bool XInfogramesPak::initUnpack(UNPACK_STATE *pState,
     pState->pContext = pContext;
 
     const bool bFinalized =
-        guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+        validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

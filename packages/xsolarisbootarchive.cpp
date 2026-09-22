@@ -11,7 +11,6 @@
 #include "xsolarisbootarchive.h"
 
 #include <QFileInfo>
-#include <QPointer>
 #include <QtEndian>
 
 #include <cstring>
@@ -64,11 +63,11 @@ QString XSolarisBootArchive::buildMemberName()
     // container's own name with its last extension removed ("mod.cpio.z" ->
     // "mod.cpio"), which is completeBaseName(); a name with no extension is
     // passed through unchanged.
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     QString sResult;
     if (guardedSource) {
         const QString sDeviceName =
-            XBinary::getDeviceFileName(guardedSource.data());
+            XBinary::getDeviceFileName(guardedSource);
         if (!sDeviceName.isEmpty()) {
             sResult = QFileInfo(sDeviceName).completeBaseName();
         }
@@ -81,8 +80,7 @@ bool XSolarisBootArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XSolarisBootArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -96,7 +94,7 @@ bool XSolarisBootArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     const QByteArray baDescriptor =
         read_array_process(0, SOLARIS_BOOT_DESCRIPTOR_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource ||
+    if (!guardedSource ||
         (baDescriptor.size() != SOLARIS_BOOT_DESCRIPTOR_SIZE)) {
         return false;
     }
@@ -118,7 +116,7 @@ bool XSolarisBootArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     const QByteArray baGroupHeader =
         read_array_process(SOLARIS_BOOT_GROUP_OFFSET,
                            SOLARIS_BOOT_GROUP_FIXED_HEADER, pPdStruct);
-    if (!guardedThis || !guardedSource ||
+    if (!guardedSource ||
         (baGroupHeader.size() != SOLARIS_BOOT_GROUP_FIXED_HEADER)) {
         return false;
     }
@@ -155,7 +153,7 @@ bool XSolarisBootArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         read_array_process(SOLARIS_BOOT_GROUP_OFFSET +
                                SOLARIS_BOOT_GROUP_FIXED_HEADER,
                            nTableSize, pPdStruct);
-    if (!guardedThis || !guardedSource || (baTable.size() != nTableSize)) {
+    if (!guardedSource || (baTable.size() != nTableSize)) {
         return false;
     }
     const uchar *pTable = reinterpret_cast<const uchar *>(baTable.constData());
@@ -211,7 +209,7 @@ bool XSolarisBootArchive::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     context.nArchiveSize = SOLARIS_BOOT_GROUP_OFFSET + context.nGroupSize;
     context.sFileName = buildMemberName();
-    if (!guardedThis || !guardedSource) return false;
+    if (!guardedSource) return false;
 
     *pContext = context;
     return isPdStructNotCanceled(pPdStruct);
@@ -221,7 +219,7 @@ bool XSolarisBootArchive::isValid(PDSTRUCT *pPdStruct)
 {
     // Detection runs on a device the caller still owns, so the probe has to
     // leave the cursor exactly where it found it.
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -432,8 +430,7 @@ bool XSolarisBootArchive::initUnpack(
     UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties,
     PDSTRUCT *pPdStruct)
 {
-    QPointer<XSolarisBootArchive> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() ||
         m_bUnpackOperationInProgress) {
         return false;
@@ -442,7 +439,7 @@ bool XSolarisBootArchive::initUnpack(
         !ownsUnpackSource(pState)) {
         return false;
     }
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource ||
+    if (!finishUnpack(pState, nullptr) || !guardedSource ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -457,9 +454,9 @@ bool XSolarisBootArchive::initUnpack(
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis ||
+    if (!parseContext(pContext, pPdStruct) ||
         !guardedSource || pContext->listBlocks.isEmpty()) {
-        if (guardedThis) guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -478,16 +475,11 @@ bool XSolarisBootArchive::initUnpack(
     // Binding only stages the source; without this the listing still works
     // while extraction silently produces nothing.
     const bool bFinalized =
-        guardedThis->validateAndFinalizeUnpackSource(pState, pContext,
+        validateAndFinalizeUnpackSource(pState, pContext,
                                                      pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -500,9 +492,8 @@ XBinary::ARCHIVERECORD XSolarisBootArchive::infoCurrent(UNPACK_STATE *pState,
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress,
                                           &m_bNestedUnpackInfoAuthorized);
-    QPointer<XSolarisBootArchive> guardedThis(this);
     if (!operationGuard.isAllowed() || !pState || !pState->pContext ||
-        !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis ||
+        !isUnpackSourceCurrent(pState, pPdStruct) ||
         (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords) ||
         (pState->nNumberOfRecords != 1)) {
@@ -542,9 +533,8 @@ bool XSolarisBootArchive::moveToNext(UNPACK_STATE *pState,
                                      PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    QPointer<XSolarisBootArchive> guardedThis(this);
     if (!operationGuard.isAcquired() || !pState || !pState->pContext ||
-        !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis ||
+        !isUnpackSourceCurrent(pState, pPdStruct) ||
         (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;

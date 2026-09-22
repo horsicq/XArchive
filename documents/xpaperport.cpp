@@ -5,7 +5,6 @@
 
 #include "xpaperport.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <new>
@@ -46,13 +45,12 @@ XPaperPort::~XPaperPort()
 
 bool XPaperPort::readChunk(qint64 nOffset, qint64 *pnSize, quint16 *pnType, PDSTRUCT *pPdStruct)
 {
-    QPointer<XPaperPort> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || !pnSize || !pnType) return false;
     if (!paperportRangeWithin(guardedSource->size(), nOffset, PAPERPORT_CHUNK_HEADER_SIZE)) return false;
 
     const QByteArray baChunk = read_array_process(nOffset, PAPERPORT_CHUNK_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baChunk.size() != PAPERPORT_CHUNK_HEADER_SIZE)) return false;
+    if (!guardedSource || (baChunk.size() != PAPERPORT_CHUNK_HEADER_SIZE)) return false;
     const uchar *p = reinterpret_cast<const uchar *>(baChunk.constData());
     if ((p[0] != 'V') || (p[1] != 'Z')) return false;
     const qint32 nSize = qFromLittleEndian<qint32>(p + 2);
@@ -66,8 +64,7 @@ bool XPaperPort::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XPaperPort> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -75,7 +72,7 @@ bool XPaperPort::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nInputSize < PAPERPORT_FILE_HEADER_SIZE + PAPERPORT_CHUNK_HEADER_SIZE) return false;
 
     const QByteArray baHeader = read_array_process(0, PAPERPORT_FILE_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != PAPERPORT_FILE_HEADER_SIZE)) return false;
+    if (!guardedSource || (baHeader.size() != PAPERPORT_FILE_HEADER_SIZE)) return false;
     const uchar *pHeader = reinterpret_cast<const uchar *>(baHeader.constData());
 
     if ((pHeader[0] != 'V') || (pHeader[1] != 'i') || (pHeader[2] != 'G')) return false;
@@ -93,7 +90,7 @@ bool XPaperPort::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     const qint64 nRootBase = nRootOffset + PAPERPORT_CHUNK_HEADER_SIZE;
     if (!paperportRangeWithin(context.nInputSize, nRootBase, PAPERPORT_ROOT_PREFIX_SIZE)) return false;
     const QByteArray baRoot = read_array_process(nRootBase, PAPERPORT_ROOT_PREFIX_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baRoot.size() != PAPERPORT_ROOT_PREFIX_SIZE)) return false;
+    if (!guardedSource || (baRoot.size() != PAPERPORT_ROOT_PREFIX_SIZE)) return false;
     const uchar *pRoot = reinterpret_cast<const uchar *>(baRoot.constData());
     const qint32 nCount = static_cast<qint32>(qFromLittleEndian<quint16>(pRoot));
     if ((nCount < 1) || (nCount > PAPERPORT_MAX_PAGES)) return false;
@@ -107,7 +104,7 @@ bool XPaperPort::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (!isPdStructNotCanceled(pPdStruct)) return false;
         if (!paperportRangeWithin(context.nInputSize, nEntry, PAPERPORT_ROOT_ENTRY_SIZE)) return false;
         const QByteArray baEntry = read_array_process(nEntry, PAPERPORT_ROOT_ENTRY_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baEntry.size() != PAPERPORT_ROOT_ENTRY_SIZE)) return false;
+        if (!guardedSource || (baEntry.size() != PAPERPORT_ROOT_ENTRY_SIZE)) return false;
         const qint64 nItemOffset = static_cast<qint64>(qFromLittleEndian<qint32>(reinterpret_cast<const uchar *>(baEntry.constData()) + 4));
         nEntry += PAPERPORT_ROOT_ENTRY_SIZE;
 
@@ -119,7 +116,7 @@ bool XPaperPort::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         const qint64 nItemBase = nItemOffset + PAPERPORT_CHUNK_HEADER_SIZE;
         if (!paperportRangeWithin(context.nInputSize, nItemBase, PAPERPORT_ITEM_RECORD_SIZE)) return false;
         const QByteArray baItem = read_array_process(nItemBase, PAPERPORT_ITEM_RECORD_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baItem.size() != PAPERPORT_ITEM_RECORD_SIZE)) return false;
+        if (!guardedSource || (baItem.size() != PAPERPORT_ITEM_RECORD_SIZE)) return false;
         const qint64 nImageOffset = static_cast<qint64>(qFromLittleEndian<qint32>(reinterpret_cast<const uchar *>(baItem.constData()) + 34));
 
         qint64 nImageSize = 0;
@@ -132,13 +129,13 @@ bool XPaperPort::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         if (nImageSize < PAPERPORT_OBJECT_HEADER_SIZE) return false;
 
         const QByteArray baObjectHeader = read_array_process(nObjectOffset, PAPERPORT_OBJECT_HEADER_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baObjectHeader.size() != PAPERPORT_OBJECT_HEADER_SIZE)) return false;
+        if (!guardedSource || (baObjectHeader.size() != PAPERPORT_OBJECT_HEADER_SIZE)) return false;
         qint32 nTileHeaderOffset = 0;
         if (!XPaperPortDecoder::probeObjectHeader(baObjectHeader, &nTileHeaderOffset)) return false;
         if (static_cast<qint64>(nTileHeaderOffset) > nImageSize - PAPERPORT_TILE_HEADER_SIZE) return false;
 
         const QByteArray baTileHeader = read_array_process(nObjectOffset + nTileHeaderOffset, PAPERPORT_TILE_HEADER_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baTileHeader.size() != PAPERPORT_TILE_HEADER_SIZE)) return false;
+        if (!guardedSource || (baTileHeader.size() != PAPERPORT_TILE_HEADER_SIZE)) return false;
         XPaperPortDecoder::IMAGEINFO info = {};
         if (!XPaperPortDecoder::probeGeometry(baObjectHeader, baTileHeader, &info)) return false;
 
@@ -157,12 +154,12 @@ bool XPaperPort::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
     context.nArchiveSize = context.nInputSize;
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XPaperPort::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -329,11 +326,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XPaperPort::getDefaultUnpackProperties()
 
 bool XPaperPort::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XPaperPort> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -343,8 +339,8 @@ bool XPaperPort::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVaria
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -358,15 +354,10 @@ bool XPaperPort::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVaria
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

@@ -21,7 +21,6 @@
 #include "xtar_zstd.h"
 #include "Algos/xzstddecoder.h"
 
-#include <QPointer>
 
 #include <cstring>
 #include <limits>
@@ -132,7 +131,7 @@ bool XTAR_ZSTD::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 
 bool XTAR_ZSTD::isValidPrefix(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedDevice(pDevice);
+    QIODevice *guardedDevice = pDevice;
     if (!guardedDevice || guardedDevice->isSequential() || !guardedDevice->isOpen() || !guardedDevice->isReadable() || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -240,27 +239,25 @@ XBinary *XTAR_ZSTD::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nMod
 
 bool XTAR_ZSTD::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XTAR_ZSTD> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = guardedThis->XTARCOMPRESSED::handleInternalInfo(pPdStruct);
-        if (!guardedThis || !bResult) return false;
-        XTARCOMPRESSED::INTERNAL_INFO *pInfo = static_cast<XTARCOMPRESSED::INTERNAL_INFO *>(guardedThis->XTARCOMPRESSED::getInternalInfo(pPdStruct));
-        if (!guardedThis || !pInfo) return false;
-        static_cast<XTARCOMPRESSED::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
+        bResult = XTARCOMPRESSED::handleInternalInfo(pPdStruct);
+        if (!bResult) return false;
+        XTARCOMPRESSED::INTERNAL_INFO *pInfo = static_cast<XTARCOMPRESSED::INTERNAL_INFO *>(XTARCOMPRESSED::getInternalInfo(pPdStruct));
+        if (!pInfo) return false;
+        static_cast<XTARCOMPRESSED::INTERNAL_INFO &>(m_internalInfo) = *pInfo;
     }
 
-    return guardedThis && bResult;
+    return bResult;
 }
 
 void *XTAR_ZSTD::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XTAR_ZSTD> guardedThis(this);
-    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
-    if (!guardedThis || !bHandled) return nullptr;
+    const bool bHandled = handleInternalInfo(pPdStruct);
+    if (!bHandled) return nullptr;
 
-    return &guardedThis->m_internalInfo;
+    return &m_internalInfo;
 }
 
 void XTAR_ZSTD::setInternalInfo(void *pInternalInfo)

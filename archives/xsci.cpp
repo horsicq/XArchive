@@ -5,7 +5,6 @@
 
 #include "xsci.h"
 
-#include <QPointer>
 #include <QStringList>
 #include <QtEndian>
 
@@ -59,8 +58,7 @@ bool XSCI::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XSCI> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource || guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
@@ -68,7 +66,7 @@ bool XSCI::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nInputSize < SCI_HEADER_SIZE + SCI_RECORD_SIZE) return false;
 
     const QByteArray baHeader = read_array_process(0, SCI_HEADER_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baHeader.size() != SCI_HEADER_SIZE)) return false;
+    if (!guardedSource || (baHeader.size() != SCI_HEADER_SIZE)) return false;
     // Exactly the fields the reference detector pins; the banner text between
     // them differs between the 1.00 and 2.00 writers.
     const bool bTag = (memcmp(baHeader.constData(), "SCI1", 4) == 0) || (memcmp(baHeader.constData(), "SCI2", 4) == 0);
@@ -86,7 +84,7 @@ bool XSCI::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
             break;
         }
         const QByteArray baRecord = read_array_process(nOffset, SCI_RECORD_SIZE, pPdStruct);
-        if (!guardedThis || !guardedSource || (baRecord.size() != SCI_RECORD_SIZE)) return false;
+        if (!guardedSource || (baRecord.size() != SCI_RECORD_SIZE)) return false;
 
         MEMBER member = {};
         member.nRecordOffset = nOffset;
@@ -116,12 +114,12 @@ bool XSCI::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nArchiveSize > context.nInputSize) context.nArchiveSize = context.nInputSize;
 
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return guardedSource && isPdStructNotCanceled(pPdStruct);
 }
 
 bool XSCI::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
@@ -188,7 +186,7 @@ QString XSCI::getMIMEString()
 
 QString XSCI::getVersion()
 {
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!guardedSource) return QString();
     const QByteArray baTag = read_array_process(0, 6, nullptr);
     if (baTag.size() != 6) return QString();
@@ -286,11 +284,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XSCI::getDefaultUnpackProperties()
 
 bool XSCI::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XSCI> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
+    QIODevice *guardedSource = getDevice();
     if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -300,8 +297,8 @@ bool XSCI::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || !guardedSource || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -315,15 +312,10 @@ bool XSCI::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!guardedSource || !bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

@@ -26,7 +26,7 @@ public:
 
     struct KWAJSFX_UNPACK_CONTEXT {
         QList<KWAJSFX_ENTRY> listEntries;
-        QPointer<QIODevice> pOuterSourceDevice;
+        QIODevice *pOuterSourceDevice = nullptr;
         quint64 nOwnerDeviceGeneration;
         UNPACK_STATE *pOwnerState;
         SubDevice *pSubDevice;
@@ -52,12 +52,6 @@ public:
     bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
     bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
-
-protected:
-    bool isDeviceReplacementAllowed() const override
-    {
-        return XSFX::isDeviceReplacementAllowed() && (!m_pKwajUnpackOperationState || !*m_pKwajUnpackOperationState) && m_setKwajUnpackContexts.isEmpty();
-    }
 
 private:
     bool _buildResourceEntries(QList<KWAJSFX_ENTRY> *pList, PDSTRUCT *pPdStruct);

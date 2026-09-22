@@ -116,7 +116,6 @@ qint64 XACE::_blockEnd(const BLOCK_INFO &info)
 
 bool XACE::_readBlock(qint64 nOffset, BLOCK_INFO *pInfo, PDSTRUCT *pPdStruct)
 {
-    QPointer<XACE> guardedThis(this);
     if (!pInfo || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -124,7 +123,6 @@ bool XACE::_readBlock(qint64 nOffset, BLOCK_INFO *pInfo, PDSTRUCT *pPdStruct)
     *pInfo = BLOCK_INFO();
 
     const qint64 nFileSize = getSize();
-    if (!guardedThis) return false;
 
     if ((nOffset < 0) || (nOffset > nFileSize) || ((nFileSize - nOffset) < 4)) {
         return false;
@@ -133,9 +131,7 @@ bool XACE::_readBlock(qint64 nOffset, BLOCK_INFO *pInfo, PDSTRUCT *pPdStruct)
     BLOCK_INFO info = {};
     info.nOffset = nOffset;
     info.nHeadCRC = read_uint16(nOffset, false);
-    if (!guardedThis) return false;
     info.nHeadSize = read_uint16(nOffset + 2, false);
-    if (!guardedThis) return false;
 
     // HEAD_SIZE covers bytes starting at HEAD_TYPE.  A generic header contains
     // at least HEAD_TYPE and HEAD_FLAGS (three bytes).
@@ -146,16 +142,13 @@ bool XACE::_readBlock(qint64 nOffset, BLOCK_INFO *pInfo, PDSTRUCT *pPdStruct)
     info.nHeaderSize = 4 + info.nHeadSize;
     info.nDataOffset = nOffset + info.nHeaderSize;
     info.nHeadType = read_uint8(nOffset + 4);
-    if (!guardedThis) return false;
     info.nHeadFlags = read_uint16(nOffset + 5, false);
-    if (!guardedThis) return false;
 
     if ((info.nHeadType != HEADTYPE_ARCHIVE) && (info.nHeadType != HEADTYPE_FILE) && (info.nHeadType != HEADTYPE_RECOVERY)) {
         return false;
     }
 
     QByteArray baHeader = read_array(nOffset + 4, info.nHeadSize);
-    if (!guardedThis) return false;
 
     if (baHeader.size() != info.nHeadSize) {
         return false;
@@ -173,7 +166,6 @@ bool XACE::_readBlock(qint64 nOffset, BLOCK_INFO *pInfo, PDSTRUCT *pPdStruct)
         }
 
         info.nAddSize = read_uint32(nOffset + 7, false);
-        if (!guardedThis) return false;
     }
 
     if (info.nAddSize > static_cast<quint64>(nFileSize - info.nDataOffset)) {
@@ -187,30 +179,20 @@ bool XACE::_readBlock(qint64 nOffset, BLOCK_INFO *pInfo, PDSTRUCT *pPdStruct)
         }
 
         QByteArray baMagic = read_array(nOffset + MAGIC_OFFSET, 7);
-        if (!guardedThis) return false;
 
         if ((baMagic.size() != 7) || (std::memcmp(baMagic.constData(), MAGIC, 7) != 0)) {
             return false;
         }
 
         info.nVersionExtract = read_uint8(nOffset + 14);
-        if (!guardedThis) return false;
         info.nVersionCreated = read_uint8(nOffset + 15);
-        if (!guardedThis) return false;
         info.nHostCreated = read_uint8(nOffset + 16);
-        if (!guardedThis) return false;
         info.nVolumeNumber = read_uint8(nOffset + 17);
-        if (!guardedThis) return false;
         info.nTimeCreated = read_uint32(nOffset + 18, false);
-        if (!guardedThis) return false;
         info.nMainReserved1 = read_uint16(nOffset + 22, false);
-        if (!guardedThis) return false;
         info.nMainReserved2 = read_uint16(nOffset + 24, false);
-        if (!guardedThis) return false;
         info.nMainReserved = read_uint32(nOffset + 26, false);
-        if (!guardedThis) return false;
         info.nAVSize = read_uint8(nOffset + 30);
-        if (!guardedThis) return false;
         info.nAVOffset = nOffset + 31;
 
         if (((info.nHeadFlags & ARCHFLAG_AV) != 0) != (info.nAVSize != 0)) {
@@ -230,7 +212,6 @@ bool XACE::_readBlock(qint64 nOffset, BLOCK_INFO *pInfo, PDSTRUCT *pPdStruct)
 
             const qint64 nCommentSizeOffset = nOffset + 4 + nVariableEnd;
             info.nCommentSize = read_uint16(nCommentSizeOffset, false);
-            if (!guardedThis) return false;
             info.nCommentOffset = nCommentSizeOffset + 2;
 
             if ((info.nCommentSize > ACE1_MAX_COMMENT) || (info.nCommentSize > (info.nHeadSize - nVariableEnd - 2U))) {
@@ -243,25 +224,15 @@ bool XACE::_readBlock(qint64 nOffset, BLOCK_INFO *pInfo, PDSTRUCT *pPdStruct)
         }
 
         info.nPackedSize = read_uint32(nOffset + 7, false);
-        if (!guardedThis) return false;
         info.nUnpackedSize = read_uint32(nOffset + 11, false);
-        if (!guardedThis) return false;
         info.nFileTime = read_uint32(nOffset + 15, false);
-        if (!guardedThis) return false;
         info.nAttributes = read_uint32(nOffset + 19, false);
-        if (!guardedThis) return false;
         info.nFileCRC = read_uint32(nOffset + 23, false);
-        if (!guardedThis) return false;
         info.nTechType = read_uint8(nOffset + 27);
-        if (!guardedThis) return false;
         info.nTechQuality = read_uint8(nOffset + 28);
-        if (!guardedThis) return false;
         info.nTechParameter = read_uint16(nOffset + 29, false);
-        if (!guardedThis) return false;
         info.nReserved = read_uint16(nOffset + 31, false);
-        if (!guardedThis) return false;
         info.nFileNameSize = read_uint16(nOffset + 33, false);
-        if (!guardedThis) return false;
         info.nFileNameOffset = nOffset + 35;
 
         if ((info.nFileNameSize > ACE1_MAX_FILENAME) || (info.nFileNameSize > (info.nHeadSize - ACE1_FILE_MIN_HEAD_SIZE))) {
@@ -269,7 +240,6 @@ bool XACE::_readBlock(qint64 nOffset, BLOCK_INFO *pInfo, PDSTRUCT *pPdStruct)
         }
 
         QByteArray baFileName = read_array(info.nFileNameOffset, info.nFileNameSize);
-        if (!guardedThis) return false;
 
         if ((baFileName.size() != info.nFileNameSize) || baFileName.contains('\0')) {
             return false;
@@ -286,7 +256,6 @@ bool XACE::_readBlock(qint64 nOffset, BLOCK_INFO *pInfo, PDSTRUCT *pPdStruct)
 
             const qint64 nCommentSizeOffset = nOffset + 4 + nVariableEnd;
             info.nCommentSize = read_uint16(nCommentSizeOffset, false);
-            if (!guardedThis) return false;
             info.nCommentOffset = nCommentSizeOffset + 2;
 
             if ((info.nCommentSize > ACE1_MAX_COMMENT) || (info.nCommentSize > (info.nHeadSize - nVariableEnd - 2U))) {
@@ -302,20 +271,15 @@ bool XACE::_readBlock(qint64 nOffset, BLOCK_INFO *pInfo, PDSTRUCT *pPdStruct)
         }
 
         QByteArray baMagic = read_array(nOffset + 11, 7);
-        if (!guardedThis) return false;
 
         if ((baMagic.size() != 7) || (std::memcmp(baMagic.constData(), MAGIC, 7) != 0)) {
             return false;
         }
 
         info.nRecoveryRelativeStart = read_uint32(nOffset + 18, false);
-        if (!guardedThis) return false;
         info.nRecoveryBlockCount = read_uint32(nOffset + 22, false);
-        if (!guardedThis) return false;
         info.nRecoveryClusterSize = read_uint32(nOffset + 26, false);
-        if (!guardedThis) return false;
         info.nRecoveryCRC = read_uint16(nOffset + 30, false);
-        if (!guardedThis) return false;
 
         const quint64 nExpectedRecoverySize = static_cast<quint64>(info.nRecoveryBlockCount) * 2U + static_cast<quint64>(info.nRecoveryClusterSize);
         if (nExpectedRecoverySize != info.nAddSize) {
@@ -346,7 +310,7 @@ bool XACE::_readBlock(qint64 nOffset, BLOCK_INFO *pInfo, PDSTRUCT *pPdStruct)
             const qint32 nChunk = static_cast<qint32>(qMin(nCRCRemaining, (qint64)baCRCBuffer.size()));
             if (nChunk <= 0) return false;
             const qint64 nRead = read_array(nCRCOffset, baCRCBuffer.data(), nChunk);
-            if (!guardedThis || (nRead != nChunk)) {
+            if ((nRead != nChunk)) {
                 return false;
             }
             nRecoveryCRC = XBinary::_getCRC32(baCRCBuffer.constData(), nChunk, nRecoveryCRC, XBinary::_getCRC32Table_EDB88320());
@@ -374,7 +338,6 @@ bool XACE::_isRawAce1Main(const BLOCK_INFO &info) const
 
 bool XACE::_collectBlocks(QList<BLOCK_INFO> *pListBlocks, PDSTRUCT *pPdStruct)
 {
-    QPointer<XACE> guardedThis(this);
     if (!pListBlocks) {
         return false;
     }
@@ -384,7 +347,7 @@ bool XACE::_collectBlocks(QList<BLOCK_INFO> *pListBlocks, PDSTRUCT *pPdStruct)
     BLOCK_INFO mainInfo = {};
 
     const bool bMainRead = _readBlock(0, &mainInfo, pPdStruct);
-    if (!guardedThis || !bMainRead || !_isRawAce1Main(mainInfo)) {
+    if (!bMainRead || !_isRawAce1Main(mainInfo)) {
         return false;
     }
 
@@ -392,7 +355,6 @@ bool XACE::_collectBlocks(QList<BLOCK_INFO> *pListBlocks, PDSTRUCT *pPdStruct)
 
     qint64 nOffset = _blockEnd(mainInfo);
     const qint64 nFileSize = getSize();
-    if (!guardedThis) return false;
     bool bHasRecoveryRecord = false;
 
     if (!(mainInfo.nHeadFlags & ARCHFLAG_MULTIVOLUME) && (mainInfo.nVolumeNumber != 0)) {
@@ -414,7 +376,7 @@ bool XACE::_collectBlocks(QList<BLOCK_INFO> *pListBlocks, PDSTRUCT *pPdStruct)
         BLOCK_INFO info = {};
 
         const bool bBlockRead = _readBlock(nOffset, &info, pPdStruct);
-        if (!guardedThis || !bBlockRead || (info.nHeadType == HEADTYPE_ARCHIVE)) {
+        if (!bBlockRead || (info.nHeadType == HEADTYPE_ARCHIVE)) {
             pListBlocks->clear();
             return false;
         }
@@ -553,7 +515,6 @@ QMap<XBinary::UNPACK_PROP, QVariant> XACE::getDefaultUnpackProperties()
 
 bool XACE::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XACE> guardedThis(this);
     if (m_bUnpackOperationInProgress) {
         return false;
     }
@@ -580,14 +541,12 @@ bool XACE::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     pState->pContext = nullptr;
     *pState = UNPACK_STATE();
     delete pOldContext;
-    if (!guardedThis) return false;
     const bool bBound = bindUnpackSource(pState, pPdStruct);
-    if (!guardedThis || !bBound) return false;
+    if (!bBound) return false;
 
     pState->mapUnpackProperties = mapProperties;
     pState->nCurrentOffset = 0;
     pState->nTotalSize = getSize();
-    if (!guardedThis) return false;
     pState->nCurrentIndex = 0;
     pState->nNumberOfRecords = 0;
 
@@ -600,7 +559,6 @@ bool XACE::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     QList<BLOCK_INFO> listBlocks;
 
     const bool bCollected = _collectBlocks(&listBlocks, pPdStruct);
-    if (!guardedThis) return false;
     if (!bCollected || listBlocks.isEmpty()) {
         releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
@@ -639,7 +597,6 @@ bool XACE::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     }
 
     if (!validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
-        if (!guardedThis) return false;
         pState->pContext = nullptr;
         releaseUnpackSource(pState);
         delete pContext;
@@ -652,7 +609,6 @@ bool XACE::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
 
 XBinary::ARCHIVERECORD XACE::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XACE> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
 
@@ -662,7 +618,7 @@ XBinary::ARCHIVERECORD XACE::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         return result;
     }
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent) return result;
+    if (!bSourceCurrent) return result;
 
     UNPACK_CONTEXT *pContext = static_cast<UNPACK_CONTEXT *>(pState->pContext);
 
@@ -765,7 +721,6 @@ XBinary::ARCHIVERECORD XACE::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
 bool XACE::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XACE> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
 
@@ -773,7 +728,7 @@ bool XACE::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         return false;
     }
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent) return false;
+    if (!bSourceCurrent) return false;
 
     UNPACK_CONTEXT *pContext = static_cast<UNPACK_CONTEXT *>(pState->pContext);
 
@@ -795,7 +750,6 @@ bool XACE::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 bool XACE::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    QPointer<XACE> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
 
@@ -818,7 +772,6 @@ bool XACE::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     pState->mapArchiveProperties.clear();
 
     delete pContext;
-    Q_UNUSED(guardedThis)
     return true;
 }
 
@@ -1182,27 +1135,25 @@ XBinary *XACE::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
 
 bool XACE::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XACE> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
-        if (!guardedThis || !bResult) return false;
-        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(guardedThis->XArchive::getInternalInfo(pPdStruct));
-        if (!guardedThis || !pInfo) return false;
-        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        if (!bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        if (!pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) = *pInfo;
     }
 
-    return guardedThis && bResult;
+    return bResult;
 }
 
 void *XACE::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    QPointer<XACE> guardedThis(this);
-    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
-    if (!guardedThis || !bHandled) return nullptr;
+    const bool bHandled = handleInternalInfo(pPdStruct);
+    if (!bHandled) return nullptr;
 
-    return &guardedThis->m_internalInfo;
+    return &m_internalInfo;
 }
 
 void XACE::setInternalInfo(void *pInternalInfo)

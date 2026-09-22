@@ -197,11 +197,10 @@ qint64 XARX::getFileFormatSize(PDSTRUCT *pPdStruct)
 
 bool XARX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XARX> guardedArchive(this);
-    if (!pState || m_bUnpackOperationInProgress || ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedArchive->ownsUnpackSource(pState))) {
+    if (!pState || m_bUnpackOperationInProgress || ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState))) {
         return false;
     }
-    if (!guardedArchive->finishUnpack(pState, nullptr) || !guardedArchive) return false;
+    if (!finishUnpack(pState, nullptr)) return false;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
 
@@ -213,17 +212,16 @@ bool XARX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     // authenticates it through isUnpackSourceCurrent/getBoundUnpackSourceSnapshot
     // and refuses an unbound state, so listing would work while extraction
     // silently failed.
-    const bool bBound = guardedArchive->bindUnpackSource(pState, pPdStruct);
-    if (!guardedArchive || !bBound) return false;
+    const bool bBound = bindUnpackSource(pState, pPdStruct);
+    if (!bBound) return false;
 
-    const QList<MEMBER> listMembers = guardedArchive->_collectMembers(-1, pPdStruct);
-    if (!guardedArchive) return false;
+    const QList<MEMBER> listMembers = _collectMembers(-1, pPdStruct);
 
     pState->mapUnpackProperties = mapProperties;
     pState->nCurrentOffset = 0;
     pState->nCurrentIndex = 0;
     pState->nNumberOfRecords = listMembers.size();
-    pState->nTotalSize = guardedArchive->getSize();
+    pState->nTotalSize = getSize();
     pState->pContext = nullptr;
 
     bool bResult = false;
@@ -232,15 +230,11 @@ bool XARX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     // and getBoundUnpackSourceSnapshot both authenticate against the finalized
     // token, so skipping this leaves every later record check failing.
     if ((pState->nNumberOfRecords > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-        bResult = guardedArchive->validateAndFinalizeUnpackSource(pState, pPdStruct);
-        if (!guardedArchive) {
-            *pState = UNPACK_STATE();
-            return false;
-        }
+        bResult = validateAndFinalizeUnpackSource(pState, pPdStruct);
     }
 
     if (!bResult) {
-        guardedArchive->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
     }
 

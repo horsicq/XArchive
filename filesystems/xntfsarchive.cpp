@@ -3,7 +3,6 @@
  */
 #include "xntfsarchive.h"
 #include <QMap>
-#include <QPointer>
 #include <QSet>
 #include <QTemporaryFile>
 #include <QtEndian>
@@ -50,9 +49,9 @@ struct Entry { QString name; QString info; QString unsupported; bool folder; Str
 struct Plan { quint64 sourceSize = 0; QVector<Entry> entries; QString error; };
 struct Volume { quint64 offset; quint64 length; quint64 cluster; quint64 sector; quint64 recordSize; QString prefix; };
 struct Reader {
-    QPointer<XNTFSArchive> owner;
-    QPointer<QIODevice> source;
-    QPointer<QIODevice> identity;
+    XNTFSArchive *owner;
+    QIODevice *source;
+    QIODevice *identity;
     XBinary::PDSTRUCT *pd;
     quint64 size = 0;
     quint64 readBudget = kReadBudget;
@@ -65,13 +64,13 @@ struct Reader {
         qint64 n = source->size();
         if (active() && n >= 0) size = quint64(n);
     }
-    bool active() const { return owner && source && identity && owner->ntfsDataDevice() == source.data() && owner->getDevice() == identity.data() && XBinary::isPdStructNotCanceled(pd); }
+    bool active() const { return owner && source && identity && owner->ntfsDataDevice() == source && owner->getDevice() == identity && XBinary::isPdStructNotCanceled(pd); }
     bool retain(quint64 n) { if (n > keepBudget) return false; keepBudget -= n; return true; }
     QByteArray read(quint64 off, quint64 n, bool metadata = true) {
         if (!active() || !span(off, n, size) || n > 65536 || (metadata && n > readBudget)) return QByteArray();
         if (metadata) readBudget -= n;
         QByteArray out(int(n), 0);
-        qint64 count = XBinary::read_array_process(source.data(), qint64(off), out.data(), qint64(n), pd);
+        qint64 count = XBinary::read_array_process(source, qint64(off), out.data(), qint64(n), pd);
         return active() && count == qint64(n) ? out : QByteArray();
     }
 };
@@ -330,7 +329,7 @@ bool parse(Reader &r, Plan &p) {
     return found && r.active();
 }
 bool writeAll(Reader &r, QIODevice *output, const QByteArray &a) {
-    QPointer<QIODevice> guard(output);qint64 done = 0;
+    QIODevice *guard = output;qint64 done = 0;
     while (done < a.size() && r.active() && guard) {
         qint64 n = guard->write(a.constData() + done, a.size() - done);
         if (!guard || !r.active() || n <= 0 || n > a.size() - done) return false;
@@ -342,7 +341,7 @@ bool writeAll(Reader &r, QIODevice *output, const QByteArray &a) {
 
 XNTFSArchive::XNTFSArchive(QIODevice *device) : XArchive(device) {}
 XNTFSArchive::XNTFSArchive(QIODevice *identity, QIODevice *logical) : XArchive(identity), m_logicalDevice(logical), m_mapped(true) {}
-QIODevice *XNTFSArchive::ntfsDataDevice() { return m_mapped ? m_logicalDevice.data() : getDevice(); }
+QIODevice *XNTFSArchive::ntfsDataDevice() { return m_mapped ? m_logicalDevice : getDevice(); }
 XBinary *XNTFSArchive::createInstance(QIODevice *device, bool image, XADDR address) { Q_UNUSED(image) Q_UNUSED(address) return new XNTFSArchive(device); }
 bool XNTFSArchive::isValid(PDSTRUCT *pd) { Reader r(this, pd);Plan p;return parse(r, p); }
 XBinary::FT XNTFSArchive::getFileType() { return FT_NTFS; }
@@ -352,13 +351,12 @@ QString XNTFSArchive::getVersion() { return QString(); }
 QList<XBinary::PM_INFO> XNTFSArchive::unpackImplemented() { PM_INFO p = {};p.hm[0] = HANDLE_METHOD_ARCHIVE_STREAM;return {p}; }
 
 bool XNTFSArchive::initUnpack(UNPACK_STATE *state, const QMap<UNPACK_PROP, QVariant> &properties, PDSTRUCT *pd) {
-    QPointer<XNTFSArchive> self(this);
-    if (!state || m_bUnpackOperationInProgress || !finishUnpack(state, nullptr) || !self) return false;
+    if (!state || m_bUnpackOperationInProgress || !finishUnpack(state, nullptr)) return false;
     UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);
     if (!guard.isAcquired() || !isPdStructNotCanceled(pd)) return false;
-    bool bound = bindUnpackSource(state, pd);if (!self || !bound) return false;
+    bool bound = bindUnpackSource(state, pd);if (!bound) return false;
     std::unique_ptr<Plan> plan(new (std::nothrow) Plan);Reader reader(this, pd);
-    bool parsed = plan && parse(reader, *plan);if (!self) return false;
+    bool parsed = plan && parse(reader, *plan);
     if (!parsed) { QString error = plan ? plan->error : QString();releaseUnpackSource(state);*state = UNPACK_STATE();if (!error.isEmpty()) setPdStructErrorString(pd, error);return false; }
     state->pContext = plan.get();state->mapUnpackProperties = properties;state->nTotalSize = qint64(plan->sourceSize);
     state->nNumberOfRecords = int(plan->entries.size());state->nCurrentIndex = 0;state->nCurrentOffset = 0;
@@ -366,13 +364,13 @@ bool XNTFSArchive::initUnpack(UNPACK_STATE *state, const QMap<UNPACK_PROP, QVari
         state->pContext = nullptr;releaseUnpackSource(state);*state = UNPACK_STATE();return false;
     }
     Plan *context = plan.release();
-    if (!validateAndFinalizeUnpackSource(state, context, pd)) { if (!self) return false;state->pContext = nullptr;releaseUnpackSource(state);delete context;*state = UNPACK_STATE();return false; }
+    if (!validateAndFinalizeUnpackSource(state, context, pd)) { state->pContext = nullptr;releaseUnpackSource(state);delete context;*state = UNPACK_STATE();return false; }
     return true;
 }
 XBinary::ARCHIVERECORD XNTFSArchive::infoCurrent(UNPACK_STATE *state, PDSTRUCT *pd) {
-    QPointer<XNTFSArchive> self(this);UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);ARCHIVERECORD record = {};
+    XNTFSArchive *self = this;UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);ARCHIVERECORD record = {};
     if (!guard.isAllowed() || !state || !state->pContext || state->nCurrentIndex < 0 || state->nCurrentIndex >= state->nNumberOfRecords) return record;
-    bool current = isUnpackSourceCurrent(state, pd);if (!self || !current) return record;
+    bool current = isUnpackSourceCurrent(state, pd);if (!current) return record;
     const Plan &plan = *static_cast<Plan *>(state->pContext);if (state->nNumberOfRecords != plan.entries.size()) return record;
     const Entry &entry = plan.entries.at(state->nCurrentIndex);
     record.mapProperties.insert(FPART_PROP_ORIGINALNAME, entry.name);record.mapProperties.insert(FPART_PROP_ISFOLDER, entry.folder);
@@ -381,10 +379,10 @@ XBinary::ARCHIVERECORD XNTFSArchive::infoCurrent(UNPACK_STATE *state, PDSTRUCT *
     if (!markArchiveStreamRecord(&record, state->nCurrentIndex)) return ARCHIVERECORD();return record;
 }
 bool XNTFSArchive::unpackCurrent(UNPACK_STATE *state, QIODevice *output, PDSTRUCT *pd) {
-    UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);QPointer<XNTFSArchive> self(this);QPointer<QIODevice> destination(output);
+    UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);QIODevice *destination = output;
     if (!guard.isAcquired() || !state || !state->pContext || state->nCurrentIndex < 0 || state->nCurrentIndex >= state->nNumberOfRecords) return false;
-    bool current = isUnpackSourceCurrent(state, pd);if (!self || !current || !destination || !isUnpackOutputSupported(destination.data())) return false;
-    if (!self || !destination) return false;bool alias = devicesAlias(getDevice(), destination.data());if (!self || !destination || alias) return false;
+    bool current = isUnpackSourceCurrent(state, pd);if (!current || !destination || !isUnpackOutputSupported(destination)) return false;
+    if (!destination) return false;bool alias = devicesAlias(getDevice(), destination);if (!destination || alias) return false;
     const Plan &plan = *static_cast<Plan *>(state->pContext);if (state->nNumberOfRecords != plan.entries.size()) return false;
     const Entry entry = plan.entries.at(state->nCurrentIndex);
     if (!entry.unsupported.isEmpty()) { setPdStructErrorString(pd, entry.unsupported);return false; }
@@ -398,15 +396,15 @@ bool XNTFSArchive::unpackCurrent(UNPACK_STATE *state, QIODevice *output, PDSTRUC
         QByteArray bytes;quint64 n = qMin(quint64(65536), entry.data.size - off);
         if (!readStream(reader, entry.data, off, n, bytes, false) || !writeAll(reader, &stage, bytes)) return false;off += n;
     }
-    if (!reader.active() || !self || !destination || stage.size() != qint64(entry.data.size) || !stage.seek(0)) return false;
-    current = isUnpackSourceCurrent(state, pd);if (!self || !current || !destination) return false;
-    bool published = publishUnpackOutput(&stage, destination.data(), state, pd);if (!self || !published) return false;
+    if (!reader.active() || !destination || stage.size() != qint64(entry.data.size) || !stage.seek(0)) return false;
+    current = isUnpackSourceCurrent(state, pd);if (!current || !destination) return false;
+    bool published = publishUnpackOutput(&stage, destination, state, pd);if (!published) return false;
     state->nCurrentOffset = qint64(entry.data.size);return true;
 }
 bool XNTFSArchive::moveToNext(UNPACK_STATE *state, PDSTRUCT *pd) {
-    QPointer<XNTFSArchive> self(this);UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);
+    XNTFSArchive *self = this;UNPACK_OPERATION_GUARD guard(&m_bUnpackOperationInProgress);
     if (!guard.isAcquired() || !state || !state->pContext || state->nCurrentIndex < 0 || state->nCurrentIndex >= state->nNumberOfRecords) return false;
-    bool current = isUnpackSourceCurrent(state, pd);if (!self || !current) return false;
+    bool current = isUnpackSourceCurrent(state, pd);if (!current) return false;
     ++state->nCurrentIndex;return state->nCurrentIndex < state->nNumberOfRecords;
 }
 bool XNTFSArchive::finishUnpack(UNPACK_STATE *state, PDSTRUCT *pd) {

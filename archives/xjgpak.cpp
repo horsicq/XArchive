@@ -5,7 +5,6 @@
 
 #include "xjgpak.h"
 
-#include <QPointer>
 #include <QtEndian>
 
 #include <cstring>
@@ -58,9 +57,8 @@ bool XJGPAK::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !isPdStructNotCanceled(pPdStruct)) return false;
 
-    QPointer<XJGPAK> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || guardedSource->isSequential()) return false;
+    QIODevice *guardedSource = getDevice();
+    if (guardedSource->isSequential()) return false;
 
     CONTEXT context = {};
     context.nInputSize = guardedSource->size();
@@ -68,7 +66,7 @@ bool XJGPAK::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     if (context.nInputSize < JGPAK_SIGNATURE_SIZE + 4 + 4 + 1 + 4) return false;
 
     const QByteArray baSignature = read_array_process(0, JGPAK_SIGNATURE_SIZE, pPdStruct);
-    if (!guardedThis || !guardedSource || (baSignature.size() != JGPAK_SIGNATURE_SIZE)) return false;
+    if ((baSignature.size() != JGPAK_SIGNATURE_SIZE)) return false;
     {
         static const char pSignature[JGPAK_SIGNATURE_SIZE] = {'J', 'G', 'P', 'A', 'K', '\x00', '\x01'};
         if (memcmp(baSignature.constData(), pSignature, JGPAK_SIGNATURE_SIZE) != 0) return false;
@@ -78,13 +76,13 @@ bool XJGPAK::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     QString sBanner[2];
     for (qint32 i = 0; i < 2; i++) {
         const QByteArray baLength = read_array_process(nOffset, 4, pPdStruct);
-        if (!guardedThis || !guardedSource || (baLength.size() != 4)) return false;
+        if ((baLength.size() != 4)) return false;
         const qint32 nLength = qFromLittleEndian<qint32>(reinterpret_cast<const uchar *>(baLength.constData()));
         if ((nLength < 0) || (nLength > JGPAK_MAX_STRING)) return false;
         nOffset += 4;
         if (!jgpakRangeWithin(context.nInputSize, nOffset, nLength)) return false;
         const QByteArray baText = read_array_process(nOffset, nLength, pPdStruct);
-        if (!guardedThis || !guardedSource || (baText.size() != nLength)) return false;
+        if ((baText.size() != nLength)) return false;
         // The banners are plain 8-bit text; a control byte here means the file
         // only happens to start with the signature.
         for (qint32 j = 0; j < baText.size(); j++) {
@@ -98,7 +96,7 @@ bool XJGPAK::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     context.sVersion = sBanner[1];
 
     const QByteArray baCount = read_array_process(nOffset, 5, pPdStruct);
-    if (!guardedThis || !guardedSource || (baCount.size() != 5)) return false;
+    if ((baCount.size() != 5)) return false;
     const qint32 nNumberOfMembers = qFromLittleEndian<qint32>(reinterpret_cast<const uchar *>(baCount.constData()) + 1);
     if ((nNumberOfMembers < 0) || (nNumberOfMembers > JGPAK_MAX_MEMBERS)) return false;
     nOffset += 5;
@@ -109,7 +107,7 @@ bool XJGPAK::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         context.nDirectoryEnd = nOffset;
         context.nArchiveSize = nOffset;
         *pContext = context;
-        return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+        return isPdStructNotCanceled(pPdStruct);
     }
 
     // Upper bound for the directory: 1 length byte + a 255-byte name + the
@@ -118,7 +116,7 @@ bool XJGPAK::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     const qint64 nDirectoryBudget = qMin<qint64>(context.nInputSize - nOffset, qint64(nNumberOfMembers) * (1 + 255 + JGPAK_TAIL_SIZE));
     if (nDirectoryBudget < qint64(nNumberOfMembers) * (1 + 1 + JGPAK_TAIL_SIZE)) return false;
     const QByteArray baDirectory = read_array_process(nOffset, nDirectoryBudget, pPdStruct);
-    if (!guardedThis || !guardedSource || (baDirectory.size() != nDirectoryBudget)) return false;
+    if ((baDirectory.size() != nDirectoryBudget)) return false;
 
     qint64 nCursor = 0;
     for (qint32 i = 0; i < nNumberOfMembers; i++) {
@@ -164,16 +162,16 @@ bool XJGPAK::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     context.nArchiveSize = nExpected;
 
     *pContext = context;
-    return guardedThis && guardedSource && isPdStructNotCanceled(pPdStruct);
+    return isPdStructNotCanceled(pPdStruct);
 }
 
 bool XJGPAK::isValid(PDSTRUCT *pPdStruct)
 {
-    QPointer<QIODevice> guardedSource(getDevice());
-    const qint64 nSavedPosition = guardedSource ? guardedSource->pos() : -1;
+    QIODevice *guardedSource = getDevice();
+    const qint64 nSavedPosition = guardedSource->pos();
     CONTEXT context = {};
     const bool bResult = parseContext(&context, pPdStruct);
-    if (guardedSource && (nSavedPosition >= 0)) {
+    if ((nSavedPosition >= 0)) {
         guardedSource->seek(nSavedPosition);
     }
     return bResult;
@@ -329,11 +327,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XJGPAK::getDefaultUnpackProperties()
 
 bool XJGPAK::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    QPointer<XJGPAK> guardedThis(this);
-    QPointer<QIODevice> guardedSource(getDevice());
-    if (!pState || !guardedSource || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
+    QIODevice *guardedSource = getDevice();
+    if (!pState || guardedSource->isSequential() || m_bUnpackOperationInProgress) return false;
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    if (!finishUnpack(pState, nullptr) || !guardedThis || !guardedSource || !isPdStructNotCanceled(pPdStruct)) return false;
+    if (!finishUnpack(pState, nullptr) || !isPdStructNotCanceled(pPdStruct)) return false;
 
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !bindUnpackSource(pState, pPdStruct)) return false;
@@ -343,8 +340,8 @@ bool XJGPAK::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> 
         releaseUnpackSource(pState);
         return false;
     }
-    if (!parseContext(pContext, pPdStruct) || !guardedThis || !guardedSource || pContext->listMembers.isEmpty()) {
-        if (guardedThis) releaseUnpackSource(pState);
+    if (!parseContext(pContext, pPdStruct) || pContext->listMembers.isEmpty()) {
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;
@@ -358,15 +355,10 @@ bool XJGPAK::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> 
     pState->nNumberOfRecords = pContext->listMembers.size();
     pState->pContext = pContext;
 
-    const bool bFinalized = guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
-    if (!guardedThis || !guardedSource || !bFinalized) {
-        if (!guardedThis) {
-            delete pContext;
-            *pState = UNPACK_STATE();
-            return false;
-        }
+    const bool bFinalized = validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
+    if (!bFinalized) {
         pState->pContext = nullptr;
-        guardedThis->releaseUnpackSource(pState);
+        releaseUnpackSource(pState);
         delete pContext;
         *pState = UNPACK_STATE();
         return false;

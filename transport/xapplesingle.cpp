@@ -52,13 +52,12 @@ XBinary *XAppleSingle::createInstance(QIODevice *pDevice, bool bIsImage,
 bool XAppleSingle::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
                               PDSTRUCT *pPdStruct)
 {
-    QPointer<XAppleSingle> guardedThis(this);
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || (nTotalSize < 38) ||
+    if ((nTotalSize < 38) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
     const QByteArray baHeader = read_array_process(0, 26, pPdStruct);
-    if (!guardedThis || (baHeader.size() != 26)) return false;
+    if ((baHeader.size() != 26)) return false;
     const uchar *pHeader =
         reinterpret_cast<const uchar *>(baHeader.constData());
     const quint32 nMagic = qFromBigEndian<quint32>(pHeader);
@@ -75,7 +74,7 @@ bool XAppleSingle::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
     if (!rangeWithin(nTotalSize, 26, nDirectorySize)) return false;
     const QByteArray baDirectory =
         read_array_process(26, nDirectorySize, pPdStruct);
-    if (!guardedThis || (baDirectory.size() != nDirectorySize)) return false;
+    if ((baDirectory.size() != nDirectorySize)) return false;
 
     QSet<QString> stUsedFiles;
     QSet<QString> stUsedDirectories;
