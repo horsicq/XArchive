@@ -11,13 +11,21 @@
 namespace {
 const qint32 MaxBlocks = 100000;
 const qint32 MaxEmptyHeaders = 1024;
-quint32 le32(const char *p) { return qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(p)); }
-bool within(qint64 total, qint64 pos, qint64 size) { return pos >= 0 && size >= 0 && pos <= total && size <= total - pos; }
+quint32 le32(const char *p)
+{
+    return qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(p));
+}
+bool within(qint64 total, qint64 pos, qint64 size)
+{
+    return pos >= 0 && size >= 0 && pos <= total && size <= total - pos;
+}
 
 class RzipStreams final {
 public:
     RzipStreams(const QByteArray &data, qint64 start, qint64 memoryLimit, XBinary::PDSTRUCT *progress)
-        : m_data(data), m_start(start), m_memoryLimit(memoryLimit), m_progress(progress) {}
+        : m_data(data), m_start(start), m_memoryLimit(memoryLimit), m_progress(progress)
+    {
+    }
     bool open()
     {
         // rzip 2.0 could leave an empty first header when closing the previous
@@ -56,11 +64,12 @@ public:
     }
     bool finish(qint64 *end, qint32 *blocks) const
     {
-        for (const Stream &s : m_streams) if (s.next || s.position != s.buffer.size()) return false;
+        for (const Stream &s : m_streams)
+            if (s.next || s.position != s.buffer.size()) return false;
         // Every physical header/body must be visited exactly once. Linked stream
         // offsets may interleave, but they cannot overlap or hide a hole/overlay.
         qint64 expected = m_start + 26;
-        for (QMap<qint64,qint64>::const_iterator i = m_extents.cbegin(); i != m_extents.cend(); ++i) {
+        for (QMap<qint64, qint64>::const_iterator i = m_extents.cbegin(); i != m_extents.cend(); ++i) {
             if (i.key() != expected) return false;
             expected = i.value();
         }
@@ -68,8 +77,13 @@ public:
         *blocks = m_extents.size();
         return XBinary::isPdStructNotCanceled(m_progress);
     }
+
 private:
-    struct Stream { quint32 next = 0; QByteArray buffer; qint64 position = 0; };
+    struct Stream {
+        quint32 next = 0;
+        QByteArray buffer;
+        qint64 position = 0;
+    };
     bool load(int stream)
     {
         Stream &s = m_streams[stream];
@@ -80,11 +94,11 @@ private:
         const quint8 type = quint8(p[0]);
         const qint64 packed = le32(p + 1), raw = le32(p + 5);
         const quint32 next = le32(p + 9);
-        if ((type != 3 && type != 4) || packed <= 0 || raw <= 0 || packed > XRzipDecoder::MaxBlock || raw > m_memoryLimit ||
-            !within(m_data.size(), pos + 13, packed) || (type == 3 && packed != raw) ||
-            (next && qint64(next) < pos + 13 + packed - m_start)) return false;
+        if ((type != 3 && type != 4) || packed <= 0 || raw <= 0 || packed > XRzipDecoder::MaxBlock || raw > m_memoryLimit || !within(m_data.size(), pos + 13, packed) ||
+            (type == 3 && packed != raw) || (next && qint64(next) < pos + 13 + packed - m_start))
+            return false;
         const qint64 end = pos + 13 + packed;
-        const QMap<qint64,qint64>::iterator after = m_extents.lowerBound(pos);
+        const QMap<qint64, qint64>::iterator after = m_extents.lowerBound(pos);
         if (after != m_extents.end() && after.key() < end) return false;
         if (after != m_extents.begin() && std::prev(after).value() > pos) return false;
         QByteArray decoded;
@@ -101,8 +115,7 @@ private:
             state.nProcessedLimit = -1;
             state.mapUnpackProperties.insert(XBinary::UNPACK_PROP_MAX_OUTPUT_SIZE, raw);
             state.mapUnpackProperties.insert(XBinary::UNPACK_PROP_MAX_MEMORY_OUTPUT_SIZE, raw);
-            if (!XBZIP2Decoder::decompress(&state, m_progress) || state.nCountInput != packed || state.nCountOutput != raw || decoded.size() != raw)
-                return false;
+            if (!XBZIP2Decoder::decompress(&state, m_progress) || state.nCountInput != packed || state.nCountOutput != raw || decoded.size() != raw) return false;
         }
         s.buffer = std::move(decoded);
         s.position = 0;
@@ -115,9 +128,9 @@ private:
     qint64 m_memoryLimit;
     XBinary::PDSTRUCT *m_progress;
     Stream m_streams[2];
-    QMap<qint64,qint64> m_extents;
+    QMap<qint64, qint64> m_extents;
 };
-}
+}  // namespace
 
 bool XRzipDecoder::parseHeader(const QByteArray &data, HEADER *header)
 {
@@ -125,28 +138,32 @@ bool XRzipDecoder::parseHeader(const QByteArray &data, HEADER *header)
     const uchar *p = reinterpret_cast<const uchar *>(data.constData());
     // Recovered framing is corroborated by the original rzip 2.1 writer.
     if (p[4] != 2 || p[5] > 1) return false;
-    for (int i = 14; i < 24; ++i) if (p[i]) return false;
+    for (int i = 14; i < 24; ++i)
+        if (p[i]) return false;
     const quint64 raw = qFromBigEndian<quint32>(p + 6) | (quint64(qFromBigEndian<quint32>(p + 10)) << 32);
     if (raw > quint64(MaxOutput)) return false;
-    header->major = p[4]; header->minor = p[5]; header->rawSize = qint64(raw);
+    header->major = p[4];
+    header->minor = p[5];
+    header->rawSize = qint64(raw);
     return true;
 }
 
 bool XRzipDecoder::decode(const QByteArray &data, XBinary::DATAPROCESS_STATE *writer, RESULT *result, XBinary::PDSTRUCT *progress)
 {
     HEADER header;
-    if (!writer || !result || data.size() > MaxInput || !parseHeader(data, &header) || !writer->pDeviceOutput ||
-        writer->nProcessedOffset != 0 || writer->nProcessedLimit != -1 || !XBinary::isPdStructNotCanceled(progress)) return false;
+    if (!writer || !result || data.size() > MaxInput || !parseHeader(data, &header) || !writer->pDeviceOutput || writer->nProcessedOffset != 0 ||
+        writer->nProcessedLimit != -1 || !XBinary::isPdStructNotCanceled(progress))
+        return false;
     *result = RESULT();
     QIODevice *history = writer->pDeviceOutput;
-    if (!history->isOpen() || !history->isReadable() || !history->isWritable() || history->isSequential() || history->pos() != 0 || history->size() != 0)
-        return false;
+    if (!history->isOpen() || !history->isReadable() || !history->isWritable() || history->isSequential() || history->pos() != 0 || history->size() != 0) return false;
     XBinary::OUTPUT_POLICY policy = {};
-    if (!XBinary::resolveUnpackOutputPolicy(writer->mapUnpackProperties, &policy) ||
-        (policy.nMaxEntryOutputSize >= 0 && header.rawSize > policy.nMaxEntryOutputSize)) return false;
+    if (!XBinary::resolveUnpackOutputPolicy(writer->mapUnpackProperties, &policy) || (policy.nMaxEntryOutputSize >= 0 && header.rawSize > policy.nMaxEntryOutputSize))
+        return false;
     qint64 memoryLimit = MaxBlock;
     if (policy.nMaxMemoryOutputSize >= 0) memoryLimit = qMin(memoryLimit, policy.nMaxMemoryOutputSize);
-    writer->nCountInput = 0; writer->nCountOutput = 0;
+    writer->nCountInput = 0;
+    writer->nCountOutput = 0;
     qint64 physical = 24;
     char scratch[65535];
     try {
@@ -189,9 +206,11 @@ bool XRzipDecoder::decode(const QByteArray &data, XBinary::DATAPROCESS_STATE *wr
             ++result->chunks;
             physical = end;
         }
-    } catch (const std::bad_alloc &) { return false; }
-    if (!history || !XBinary::isPdStructNotCanceled(progress) || physical != data.size() || writer->nCountOutput != header.rawSize ||
-        history->size() != header.rawSize) return false;
+    } catch (const std::bad_alloc &) {
+        return false;
+    }
+    if (!history || !XBinary::isPdStructNotCanceled(progress) || physical != data.size() || writer->nCountOutput != header.rawSize || history->size() != header.rawSize)
+        return false;
     writer->nCountInput = physical;
     result->consumed = physical;
     result->outputSize = writer->nCountOutput;

@@ -61,8 +61,7 @@ quint32 trackKey(quint8 cylinder, quint8 head)
 
 bool rangeWithin(qint64 total, qint64 offset, qint64 size)
 {
-    return offset >= 0 && size >= 0 && offset <= total &&
-           size <= total - offset;
+    return offset >= 0 && size >= 0 && offset <= total && size <= total - offset;
 }
 
 void setError(QString *error, const QString &text)
@@ -72,12 +71,9 @@ void setError(QString *error, const QString &text)
 
 bool geometrySize(const Geometry &geometry, qint64 limit, qint64 *size)
 {
-    if (!size || geometry.cylinders < 1 || geometry.heads < 1 ||
-        geometry.sectors < 1 || geometry.sectorSize < 1)
-        return false;
+    if (!size || geometry.cylinders < 1 || geometry.heads < 1 || geometry.sectors < 1 || geometry.sectorSize < 1) return false;
     qint64 value = geometry.cylinders;
-    const qint64 factors[] = {geometry.heads, geometry.sectors,
-                              geometry.sectorSize};
+    const qint64 factors[] = {geometry.heads, geometry.sectors, geometry.sectorSize};
     for (qint64 factor : factors) {
         if (factor < 1 || value > limit / factor) return false;
         value *= factor;
@@ -96,9 +92,8 @@ bool dosGeometry(const QByteArray &bootSector, Geometry *geometry)
     const quint32 heads = qFromLittleEndian<quint16>(p + 26);
     quint32 totalSectors = qFromLittleEndian<quint16>(p + 19);
     if (!totalSectors) totalSectors = qFromLittleEndian<quint32>(p + 32);
-    if (sectorSize < 128 || sectorSize > 65536 || sectorSize % 128 ||
-        sectors < 1 || sectors > 255 || heads < 1 || heads > 255 ||
-        totalSectors < sectors * heads || totalSectors % (sectors * heads))
+    if (sectorSize < 128 || sectorSize > 65536 || sectorSize % 128 || sectors < 1 || sectors > 255 || heads < 1 || heads > 255 || totalSectors < sectors * heads ||
+        totalSectors % (sectors * heads))
         return false;
     geometry->sectorSize = qint32(sectorSize);
     geometry->sectors = qint32(sectors);
@@ -112,10 +107,7 @@ bool standardQrstGeometry(quint8 format, Geometry *geometry)
 {
     if (!geometry) return false;
     static const Geometry formats[] = {
-        {}, {40, 2, 9, 512, 1}, {80, 2, 15, 512, 1},
-        {80, 2, 9, 512, 1}, {80, 2, 18, 512, 1},
-        {40, 1, 8, 512, 1}, {40, 1, 9, 512, 1},
-        {40, 2, 8, 512, 1}};
+        {}, {40, 2, 9, 512, 1}, {80, 2, 15, 512, 1}, {80, 2, 9, 512, 1}, {80, 2, 18, 512, 1}, {40, 1, 8, 512, 1}, {40, 1, 9, 512, 1}, {40, 2, 8, 512, 1}};
     if (format < 1 || format > 7) return false;
     *geometry = formats[format];
     return true;
@@ -124,9 +116,7 @@ bool standardQrstGeometry(quint8 format, Geometry *geometry)
 bool isQrstVersion5(const QByteArray &data)
 {
     if (data.size() < 8) return false;
-    return qFromLittleEndian<quint32>(
-               reinterpret_cast<const uchar *>(data.constData()) + 4) ==
-           QRST_VERSION_5;
+    return qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(data.constData()) + 4) == QRST_VERSION_5;
 }
 
 // The byte count a complete image of the header's standard format occupies.
@@ -147,16 +137,14 @@ quint32 crc32Edb88320(const QByteArray &data)
     if (!ready) {
         for (quint32 index = 0; index < 256; ++index) {
             quint32 value = index;
-            for (qint32 bit = 0; bit < 8; ++bit)
-                value = (value & 1U) ? ((value >> 1) ^ 0xedb88320U) : (value >> 1);
+            for (qint32 bit = 0; bit < 8; ++bit) value = (value & 1U) ? ((value >> 1) ^ 0xedb88320U) : (value >> 1);
             table[index] = value;
         }
         ready = true;
     }
     quint32 crc = 0xffffffffU;
     const uchar *p = reinterpret_cast<const uchar *>(data.constData());
-    for (qint64 index = 0; index < data.size(); ++index)
-        crc = table[(crc ^ p[index]) & 0xffU] ^ (crc >> 8);
+    for (qint64 index = 0; index < data.size(); ++index) crc = table[(crc ^ p[index]) & 0xffU] ^ (crc >> 8);
     return crc ^ 0xffffffffU;
 }
 
@@ -170,8 +158,7 @@ bool qrstCrcMatches(const QByteArray &data, quint32 expected)
     return (crc == expected) || ((crc ^ 0xffffffffU) == expected);
 }
 
-bool decodeImd(const QByteArray &input, qint64 limit,
-               XLegacyDiskDecoder::RESULT *result, QString *error)
+bool decodeImd(const QByteArray &input, qint64 limit, XLegacyDiskDecoder::RESULT *result, QString *error)
 {
     const qint64 headerEnd = input.indexOf(char(0x1a));
     if (!input.startsWith("IMD ") || headerEnd < 4) return false;
@@ -193,8 +180,7 @@ bool decodeImd(const QByteArray &input, qint64 limit,
         const quint8 sectorCount = p[position++];
         const quint8 sizeCode = p[position++];
         const quint8 head = headFlags & 0x3fU;
-        if ((mode > 6 && mode != 9) || !sectorCount || head > 1 ||
-            !rangeWithin(input.size(), position, sectorCount)) {
+        if ((mode > 6 && mode != 9) || !sectorCount || head > 1 || !rangeWithin(input.size(), position, sectorCount)) {
             setError(error, QStringLiteral("Invalid IMD track geometry"));
             return false;
         }
@@ -214,8 +200,7 @@ bool decodeImd(const QByteArray &input, qint64 limit,
         }
         QList<qint32> sectorSizes;
         if (sizeCode == 0xffU) {
-            if (!rangeWithin(input.size(), position, qint64(sectorCount) * 2))
-                return false;
+            if (!rangeWithin(input.size(), position, qint64(sectorCount) * 2)) return false;
             for (qint32 index = 0; index < sectorCount; ++index) {
                 sectorSizes.append(qFromLittleEndian<quint16>(p + position));
                 position += 2;
@@ -223,16 +208,13 @@ bool decodeImd(const QByteArray &input, qint64 limit,
         } else {
             if (sizeCode > 16) return false;
             const qint32 sectorSize = 128 << sizeCode;
-            for (qint32 index = 0; index < sectorCount; ++index)
-                sectorSizes.append(sectorSize);
+            for (qint32 index = 0; index < sectorCount; ++index) sectorSizes.append(sectorSize);
         }
 
         QList<Sector> sectors;
         for (qint32 index = 0; index < sectorCount; ++index) {
             const qint32 sectorSize = sectorSizes.at(index);
-            if (sectorSize < 1 || sectorSize > 1024 * 1024 ||
-                !rangeWithin(input.size(), position, 1))
-                return false;
+            if (sectorSize < 1 || sectorSize > 1024 * 1024 || !rangeWithin(input.size(), position, 1)) return false;
             Sector sector;
             sector.idCylinder = quint8(cylinderIds.at(index));
             sector.idHead = quint8(headIds.at(index));
@@ -240,14 +222,11 @@ bool decodeImd(const QByteArray &input, qint64 limit,
             sector.status = p[position++];
             if (sector.status == 0) {
                 sector.data = QByteArray(sectorSize, char(0xf6));
-            } else if (sector.status == 1 || sector.status == 3 ||
-                       sector.status == 5 || sector.status == 7) {
-                if (!rangeWithin(input.size(), position, sectorSize))
-                    return false;
+            } else if (sector.status == 1 || sector.status == 3 || sector.status == 5 || sector.status == 7) {
+                if (!rangeWithin(input.size(), position, sectorSize)) return false;
                 sector.data = input.mid(position, sectorSize);
                 position += sectorSize;
-            } else if (sector.status == 2 || sector.status == 4 ||
-                       sector.status == 6 || sector.status == 8) {
+            } else if (sector.status == 2 || sector.status == 4 || sector.status == 6 || sector.status == 8) {
                 if (!rangeWithin(input.size(), position, 1)) return false;
                 sector.data = QByteArray(sectorSize, input.at(position++));
             } else {
@@ -267,8 +246,7 @@ bool decodeImd(const QByteArray &input, qint64 limit,
     QByteArray bootSector;
     const QList<Sector> firstTrack = tracks.value(trackKey(0, 0));
     for (const Sector &sector : firstTrack) {
-        if (sector.idCylinder == 0 && sector.idHead == 0 &&
-            sector.idSector == 1) {
+        if (sector.idCylinder == 0 && sector.idHead == 0 && sector.idSector == 1) {
             bootSector = sector.data;
             break;
         }
@@ -280,16 +258,13 @@ bool decodeImd(const QByteArray &input, qint64 limit,
         geometry.sectors = 0;
         geometry.sectorBase = 256;
         qint32 bestCount = -1;
-        for (QMap<qint32, qint32>::const_iterator it = sizeFrequency.cbegin();
-             it != sizeFrequency.cend(); ++it) {
+        for (QMap<qint32, qint32>::const_iterator it = sizeFrequency.cbegin(); it != sizeFrequency.cend(); ++it) {
             if (it.value() > bestCount) {
                 bestCount = it.value();
                 geometry.sectorSize = it.key();
             }
         }
-        for (const Sector &sector : firstTrack)
-            geometry.sectorBase = qMin(geometry.sectorBase,
-                                       qint32(sector.idSector));
+        for (const Sector &sector : firstTrack) geometry.sectorBase = qMin(geometry.sectorBase, qint32(sector.idSector));
         for (const QList<Sector> &track : tracks)
             // qint32(): Geometry::sectors is qint32 but QList::size() is
             // qsizetype on Qt6, and qMin/qMax deduce a single T from both.
@@ -306,14 +281,12 @@ bool decodeImd(const QByteArray &input, qint64 limit,
     qint64 recovered = 0;
     for (qint32 cylinder = 0; cylinder < geometry.cylinders; ++cylinder) {
         for (qint32 head = 0; head < geometry.heads; ++head) {
-            const QList<Sector> track = tracks.value(
-                trackKey(quint8(cylinder), quint8(head)));
+            const QList<Sector> track = tracks.value(trackKey(quint8(cylinder), quint8(head)));
             for (qint32 number = 0; number < geometry.sectors; ++number) {
                 const qint32 expected = geometry.sectorBase + number;
                 const Sector *found = nullptr;
                 for (const Sector &sector : track) {
-                    if (sector.idCylinder == cylinder &&
-                        sector.idHead == head && sector.idSector == expected) {
+                    if (sector.idCylinder == cylinder && sector.idHead == head && sector.idSector == expected) {
                         found = &sector;
                         break;
                     }
@@ -321,14 +294,9 @@ bool decodeImd(const QByteArray &input, qint64 limit,
                 if (!found) {
                     ++recovered;
                 } else {
-                    const qint32 copySize = qMin(geometry.sectorSize,
-                                                 found->data.size());
-                    if (copySize)
-                        memcpy(raw.data() + outputOffset,
-                               found->data.constData(), size_t(copySize));
-                    if (found->status == 0 || found->status >= 5 ||
-                        found->data.size() != geometry.sectorSize)
-                        ++recovered;
+                    const qint32 copySize = qMin(geometry.sectorSize, found->data.size());
+                    if (copySize) memcpy(raw.data() + outputOffset, found->data.constData(), size_t(copySize));
+                    if (found->status == 0 || found->status >= 5 || found->data.size() != geometry.sectorSize) ++recovered;
                 }
                 outputOffset += geometry.sectorSize;
             }
@@ -346,20 +314,15 @@ bool decodeImd(const QByteArray &input, qint64 limit,
     return true;
 }
 
-bool expandQrstTrack(const QByteArray &input, qint64 *position,
-                     qint32 packedSize, qint32 trackSize, QByteArray *track)
+bool expandQrstTrack(const QByteArray &input, qint64 *position, qint32 packedSize, qint32 trackSize, QByteArray *track)
 {
-    if (!position || !track || packedSize < 1 ||
-        !rangeWithin(input.size(), *position, packedSize))
-        return false;
+    if (!position || !track || packedSize < 1 || !rangeWithin(input.size(), *position, packedSize)) return false;
     const qint64 end = *position + packedSize;
     QByteArray raw;
     raw.reserve(trackSize);
     while (*position < end) {
         const quint8 literalSize = quint8(input.at((*position)++));
-        if (!rangeWithin(end, *position, literalSize) ||
-            literalSize > trackSize - raw.size())
-            return false;
+        if (!rangeWithin(end, *position, literalSize) || literalSize > trackSize - raw.size()) return false;
         raw.append(input.constData() + *position, literalSize);
         *position += literalSize;
         if (*position == end) break;
@@ -374,8 +337,7 @@ bool expandQrstTrack(const QByteArray &input, qint64 *position,
     return true;
 }
 
-bool decodeQrst(const QByteArray &input, qint64 limit,
-                XLegacyDiskDecoder::RESULT *result, QString *error)
+bool decodeQrst(const QByteArray &input, qint64 limit, XLegacyDiskDecoder::RESULT *result, QString *error)
 {
     if (input.size() < 796 || !input.startsWith("QRST")) return false;
     const uchar *p = reinterpret_cast<const uchar *>(input.constData());
@@ -395,21 +357,16 @@ bool decodeQrst(const QByteArray &input, qint64 limit,
         const bool haveStoredSize = standardGeometrySize(p[12], limit, &storedSize);
 
         for (qint32 index = 0; index < 2; ++index) {
-            const qint64 descriptor = QRST5_EXTENSION_OFFSET + 1 +
-                                      qint64(index) * 12;
+            const qint64 descriptor = QRST5_EXTENSION_OFFSET + 1 + qint64(index) * 12;
             const qint64 offset = qFromLittleEndian<quint32>(p + descriptor);
             const qint64 size = qFromLittleEndian<quint32>(p + descriptor + 4);
             const quint32 crc = qFromLittleEndian<quint32>(p + descriptor + 8);
             if (index > 0 && offset == 0) break;
-            if (offset < QRST5_EXTENSION_OFFSET || size < 1 ||
-                !rangeWithin(input.size(), offset, size))
-                return false;
+            if (offset < QRST5_EXTENSION_OFFSET || size < 1 || !rangeWithin(input.size(), offset, size)) return false;
 
             const QByteArray packed = input.mid(int(offset), int(size));
             if (!qrstCrcMatches(packed, crc)) {
-                setError(error, QStringLiteral(
-                                    "QRST v5 image %1 fails its CRC-32")
-                                    .arg(index + 1));
+                setError(error, QStringLiteral("QRST v5 image %1 fails its CRC-32").arg(index + 1));
                 return false;
             }
 
@@ -420,8 +377,7 @@ bool decodeQrst(const QByteArray &input, qint64 limit,
             } else {
                 qint64 consumed = 0;
                 if (!XDclDecoder::decode(packed, &decoded, limit, &consumed)) {
-                    setError(error,
-                             QStringLiteral("Invalid QRST v5 DCL stream"));
+                    setError(error, QStringLiteral("Invalid QRST v5 DCL stream"));
                     return false;
                 }
             }
@@ -439,26 +395,20 @@ bool decodeQrst(const QByteArray &input, qint64 limit,
 
         // Geometry is reported, never enforced.
         Geometry bootGeometry;
-        if (dosGeometry(result->images.at(0).rawImage.left(512), &bootGeometry))
-            geometry = bootGeometry;
+        if (dosGeometry(result->images.at(0).rawImage.left(512), &bootGeometry)) geometry = bootGeometry;
         result->driver = QStringLiteral("qrst5");
     } else {
         const Geometry storageGeometry = geometry;
-        const qint32 trackSize = storageGeometry.sectors *
-                                 storageGeometry.sectorSize;
+        const qint32 trackSize = storageGeometry.sectors * storageGeometry.sectorSize;
         QHash<quint32, QByteArray> tracks;
         qint64 position = 796;
-        const qint32 maximumTracks = storageGeometry.cylinders *
-                                     storageGeometry.heads;
+        const qint32 maximumTracks = storageGeometry.cylinders * storageGeometry.heads;
         while (position < input.size() && tracks.size() < maximumTracks) {
             if (!rangeWithin(input.size(), position, 3)) return false;
             const quint8 cylinder = p[position++];
             const quint8 head = p[position++];
             const quint8 type = p[position++];
-            if (cylinder >= storageGeometry.cylinders ||
-                head >= storageGeometry.heads ||
-                tracks.contains(trackKey(cylinder, head)))
-                return false;
+            if (cylinder >= storageGeometry.cylinders || head >= storageGeometry.heads || tracks.contains(trackKey(cylinder, head))) return false;
             QByteArray track;
             if (type == 0) {
                 if (!rangeWithin(input.size(), position, trackSize)) return false;
@@ -471,9 +421,7 @@ bool decodeQrst(const QByteArray &input, qint64 limit,
                 if (!rangeWithin(input.size(), position, 2)) return false;
                 const quint16 packedSize = qFromLittleEndian<quint16>(p + position);
                 position += 2;
-                if (!expandQrstTrack(input, &position, packedSize, trackSize,
-                                     &track))
-                    return false;
+                if (!expandQrstTrack(input, &position, packedSize, trackSize, &track)) return false;
             } else {
                 return false;
             }
@@ -485,9 +433,7 @@ bool decodeQrst(const QByteArray &input, qint64 limit,
         // payload after a complete image as its 160K raw fallback. Preserve
         // that established extraction contract; ordinary QRST files continue
         // through the native track decoder below.
-        if (tracks.size() == maximumTracks &&
-            rangeWithin(input.size(), position, 4) &&
-            input.mid(position, 4) == QByteArrayLiteral("QRST") &&
+        if (tracks.size() == maximumTracks && rangeWithin(input.size(), position, 4) && input.mid(position, 4) == QByteArrayLiteral("QRST") &&
             input.size() >= 40 * 8 * 512) {
             geometry = {40, 1, 8, 512, 1};
             XLegacyDiskDecoder::IMAGE image;
@@ -504,8 +450,7 @@ bool decodeQrst(const QByteArray &input, qint64 limit,
 
         const QByteArray firstTrack = tracks.value(trackKey(0, 0));
         Geometry bootGeometry;
-        if (dosGeometry(firstTrack.left(512), &bootGeometry))
-            geometry = bootGeometry;
+        if (dosGeometry(firstTrack.left(512), &bootGeometry)) geometry = bootGeometry;
         qint64 outputSize = 0;
         if (!geometrySize(geometry, limit, &outputSize)) return false;
         QByteArray raw(int(outputSize), char(0xe5));
@@ -513,16 +458,11 @@ bool decodeQrst(const QByteArray &input, qint64 limit,
         qint64 recovered = 0;
         for (qint32 cylinder = 0; cylinder < geometry.cylinders; ++cylinder) {
             for (qint32 head = 0; head < geometry.heads; ++head) {
-                const QByteArray track = tracks.value(
-                    trackKey(quint8(cylinder), quint8(head)));
+                const QByteArray track = tracks.value(trackKey(quint8(cylinder), quint8(head)));
                 for (qint32 sector = 0; sector < geometry.sectors; ++sector) {
-                    const qint64 sourceOffset = qint64(sector) *
-                                                storageGeometry.sectorSize;
-                    if (sourceOffset >= 0 && geometry.sectorSize <=
-                            track.size() - sourceOffset) {
-                        memcpy(raw.data() + outputOffset,
-                               track.constData() + sourceOffset,
-                               size_t(geometry.sectorSize));
+                    const qint64 sourceOffset = qint64(sector) * storageGeometry.sectorSize;
+                    if (sourceOffset >= 0 && geometry.sectorSize <= track.size() - sourceOffset) {
+                        memcpy(raw.data() + outputOffset, track.constData() + sourceOffset, size_t(geometry.sectorSize));
                     } else {
                         ++recovered;
                     }
@@ -546,29 +486,23 @@ bool decodeQrst(const QByteArray &input, qint64 limit,
 
 QString XLegacyDiskDecoder::identify(const QByteArray &data)
 {
-    if (data.startsWith("IMD ") && data.indexOf(char(0x1a), 4) >= 4)
-        return QStringLiteral("imd");
-    if (data.size() >= 796 && data.startsWith("QRST") &&
-        quint8(data.at(12)) >= 1 && quint8(data.at(12)) <= 7) {
+    if (data.startsWith("IMD ") && data.indexOf(char(0x1a), 4) >= 4) return QStringLiteral("imd");
+    if (data.size() >= 796 && data.startsWith("QRST") && quint8(data.at(12)) >= 1 && quint8(data.at(12)) <= 7) {
         // The version is the float32 at +4, not byte 795.
-        if (isQrstVersion5(data) && data.size() >= QRST5_DATA_OFFSET)
-            return QStringLiteral("qrst5");
+        if (isQrstVersion5(data) && data.size() >= QRST5_DATA_OFFSET) return QStringLiteral("qrst5");
         return QStringLiteral("qrst");
     }
     return QString();
 }
 
-bool XLegacyDiskDecoder::decode(const QByteArray &data, qint64 maxOutputSize,
-                                RESULT *result, QString *error)
+bool XLegacyDiskDecoder::decode(const QByteArray &data, qint64 maxOutputSize, RESULT *result, QString *error)
 {
     if (!result || maxOutputSize < 1) return false;
     *result = RESULT();
     if (error) error->clear();
     const QString driver = identify(data);
-    if (driver == QLatin1String("imd"))
-        return decodeImd(data, maxOutputSize, result, error);
-    if (driver == QLatin1String("qrst") || driver == QLatin1String("qrst5"))
-        return decodeQrst(data, maxOutputSize, result, error);
+    if (driver == QLatin1String("imd")) return decodeImd(data, maxOutputSize, result, error);
+    if (driver == QLatin1String("qrst") || driver == QLatin1String("qrst5")) return decodeQrst(data, maxOutputSize, result, error);
     setError(error, QStringLiteral("Unsupported legacy disk image"));
     return false;
 }

@@ -29,22 +29,19 @@ const quint8 BORLANDPACK_LZW_FLAGS_MAXBITS = 0x1fU;
 // first code byte, which is byte 1 of the payload (byte 0 is the flags byte).
 class BorlandPackBitReader {
 public:
-    BorlandPackBitReader(const char *pData, qint64 nSize)
-        : m_pData(pData), m_nTotalBits(nSize * 8), m_nBitPosition(0)
+    BorlandPackBitReader(const char *pData, qint64 nSize) : m_pData(pData), m_nTotalBits(nSize * 8), m_nBitPosition(0)
     {
     }
 
     qint32 readCode(qint32 nCodeBits)
     {
-        if ((nCodeBits < 1) || (nCodeBits > BORLANDPACK_LZW_MAXBITS) ||
-            (m_nBitPosition > m_nTotalBits - nCodeBits)) {
+        if ((nCodeBits < 1) || (nCodeBits > BORLANDPACK_LZW_MAXBITS) || (m_nBitPosition > m_nTotalBits - nCodeBits)) {
             return -1;
         }
         qint32 nCode = 0;
         for (qint32 i = 0; i < nCodeBits; ++i) {
             const qint64 nBit = m_nBitPosition + i;
-            const quint8 nByte =
-                static_cast<quint8>(m_pData[static_cast<qint64>(nBit >> 3)]);
+            const quint8 nByte = static_cast<quint8>(m_pData[static_cast<qint64>(nBit >> 3)]);
             nCode |= static_cast<qint32>((nByte >> (nBit & 7)) & 1U) << i;
         }
         m_nBitPosition += nCodeBits;
@@ -60,7 +57,10 @@ public:
         return true;
     }
 
-    qint64 bitsRead() const { return m_nBitPosition; }
+    qint64 bitsRead() const
+    {
+        return m_nBitPosition;
+    }
 
 private:
     const char *m_pData;
@@ -72,44 +72,33 @@ private:
 // CLEAR resets the dictionary, the tail of the current group is padding and the
 // next code starts at the following group boundary.  The group origin is the
 // first code bit, i.e. immediately after the flags byte.
-bool borlandPackAlignCodeGroup(BorlandPackBitReader *pReader, qint32 nCodeBits,
-                               qint64 *pnGroupStartBits)
+bool borlandPackAlignCodeGroup(BorlandPackBitReader *pReader, qint32 nCodeBits, qint64 *pnGroupStartBits)
 {
-    if (!pReader || !pnGroupStartBits ||
-        (nCodeBits < BORLANDPACK_LZW_MINBITS) ||
-        (nCodeBits > BORLANDPACK_LZW_MAXBITS) ||
-        (pReader->bitsRead() < *pnGroupStartBits)) {
+    if (!pReader || !pnGroupStartBits || (nCodeBits < BORLANDPACK_LZW_MINBITS) || (nCodeBits > BORLANDPACK_LZW_MAXBITS) || (pReader->bitsRead() < *pnGroupStartBits)) {
         return false;
     }
     const qint64 nGroupBits = static_cast<qint64>(nCodeBits) * 8;
     const qint64 nUsedBits = pReader->bitsRead() - *pnGroupStartBits;
-    const qint64 nSkipBits =
-        (nGroupBits - (nUsedBits % nGroupBits)) % nGroupBits;
+    const qint64 nSkipBits = (nGroupBits - (nUsedBits % nGroupBits)) % nGroupBits;
     if (!pReader->skipBits(nSkipBits)) return false;
     *pnGroupStartBits = pReader->bitsRead();
     return true;
 }
 }  // namespace
 
-bool XBorlandPackDecoder::decode(const QByteArray &packed,
-                                 qint64 nUncompressedSize, QByteArray *pOutput,
-                                 XBinary::PDSTRUCT *pPdStruct)
+bool XBorlandPackDecoder::decode(const QByteArray &packed, qint64 nUncompressedSize, QByteArray *pOutput, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (!pOutput || (nUncompressedSize < 0) ||
-        (nUncompressedSize > (std::numeric_limits<qint32>::max)()) ||
-        (packed.size() < 1) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!pOutput || (nUncompressedSize < 0) || (nUncompressedSize > (std::numeric_limits<qint32>::max)()) || (packed.size() < 1) ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     const quint8 nFlags = static_cast<quint8>(packed.at(0));
     if (nFlags & BORLANDPACK_LZW_FLAGS_RESERVED) return false;
 
-    const qint32 nMaxBits =
-        static_cast<qint32>(nFlags & BORLANDPACK_LZW_FLAGS_MAXBITS);
-    const bool bBlockCompress =
-        (nFlags & BORLANDPACK_LZW_FLAGS_BLOCKMODE) != 0;
-    if ((nMaxBits < BORLANDPACK_LZW_MINBITS) ||
-        (nMaxBits > BORLANDPACK_LZW_MAXBITS)) {
+    const qint32 nMaxBits = static_cast<qint32>(nFlags & BORLANDPACK_LZW_FLAGS_MAXBITS);
+    const bool bBlockCompress = (nFlags & BORLANDPACK_LZW_FLAGS_BLOCKMODE) != 0;
+    if ((nMaxBits < BORLANDPACK_LZW_MINBITS) || (nMaxBits > BORLANDPACK_LZW_MAXBITS)) {
         return false;
     }
 
@@ -159,8 +148,7 @@ bool XBorlandPackDecoder::decode(const QByteArray &packed,
 
         if (bBlockCompress && (nCode == BORLANDPACK_LZW_CLEAR)) {
             do {
-                if (!borlandPackAlignCodeGroup(&reader, nCodeBits,
-                                               &nGroupStartBits)) {
+                if (!borlandPackAlignCodeGroup(&reader, nCodeBits, &nGroupStartBits)) {
                     bResult = false;
                     break;
                 }
@@ -198,8 +186,7 @@ bool XBorlandPackDecoder::decode(const QByteArray &packed,
         }
 
         while (nCode >= 256) {
-            if ((nCode >= nNextCode) || (nCode >= nMaxCode) ||
-                (nStackTop >= nMaxCode)) {
+            if ((nCode >= nNextCode) || (nCode >= nMaxCode) || (nStackTop >= nMaxCode)) {
                 bResult = false;
                 break;
             }
@@ -228,8 +215,7 @@ bool XBorlandPackDecoder::decode(const QByteArray &packed,
             pSuffix[nNextCode] = nFinChar;
             ++nNextCode;
             if ((nNextCode >= nMaxVal) && (nCodeBits < nMaxBits)) {
-                if (!borlandPackAlignCodeGroup(&reader, nCodeBits,
-                                               &nGroupStartBits)) {
+                if (!borlandPackAlignCodeGroup(&reader, nCodeBits, &nGroupStartBits)) {
                     bResult = false;
                     break;
                 }
@@ -241,8 +227,7 @@ bool XBorlandPackDecoder::decode(const QByteArray &packed,
         nOldCode = nInCode;
     }
 
-    if (!bResult || (baOutput.size() != nUncompressedSize) ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!bResult || (baOutput.size() != nUncompressedSize) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
     *pOutput = baOutput;

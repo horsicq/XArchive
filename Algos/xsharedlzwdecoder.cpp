@@ -73,8 +73,15 @@ private:
 class CodeReader {
 public:
     CodeReader(const quint8 *pData, qint64 nSize, const XSharedLZWDecoder::OPTIONS &options, qint32 nFirstFree)
-        : m_pData(pData), m_nBits(nSize * 8), m_nBitPosition(0), m_options(options), m_nWidth(9), m_nMaxCode(0x1ff), m_nFree(nFirstFree),
-          m_nCapacity(1 << options.nMaxBits), m_nGroupCount(0)
+        : m_pData(pData),
+          m_nBits(nSize * 8),
+          m_nBitPosition(0),
+          m_options(options),
+          m_nWidth(9),
+          m_nMaxCode(0x1ff),
+          m_nFree(nFirstFree),
+          m_nCapacity(1 << options.nMaxBits),
+          m_nGroupCount(0)
     {
     }
 
@@ -149,8 +156,7 @@ private:
 
 }  // namespace
 
-bool XSharedLZWDecoder::decode(const QByteArray &baPacked, const OPTIONS &options, qint64 nUncompressedSize, QByteArray *pbaResult,
-                           XBinary::PDSTRUCT *pPdStruct)
+bool XSharedLZWDecoder::decode(const QByteArray &baPacked, const OPTIONS &options, qint64 nUncompressedSize, QByteArray *pbaResult, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pbaResult) return false;
     pbaResult->clear();

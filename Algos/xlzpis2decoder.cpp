@@ -26,10 +26,10 @@
 
 namespace {
 
-const qint32 LZ_N = 8192;            // ring buffer
-const qint32 LZ_F = 66;              // longest ordinary match
-const qint32 LZ_THRESHOLD = 2;       // shortest coded match is THRESHOLD + 1
-const qint32 LZ_N_CHAR = 320;        // 256 literals + 64 length symbols
+const qint32 LZ_N = 8192;       // ring buffer
+const qint32 LZ_F = 66;         // longest ordinary match
+const qint32 LZ_THRESHOLD = 2;  // shortest coded match is THRESHOLD + 1
+const qint32 LZ_N_CHAR = 320;   // 256 literals + 64 length symbols
 const qint32 LZ_T = LZ_N_CHAR * 2 - 1;
 const qint32 LZ_R = LZ_T - 1;
 const quint16 LZ_MAX_FREQ = 0x8000;

@@ -405,8 +405,7 @@ private:
     quint64 m_nBuffer;
 };
 
-bool zooLzdFlushOutput(QByteArray *pOutput,
-                       XBinary::DATAPROCESS_STATE *pState)
+bool zooLzdFlushOutput(QByteArray *pOutput, XBinary::DATAPROCESS_STATE *pState)
 {
     if (!pOutput || !pState) return false;
     if (pOutput->isEmpty()) return true;
@@ -418,31 +417,20 @@ bool zooLzdFlushOutput(QByteArray *pOutput,
     return true;
 }
 
-bool zooLzdEmitByte(quint8 nByte, QByteArray *pOutput,
-                    XBinary::DATAPROCESS_STATE *pState,
-                    qint64 *pProduced, bool bHasExpectedSize,
-                    qint64 nExpectedSize)
+bool zooLzdEmitByte(quint8 nByte, QByteArray *pOutput, XBinary::DATAPROCESS_STATE *pState, qint64 *pProduced, bool bHasExpectedSize, qint64 nExpectedSize)
 {
-    if (!pOutput || !pState || !pProduced ||
-        (*pProduced == (std::numeric_limits<qint64>::max)()) ||
-        (bHasExpectedSize && (*pProduced >= nExpectedSize))) {
+    if (!pOutput || !pState || !pProduced || (*pProduced == (std::numeric_limits<qint64>::max)()) || (bHasExpectedSize && (*pProduced >= nExpectedSize))) {
         return false;
     }
     pOutput->append(static_cast<char>(nByte));
     ++(*pProduced);
-    return (pOutput->size() < ZOO_LZD_OUTPUT_BUFFER_SIZE) ||
-           zooLzdFlushOutput(pOutput, pState);
+    return (pOutput->size() < ZOO_LZD_OUTPUT_BUFFER_SIZE) || zooLzdFlushOutput(pOutput, pState);
 }
 
-bool zooLzdExpandCode(quint32 nCode, quint32 nNextCode,
-                      const std::vector<quint16> &prefix,
-                      const std::vector<quint8> &suffix,
-                      std::vector<quint8> *pDecodeStack,
+bool zooLzdExpandCode(quint32 nCode, quint32 nNextCode, const std::vector<quint16> &prefix, const std::vector<quint8> &suffix, std::vector<quint8> *pDecodeStack,
                       quint32 *pStackSize, quint8 *pFirstByte)
 {
-    if (!pDecodeStack || !pStackSize || !pFirstByte ||
-        (prefix.size() < ZOO_LZD_TABLE_SIZE) ||
-        (suffix.size() < ZOO_LZD_TABLE_SIZE) ||
+    if (!pDecodeStack || !pStackSize || !pFirstByte || (prefix.size() < ZOO_LZD_TABLE_SIZE) || (suffix.size() < ZOO_LZD_TABLE_SIZE) ||
         (pDecodeStack->size() < ZOO_LZD_TABLE_SIZE)) {
         return false;
     }
@@ -450,9 +438,7 @@ bool zooLzdExpandCode(quint32 nCode, quint32 nNextCode,
     quint32 nDepth = 0;
 
     while (nCode >= ZOO_LZD_FIRST_FREE) {
-        if ((nCode >= nNextCode) ||
-            (nStackSize >= ZOO_LZD_TABLE_SIZE) ||
-            (++nDepth > ZOO_LZD_TABLE_SIZE)) {
+        if ((nCode >= nNextCode) || (nStackSize >= ZOO_LZD_TABLE_SIZE) || (++nDepth > ZOO_LZD_TABLE_SIZE)) {
             return false;
         }
         (*pDecodeStack)[nStackSize++] = suffix[nCode];
@@ -534,9 +520,7 @@ bool XLZWDecoder::decompress_zoo(XBinary::DATAPROCESS_STATE *pDecompressState, X
                 bDataError = true;
                 break;
             }
-            if (!zooLzdEmitByte(static_cast<quint8>(nCode), &baOutput,
-                                pDecompressState, &nProduced,
-                                bHasExpectedSize, nExpectedSize)) {
+            if (!zooLzdEmitByte(static_cast<quint8>(nCode), &baOutput, pDecompressState, &nProduced, bHasExpectedSize, nExpectedSize)) {
                 bDataError = !pDecompressState->bWriteError;
                 break;
             }
@@ -554,42 +538,32 @@ bool XLZWDecoder::decompress_zoo(XBinary::DATAPROCESS_STATE *pDecompressState, X
         quint8 nFirstByte = 0;
 
         if (nCode < nNextCode) {
-            if (!zooLzdExpandCode(nCode, nNextCode, prefix, suffix,
-                                  &decodeStack, &nStackSize, &nFirstByte)) {
+            if (!zooLzdExpandCode(nCode, nNextCode, prefix, suffix, &decodeStack, &nStackSize, &nFirstByte)) {
                 bDataError = true;
                 break;
             }
             bool bEmitOK = true;
             while (nStackSize > 0) {
-                if (!zooLzdEmitByte(decodeStack[--nStackSize], &baOutput,
-                                    pDecompressState, &nProduced,
-                                    bHasExpectedSize, nExpectedSize)) {
+                if (!zooLzdEmitByte(decodeStack[--nStackSize], &baOutput, pDecompressState, &nProduced, bHasExpectedSize, nExpectedSize)) {
                     bEmitOK = false;
                     break;
                 }
             }
             if (!bEmitOK) bDataError = !pDecompressState->bWriteError;
         } else if (nCode == nNextCode) {
-            if (!zooLzdExpandCode(static_cast<quint32>(nPreviousCode),
-                                  nNextCode, prefix, suffix, &decodeStack,
-                                  &nStackSize, &nFirstByte)) {
+            if (!zooLzdExpandCode(static_cast<quint32>(nPreviousCode), nNextCode, prefix, suffix, &decodeStack, &nStackSize, &nFirstByte)) {
                 bDataError = true;
                 break;
             }
             bool bEmitOK = true;
             while (nStackSize > 0) {
-                if (!zooLzdEmitByte(decodeStack[--nStackSize], &baOutput,
-                                    pDecompressState, &nProduced,
-                                    bHasExpectedSize, nExpectedSize)) {
+                if (!zooLzdEmitByte(decodeStack[--nStackSize], &baOutput, pDecompressState, &nProduced, bHasExpectedSize, nExpectedSize)) {
                     bEmitOK = false;
                     break;
                 }
             }
             if (!bEmitOK) bDataError = !pDecompressState->bWriteError;
-            if (!pDecompressState->bWriteError && !bDataError &&
-                !zooLzdEmitByte(nFirstByte, &baOutput, pDecompressState,
-                                &nProduced, bHasExpectedSize,
-                                nExpectedSize)) {
+            if (!pDecompressState->bWriteError && !bDataError && !zooLzdEmitByte(nFirstByte, &baOutput, pDecompressState, &nProduced, bHasExpectedSize, nExpectedSize)) {
                 bDataError = !pDecompressState->bWriteError;
             }
         } else {
@@ -625,6 +599,6 @@ bool XLZWDecoder::decompress_zoo(XBinary::DATAPROCESS_STATE *pDecompressState, X
         (pDecompressState->nInputLimit == -1) ? pDecompressState->pDeviceInput->atEnd() : (pDecompressState->nCountInput == pDecompressState->nInputLimit);
     const bool bOutputComplete = !bHasExpectedSize || (nProduced == nExpectedSize);
 
-    return bInitialClearSeen && bExplicitEOFSeen && bPaddingOK && bInputComplete && bOutputComplete && (pDecompressState->nCountOutput == nProduced) &&
-           !bDataError && !pDecompressState->bReadError && !pDecompressState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct);
+    return bInitialClearSeen && bExplicitEOFSeen && bPaddingOK && bInputComplete && bOutputComplete && (pDecompressState->nCountOutput == nProduced) && !bDataError &&
+           !pDecompressState->bReadError && !pDecompressState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct);
 }

@@ -32,7 +32,7 @@ const qint64 N_WINDOW_SIZE = 0x1000;  // the largest encodable distance
 const qint64 N_WINDOW_MASK = 0xfff;
 const qint32 N_CANCEL_MASK = 0xffff;  // cancellation is checked this often (items)
 const qint64 N_LZ10_MIN_LENGTH = 3;
-const qint64 N_LZ11_SHORT_LENGTH_BASE = 1;    // indicator + 1
+const qint64 N_LZ11_SHORT_LENGTH_BASE = 1;  // indicator + 1
 const qint64 N_LZ11_MEDIUM_LENGTH_BASE = 0x11;
 const qint64 N_LZ11_LONG_LENGTH_BASE = 0x111;
 // Exact expansion bounds of the codec (the reader's gate uses the same ones):
@@ -136,8 +136,8 @@ bool nlzDecodeCore(const quint8 *pIn, qint64 nIn, bool bLZ11, qint64 nOut, quint
                 qint64 nLength = 0;
                 qint64 nDistance = 0;
                 if (!nlzReadReference(pIn, nIn, bLZ11, &nPos, &nLength, &nDistance)) return false;  // E1
-                if (nDistance > nProduced) return false;      // E2: before the start
-                if (nLength > (nOut - nProduced)) return false;  // E3: past the declared end
+                if (nDistance > nProduced) return false;                                            // E2: before the start
+                if (nLength > (nOut - nProduced)) return false;                                     // E3: past the declared end
 
                 // Byte by byte, in forward order, on purpose: distance 1 with
                 // length 18 replicates the last byte, which a block copy
@@ -199,8 +199,8 @@ bool XNintendoLZDecoder::parseHeader(const quint8 *pData, qint64 nSize, HEADER *
         // as unsigned; anything with the top bit set (DSDecmp's negative) or
         // zero is a reject, because no plaintext of that length exists.
         if (nHeaderSize + N_EXTENSION_SIZE > nSize) return false;
-        const quint32 nExtended = (quint32)pData[nHeaderSize] | ((quint32)pData[nHeaderSize + 1] << 8) | ((quint32)pData[nHeaderSize + 2] << 16) |
-                                  ((quint32)pData[nHeaderSize + 3] << 24);
+        const quint32 nExtended =
+            (quint32)pData[nHeaderSize] | ((quint32)pData[nHeaderSize + 1] << 8) | ((quint32)pData[nHeaderSize + 2] << 16) | ((quint32)pData[nHeaderSize + 3] << 24);
         if ((nExtended == 0) || (nExtended > (quint32)N_MAX_OUTPUT)) return false;
         nLength = (qint64)nExtended;
         nHeaderSize += N_EXTENSION_SIZE;
@@ -235,8 +235,8 @@ bool XNintendoLZDecoder::decode(const QByteArray &baPacked, VARIANT variant, qin
     if (baOut.size() != nUncompressedSize) return false;
 
     qint64 nConsumed = 0;
-    const bool bResult = nlzDecodeCore((const quint8 *)baPacked.constData(), baPacked.size(), (variant == VARIANT_LZ11), nUncompressedSize,
-                                       (quint8 *)baOut.data(), nullptr, &nConsumed, pPdStruct);
+    const bool bResult = nlzDecodeCore((const quint8 *)baPacked.constData(), baPacked.size(), (variant == VARIANT_LZ11), nUncompressedSize, (quint8 *)baOut.data(),
+                                       nullptr, &nConsumed, pPdStruct);
     if (!bResult) return false;
 
     *pbaResult = baOut;

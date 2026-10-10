@@ -559,8 +559,7 @@ bool XCreateInstallDecoder::walkContainer(const QByteArray &baPayload, qint64 nC
                 qint64 nConsumed = 0;
                 qint64 nProduced = 0;
                 if (nPosition + nStreamSize >= nPayloadSize) return false;
-                if (!decodeStream(pPayload + nPosition + nStreamSize, nPayloadSize - (nPosition + nStreamSize), nRemaining, nullptr, &nConsumed, &nProduced,
-                                  pPdStruct)) {
+                if (!decodeStream(pPayload + nPosition + nStreamSize, nPayloadSize - (nPosition + nStreamSize), nRemaining, nullptr, &nConsumed, &nProduced, pPdStruct)) {
                     return false;
                 }
                 if ((nProduced <= 0) || (nConsumed <= 0) || (nProduced > nRemaining)) return false;

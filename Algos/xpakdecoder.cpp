@@ -101,14 +101,7 @@ private:
 class PakSink {
 public:
     PakSink(XBinary::DATAPROCESS_STATE *pState, bool bRunLength, qint64 nExpectedSize)
-        : m_pState(pState),
-          m_bRunLength(bRunLength),
-          m_nExpectedSize(nExpectedSize),
-          m_nProduced(0),
-          m_bInRepeat(false),
-          m_bHasLast(false),
-          m_nLast(0),
-          m_bError(false)
+        : m_pState(pState), m_bRunLength(bRunLength), m_nExpectedSize(nExpectedSize), m_nProduced(0), m_bInRepeat(false), m_bHasLast(false), m_nLast(0), m_bError(false)
     {
         m_baOutput.reserve(PAK_OUTPUT_BUFFER_SIZE);
     }
@@ -290,8 +283,7 @@ public:
         pReversed->clear();
 
         if (nSymbol == m_nTableSize) {
-            if (!m_bHasPrevious || (m_nTableSize >= CRUSHED_TABLE_SIZE) ||
-                !decodeNormal(m_nPreviousSymbol, pReversed) || pReversed->empty()) {
+            if (!m_bHasPrevious || (m_nTableSize >= CRUSHED_TABLE_SIZE) || !decodeNormal(m_nPreviousSymbol, pReversed) || pReversed->empty()) {
                 return false;
             }
             pReversed->insert(pReversed->begin(), pReversed->back());
@@ -449,11 +441,10 @@ qint32 distilledOffsetLength(quint32 nSymbol)
 
 bool distilledOffsetSymbol(PakBitSource *pSource, quint32 *pSymbol)
 {
-    static const std::array<quint8, 64> CODES = {
-        0x00, 0x02, 0x04, 0x0c, 0x01, 0x06, 0x0a, 0x0e, 0x11, 0x16, 0x1a, 0x1e, 0x05, 0x09, 0x0d, 0x15,
-        0x19, 0x1d, 0x25, 0x29, 0x2d, 0x35, 0x39, 0x3d, 0x03, 0x07, 0x0b, 0x13, 0x17, 0x1b, 0x23, 0x27,
-        0x2b, 0x33, 0x37, 0x3b, 0x43, 0x47, 0x4b, 0x53, 0x57, 0x5b, 0x63, 0x67, 0x6b, 0x73, 0x77, 0x7b,
-        0x0f, 0x1f, 0x2f, 0x3f, 0x4f, 0x5f, 0x6f, 0x7f, 0x8f, 0x9f, 0xaf, 0xbf, 0xcf, 0xdf, 0xef, 0xff};
+    static const std::array<quint8, 64> CODES = {0x00, 0x02, 0x04, 0x0c, 0x01, 0x06, 0x0a, 0x0e, 0x11, 0x16, 0x1a, 0x1e, 0x05, 0x09, 0x0d, 0x15,
+                                                 0x19, 0x1d, 0x25, 0x29, 0x2d, 0x35, 0x39, 0x3d, 0x03, 0x07, 0x0b, 0x13, 0x17, 0x1b, 0x23, 0x27,
+                                                 0x2b, 0x33, 0x37, 0x3b, 0x43, 0x47, 0x4b, 0x53, 0x57, 0x5b, 0x63, 0x67, 0x6b, 0x73, 0x77, 0x7b,
+                                                 0x0f, 0x1f, 0x2f, 0x3f, 0x4f, 0x5f, 0x6f, 0x7f, 0x8f, 0x9f, 0xaf, 0xbf, 0xcf, 0xdf, 0xef, 0xff};
 
     if (!pSource || !pSymbol) return false;
     quint32 nCode = 0;
@@ -543,8 +534,8 @@ bool decodeDistilled(PakBitSource *pSource, PakSink *pSink, XBinary::PDSTRUCT *p
     if (!pSource || !pSink) return false;
     quint32 nNodeCount = 0;
     quint32 nCodeLength = 0;
-    if (!pSource->readBits(16, &nNodeCount) || !pSource->readBits(8, &nCodeLength) || (nNodeCount < 2) ||
-        (nNodeCount > DISTILLED_MAX_NODES) || (nCodeLength < 1) || (nCodeLength > 12)) {
+    if (!pSource->readBits(16, &nNodeCount) || !pSource->readBits(8, &nCodeLength) || (nNodeCount < 2) || (nNodeCount > DISTILLED_MAX_NODES) || (nCodeLength < 1) ||
+        (nCodeLength > 12)) {
         return false;
     }
 

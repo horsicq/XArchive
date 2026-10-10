@@ -37,15 +37,11 @@ struct EngineContext {
     EngineResult *result;
 };
 
-class XDearkFatalError final
-{
-};
+class XDearkFatalError final {};
 
-class XDearkSession final
-{
+class XDearkSession final {
 public:
-    explicit XDearkSession(EngineContext *engineContext)
-        : m_context(XDearkModuleRegistry::createContext())
+    explicit XDearkSession(EngineContext *engineContext) : m_context(XDearkModuleRegistry::createContext())
     {
         if (!m_context) return;
         de_set_userdata(m_context, engineContext);
@@ -58,21 +54,22 @@ public:
         if (m_context) de_destroy(m_context);
     }
 
-    deark *context() const { return m_context; }
+    deark *context() const
+    {
+        return m_context;
+    }
 
     XDearkSession(const XDearkSession &) = delete;
     XDearkSession &operator=(const XDearkSession &) = delete;
 
 private:
-    static void messageCallback(deark *context, UI flags,
-                                const char *message);
+    static void messageCallback(deark *context, UI flags, const char *message);
     static void fatalCallback(deark *context);
 
     deark *m_context;
 };
 
-void appendMessage(char *destination, size_t destinationSize,
-                   const char *source)
+void appendMessage(char *destination, size_t destinationSize, const char *source)
 {
     if (!destination || destinationSize < 2 || !source || !source[0]) return;
     size_t used = std::strlen(destination);
@@ -85,29 +82,23 @@ void appendMessage(char *destination, size_t destinationSize,
     if (available) std::strncat(destination, source, available);
 }
 
-void XDearkSession::messageCallback(deark *context, UI flags,
-                                    const char *message)
+void XDearkSession::messageCallback(deark *context, UI flags, const char *message)
 {
-    EngineContext *engine =
-        static_cast<EngineContext *>(de_get_userdata(context));
+    EngineContext *engine = static_cast<EngineContext *>(de_get_userdata(context));
     const unsigned int messageType = flags & 0xffU;
     if (!engine || !engine->result || !message) return;
     if (!std::strncmp(message, "Module: ", 8)) {
         size_t length = std::strlen(message + 8);
-        if (length >= sizeof(engine->result->moduleName))
-            length = sizeof(engine->result->moduleName) - 1;
+        if (length >= sizeof(engine->result->moduleName)) length = sizeof(engine->result->moduleName) - 1;
         std::memcpy(engine->result->moduleName, message + 8, length);
         engine->result->moduleName[length] = '\0';
     }
-    if (messageType == DE_MSGTYPE_ERROR)
-        appendMessage(engine->result->errorMessage,
-                      sizeof(engine->result->errorMessage), message);
+    if (messageType == DE_MSGTYPE_ERROR) appendMessage(engine->result->errorMessage, sizeof(engine->result->errorMessage), message);
 }
 
 void XDearkSession::fatalCallback(deark *context)
 {
-    EngineContext *engine =
-        static_cast<EngineContext *>(de_get_userdata(context));
+    EngineContext *engine = static_cast<EngineContext *>(de_get_userdata(context));
     if (!engine || !engine->result) return;
     engine->result->fatalError = 1;
     throw XDearkFatalError();
@@ -117,18 +108,14 @@ void XDearkSession::fatalCallback(deark *context)
 
 QStringList XDearkEngine::supportedModules()
 {
-    return QString::fromLatin1(SUPPORTED_MODULES)
-        .split(QLatin1Char(','), Qt::SkipEmptyParts);
+    return QString::fromLatin1(SUPPORTED_MODULES).split(QLatin1Char(','), Qt::SkipEmptyParts);
 }
 
-bool XDearkEngine::extractToZip(const QString &inputPath,
-                                const QString &outputPath,
-                                const LIMITS &limits, RESULT *result)
+bool XDearkEngine::extractToZip(const QString &inputPath, const QString &outputPath, const LIMITS &limits, RESULT *result)
 {
     if (!result) return false;
     *result = RESULT();
-    if (inputPath.isEmpty() || outputPath.isEmpty() || limits.maxFiles <= 0 ||
-        limits.maxFileSize <= 0 || limits.maxTotalSize <= 0) {
+    if (inputPath.isEmpty() || outputPath.isEmpty() || limits.maxFiles <= 0 || limits.maxFileSize <= 0 || limits.maxTotalSize <= 0) {
         result->errorMessage = QStringLiteral("Invalid legacy decoder arguments");
         return false;
     }
@@ -142,20 +129,15 @@ bool XDearkEngine::extractToZip(const QString &inputPath,
         XDearkSession session(&engineContext);
         deark *context = session.context();
         if (!context) {
-            appendMessage(engineResult.errorMessage,
-                          sizeof(engineResult.errorMessage),
-                          "Cannot create legacy decoder context");
+            appendMessage(engineResult.errorMessage, sizeof(engineResult.errorMessage), "Cannot create legacy decoder context");
         } else {
             de_set_std_option_int(context, DE_STDOPT_EXTRACT_LEVEL, 2);
             de_set_std_option_int(context, DE_STDOPT_WARNINGS, 1);
             de_set_std_option_int(context, DE_STDOPT_INFOMESSAGES, 1);
             de_set_std_option_int(context, DE_STDOPT_FILENAMES_FROM_FILE, 1);
-            de_set_std_option_int(context, DE_STDOPT_OVERWRITE_MODE,
-                                  DE_OVERWRITEMODE_NEVER);
-            de_set_output_style(context, DE_OUTPUTSTYLE_ARCHIVE,
-                                DE_ARCHIVEFMT_ZIP);
-            de_set_output_archive_filename(context, nullptr,
-                                           outputName.constData(), 0);
+            de_set_std_option_int(context, DE_STDOPT_OVERWRITE_MODE, DE_OVERWRITEMODE_NEVER);
+            de_set_output_style(context, DE_OUTPUTSTYLE_ARCHIVE, DE_ARCHIVEFMT_ZIP);
+            de_set_output_archive_filename(context, nullptr, outputName.constData(), 0);
             de_set_max_output_files(context, limits.maxFiles);
             de_set_max_output_file_size(context, limits.maxFileSize);
             de_set_max_total_output_size(context, limits.maxTotalSize);
@@ -190,6 +172,5 @@ bool XDearkEngine::extractToZip(const QString &inputPath,
     result->totalOutputSize = engineResult.totalOutputSize;
     result->module = QString::fromLatin1(engineResult.moduleName);
     result->errorMessage = QString::fromUtf8(engineResult.errorMessage);
-    return result->runResult && !result->fatalError &&
-           result->extractedFiles > 0;
+    return result->runResult && !result->fatalError && result->extractedFiles > 0;
 }

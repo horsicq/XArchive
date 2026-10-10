@@ -17,19 +17,15 @@ namespace {
 const quint32 RTPATCH_DIFF_MAGIC = 0xb59c;
 const quint32 RTPATCH_WINDOW_FLAG_8K = 8;
 
-class RTPatchBitInput
-{
+class RTPatchBitInput {
 public:
-    explicit RTPatchBitInput(const QByteArray &data)
-        : m_data(data), m_nEnd(data.size())
+    explicit RTPatchBitInput(const QByteArray &data) : m_data(data), m_nEnd(data.size())
     {
     }
 
     bool readBit(quint32 *pValue)
     {
-        if (!pValue || (m_nPosition < 0) ||
-            (m_nPosition >= m_nEnd) || (m_nBitsLeft < 1) ||
-            (m_nBitsLeft > 8)) {
+        if (!pValue || (m_nPosition < 0) || (m_nPosition >= m_nEnd) || (m_nBitsLeft < 1) || (m_nBitsLeft > 8)) {
             return false;
         }
         const quint8 nByte = quint8(m_data.at(qint32(m_nPosition)));
@@ -55,14 +51,22 @@ public:
         return true;
     }
 
-    qint64 position() const { return m_nPosition; }
-    qint64 end() const { return m_nEnd; }
-    qint32 bitsLeft() const { return m_nBitsLeft; }
+    qint64 position() const
+    {
+        return m_nPosition;
+    }
+    qint64 end() const
+    {
+        return m_nEnd;
+    }
+    qint32 bitsLeft() const
+    {
+        return m_nBitsLeft;
+    }
 
     bool setCursor(qint64 nPosition, qint32 nBitsLeft)
     {
-        if ((nPosition < 0) || (nPosition > m_nEnd) ||
-            (nBitsLeft < 1) || (nBitsLeft > 8)) {
+        if ((nPosition < 0) || (nPosition > m_nEnd) || (nBitsLeft < 1) || (nBitsLeft > 8)) {
             return false;
         }
         m_nPosition = nPosition;
@@ -77,16 +81,12 @@ private:
     qint32 m_nBitsLeft = 8;
 };
 
-class RTPatchHuffmanTree
-{
+class RTPatchHuffmanTree {
 public:
-    bool initialize(qint32 nEscapeBits, qint32 nLevels,
-                    quint32 nInitialPeriod, quint32 nUpdatePeriod)
+    bool initialize(qint32 nEscapeBits, qint32 nLevels, quint32 nInitialPeriod, quint32 nUpdatePeriod)
     {
-        if ((nEscapeBits < 1) || (nEscapeBits > 8) ||
-            (nLevels < 2) || (nLevels > 24) ||
-            (nInitialPeriod == 0) || (nUpdatePeriod == 0) ||
-            (nInitialPeriod > 0xffff) || (nUpdatePeriod > 0xffff)) {
+        if ((nEscapeBits < 1) || (nEscapeBits > 8) || (nLevels < 2) || (nLevels > 24) || (nInitialPeriod == 0) || (nUpdatePeriod == 0) || (nInitialPeriod > 0xffff) ||
+            (nUpdatePeriod > 0xffff)) {
             return false;
         }
         m_bValid = true;
@@ -94,10 +94,8 @@ public:
         const quint32 nGroupCountOffset = 0x34;
         const quint32 nSymbolTableOffset = quint32(nLevels * 2 + 0x34);
         const quint32 nSlotOffset = quint32(nLevels * 6 + 0x38);
-        const quint32 nWeightOffset =
-            quint32(nLevels * 6 + 0x40) + m_nAlphabetSize * 4;
-        const quint32 nLimitOffset =
-            nWeightOffset + 4 + m_nAlphabetSize * 2;
+        const quint32 nWeightOffset = quint32(nLevels * 6 + 0x40) + m_nAlphabetSize * 4;
+        const quint32 nLimitOffset = nWeightOffset + 4 + m_nAlphabetSize * 2;
         const quint32 nDataSize = nLimitOffset + 0x1c0;
         if (nDataSize > quint32((std::numeric_limits<qint32>::max)())) {
             return false;
@@ -130,8 +128,7 @@ public:
             write32(nSymbolTableOffset + quint32(i * 4), nSlotOffset + 8);
         }
 
-        const quint32 nWeightBase =
-            nWeightOffset + m_nAlphabetSize * 2;
+        const quint32 nWeightBase = nWeightOffset + m_nAlphabetSize * 2;
         write32(nSlotOffset, nWeightBase);
         for (quint32 i = 1; i <= m_nAlphabetSize + 1; ++i) {
             write32(nSlotOffset + i * 4, nWeightBase + 2);
@@ -151,13 +148,11 @@ public:
 
     bool decode(RTPatchBitInput *pInput, quint16 *pSymbol)
     {
-        if (!pInput || !pSymbol || !m_bValid ||
-            (pInput->position() >= pInput->end())) {
+        if (!pInput || !pSymbol || !m_bValid || (pInput->position() >= pInput->end())) {
             return false;
         }
         qint32 nBitsLeft = pInput->bitsLeft();
-        const quint8 nCurrent =
-            quint8(m_inputByte(pInput->position(), pInput));
+        const quint8 nCurrent = quint8(m_inputByte(pInput->position(), pInput));
         if (!m_bValid) return false;
         qint32 nValue = ((1 << nBitsLeft) - 1) & nCurrent;
         qint32 nIndex = nBitsLeft - 1;
@@ -165,21 +160,16 @@ public:
         const quint32 nLimitOffset = read32(0x10);
         if (!m_bValid) return false;
 
-        if (quint32(nValue) <
-            read16u(nLimitOffset + quint32(nIndex * 8))) {
+        if (quint32(nValue) < read16u(nLimitOffset + quint32(nIndex * 8))) {
             do {
-                if (!pInput->setCursor(pInput->position() + 1,
-                                       pInput->bitsLeft()) ||
-                    (pInput->position() >= pInput->end())) {
+                if (!pInput->setCursor(pInput->position() + 1, pInput->bitsLeft()) || (pInput->position() >= pInput->end())) {
                     return false;
                 }
                 nIndex += 8;
                 nTotalBits += 8;
-                const quint8 nNext =
-                    quint8(m_inputByte(pInput->position(), pInput));
+                const quint8 nNext = quint8(m_inputByte(pInput->position(), pInput));
                 nValue = (((nValue & 0xff) << 8) | nNext) & 0xffff;
-            } while (quint32(nValue) <
-                     read16u(nLimitOffset + quint32(nIndex * 8)));
+            } while (quint32(nValue) < read16u(nLimitOffset + quint32(nIndex * 8)));
         }
         if (!m_bValid) return false;
 
@@ -188,8 +178,7 @@ public:
         qint32 nNewBitsLeft = 0;
         while (nCount != 0) {
             if (nIndex < 0) return false;
-            const qint64 nThresholdOffset =
-                qint64(nLimitOffset) + 2 + qint64(nIndex) * 8;
+            const qint64 nThresholdOffset = qint64(nLimitOffset) + 2 + qint64(nIndex) * 8;
             const qint32 nThreshold = read16u(nThresholdOffset);
             if (!m_bValid || (nValue < nThreshold)) break;
             --nIndex;
@@ -203,24 +192,19 @@ public:
         const quint32 nWeightOffset = read32(0x18);
         const quint32 nLevel = quint32((nIndex + 1) & 0xffff);
         if (!m_bValid || (nLevel > read16u(0x04))) return false;
-        const quint32 nSlotArray =
-            read32(nSymbolTableOffset + nLevel * 4);
+        const quint32 nSlotArray = read32(nSymbolTableOffset + nLevel * 4);
         const qint32 nBase = read16s(nLimitOffset + nLevel * 8);
         const quint32 nSlotIndex = quint32((nValue - nBase) & 0xffff);
-        const quint32 nWeightPointer =
-            read32(nSlotArray + nSlotIndex * 4);
-        if (!m_bValid || (nWeightPointer < nWeightOffset) ||
-            ((nWeightPointer - nWeightOffset) & 1U)) {
+        const quint32 nWeightPointer = read32(nSlotArray + nSlotIndex * 4);
+        if (!m_bValid || (nWeightPointer < nWeightOffset) || ((nWeightPointer - nWeightOffset) & 1U)) {
             return false;
         }
-        const quint32 nSymbol =
-            (nWeightPointer - nWeightOffset) >> 1;
+        const quint32 nSymbol = (nWeightPointer - nWeightOffset) >> 1;
         if (nSymbol > m_nAlphabetSize) return false;
 
         if (nNewBitsLeft == 0) {
             nNewBitsLeft = 8;
-            if (!pInput->setCursor(pInput->position() + 1,
-                                   nNewBitsLeft)) {
+            if (!pInput->setCursor(pInput->position() + 1, nNewBitsLeft)) {
                 return false;
             }
         } else if (!pInput->setCursor(pInput->position(), nNewBitsLeft)) {
@@ -235,8 +219,7 @@ public:
 
         if (nSymbol == read16u(0x24)) {
             quint32 nRawSymbol = 0;
-            if (!pInput->readBits(read16u(0x06), &nRawSymbol) ||
-                (nRawSymbol >= m_nAlphabetSize)) {
+            if (!pInput->readBits(read16u(0x06), &nRawSymbol) || (nRawSymbol >= m_nAlphabetSize)) {
                 return false;
             }
             const qint32 nAffectedLevel = addSymbol(nRawSymbol);
@@ -254,9 +237,7 @@ public:
 private:
     bool contains(qint64 nOffset, qint64 nSize) const
     {
-        return (nOffset >= 0) && (nSize >= 0) &&
-               (nOffset <= m_data.size()) &&
-               (nSize <= m_data.size() - nOffset);
+        return (nOffset >= 0) && (nSize >= 0) && (nOffset <= m_data.size()) && (nSize <= m_data.size() - nOffset);
     }
 
     char m_inputByte(qint64 nOffset, RTPatchBitInput *pInput)
@@ -273,7 +254,10 @@ private:
     }
 
 public:
-    void bindInput(const QByteArray *pPacked) { m_pPacked = pPacked; }
+    void bindInput(const QByteArray *pPacked)
+    {
+        m_pPacked = pPacked;
+    }
 
 private:
     quint16 read16u(qint64 nOffset)
@@ -298,10 +282,7 @@ private:
             return 0;
         }
         const uchar *p = reinterpret_cast<const uchar *>(m_data.constData());
-        return quint32(p[nOffset]) |
-               (quint32(p[nOffset + 1]) << 8) |
-               (quint32(p[nOffset + 2]) << 16) |
-               (quint32(p[nOffset + 3]) << 24);
+        return quint32(p[nOffset]) | (quint32(p[nOffset + 1]) << 8) | (quint32(p[nOffset + 2]) << 16) | (quint32(p[nOffset + 3]) << 24);
     }
 
     void write16(qint64 nOffset, qint64 nValue)
@@ -336,11 +317,9 @@ private:
             m_bValid = false;
             return;
         }
-        qint32 nAccumulator = (nStart == 0)
-            ? 2 : qint32(read16s(nLimitOffset + (nStart - 1) * 8)) * 2;
+        qint32 nAccumulator = (nStart == 0) ? 2 : qint32(read16s(nLimitOffset + (nStart - 1) * 8)) * 2;
         for (qint32 nLevel = nStart; nLevel < nLevels; ++nLevel) {
-            const qint32 nValue = nAccumulator -
-                read16s(nGroupCountOffset + nLevel * 2);
+            const qint32 nValue = nAccumulator - read16s(nGroupCountOffset + nLevel * 2);
             write16(nLimitOffset + nLevel * 8, nValue);
             nAccumulator = nValue * 2;
             write16(nLimitOffset + nLevel * 8 + 2, nAccumulator);
@@ -373,16 +352,14 @@ private:
         write16(nWeightOffset + nNewSymbol * 2, 1);
         quint32 nSlotCount = read16u(0x08);
         if (!m_bValid || (nSlotCount > m_nAlphabetSize)) return -1;
-        write32(nSlotOffset + nSlotCount * 4,
-                nWeightOffset + nNewSymbol * 2);
+        write32(nSlotOffset + nSlotCount * 4, nWeightOffset + nNewSymbol * 2);
         ++nSlotCount;
         write16(0x08, nSlotCount);
         if (nSlotCount == 2) return m_bValid ? 0 : -1;
 
         quint32 nGroupCount = read16u(0x0a);
         const quint32 nLevels = read16u(0x04);
-        if (!m_bValid || (nGroupCount == 0) ||
-            (nGroupCount > nLevels)) {
+        if (!m_bValid || (nGroupCount == 0) || (nGroupCount > nLevels)) {
             return -1;
         }
         quint32 nGroup = 0;
@@ -392,25 +369,18 @@ private:
         } else {
             if (nGroupCount < 2) return -1;
             nGroup = (nGroupCount - 2) & 0xffff;
-            for (quint32 i = 0;
-                 (i < nLevels) &&
-                 (read16s(nGroupCountOffset + nGroup * 2) == 0);
-                 ++i) {
+            for (quint32 i = 0; (i < nLevels) && (read16s(nGroupCountOffset + nGroup * 2) == 0); ++i) {
                 if (nGroup == 0) return -1;
                 nGroup = (nGroup - 1) & 0xffff;
             }
         }
-        write16(nGroupCountOffset + nGroup * 2,
-                read16s(nGroupCountOffset + nGroup * 2) - 1);
-        write16(nGroupCountOffset + (nGroup + 1) * 2,
-                read16s(nGroupCountOffset + (nGroup + 1) * 2) + 2);
-        const quint32 nNext =
-            read32(nSymbolTableOffset + (nGroup + 1) * 4);
+        write16(nGroupCountOffset + nGroup * 2, read16s(nGroupCountOffset + nGroup * 2) - 1);
+        write16(nGroupCountOffset + (nGroup + 1) * 2, read16s(nGroupCountOffset + (nGroup + 1) * 2) + 2);
+        const quint32 nNext = read32(nSymbolTableOffset + (nGroup + 1) * 4);
         if (nNext < 4) return -1;
         write32(nSymbolTableOffset + (nGroup + 1) * 4, nNext - 4);
         for (quint32 i = nGroup + 2; i <= nLevels; ++i) {
-            write32(nSymbolTableOffset + i * 4,
-                    read32(nSymbolTableOffset + i * 4) + 4);
+            write32(nSymbolTableOffset + i * 4, read32(nSymbolTableOffset + i * 4) + 4);
         }
         return m_bValid ? qint32(nGroup) : -1;
     }
@@ -423,8 +393,7 @@ private:
         const quint32 nSlotCount = read16u(0x08);
         const qint32 nUpdateCounter = read16s(0x2c);
         const quint32 nLevels = read16u(0x04);
-        if (!m_bValid || (nSlotCount > m_nAlphabetSize + 1) ||
-            (nLevels == 0) || (nLevels > 24)) {
+        if (!m_bValid || (nSlotCount > m_nAlphabetSize + 1) || (nLevels == 0) || (nLevels > 24)) {
             m_bValid = false;
             return;
         }
@@ -444,16 +413,13 @@ private:
 
         if (nMaximumWeight != 0) {
             quint32 nMask = 0x8000;
-            for (qint32 guard = 0;
-                 ((nMaximumWeight & nMask) == 0) && (guard < 16);
-                 ++guard) {
+            for (qint32 guard = 0; ((nMaximumWeight & nMask) == 0) && (guard < 16); ++guard) {
                 nMask = (nMask >> 1) | 0x8000;
             }
             quint32 nPosition = 0;
             bool bDone = false;
             while ((nPosition < nSlotCount) && !bDone && m_bValid) {
-                const quint32 nCurrentPointer =
-                    read32(nSlotOffset + nPosition * 4);
+                const quint32 nCurrentPointer = read32(nSlotOffset + nPosition * 4);
                 if ((read16u(nCurrentPointer) & nMask) == 0) {
                     quint32 nScan = nPosition + 1;
                     quint32 nInsertion = nPosition;
@@ -465,10 +431,8 @@ private:
                         nLastInsertion = nInsertion;
                         if ((read16u(nScanPointer) & nMask) != 0) {
                             nLastInsertion = nInsertion + 1;
-                            const quint32 nSaved =
-                                read32(nSlotOffset + nInsertion * 4);
-                            write32(nSlotOffset + nInsertion * 4,
-                                    nScanPointer);
+                            const quint32 nSaved = read32(nSlotOffset + nInsertion * 4);
+                            write32(nSlotOffset + nInsertion * 4, nScanPointer);
                             write32(nScanSlot, nSaved);
                         }
                         ++nScan;
@@ -521,27 +485,19 @@ private:
             const quint32 nLastWeight = read16u(nLastWeightPointer);
             const quint32 nPreviousWeight = read16u(nPreviousWeightPointer);
 
-            if ((nGroupSize < 3) ||
-                (((nLevels - 1) & 0xffff) == nLevel) ||
-                (nFirstWeight < nLastWeight + nPreviousWeight)) {
+            if ((nGroupSize < 3) || (((nLevels - 1) & 0xffff) == nLevel) || (nFirstWeight < nLastWeight + nPreviousWeight)) {
                 quint32 nMovingTableOffset = nTableOffset + 4;
                 bool bFound = false;
                 qint32 nAccumulator = qint32(nLastWeight);
                 quint32 nTargetLevel = nLevel + 2;
                 while (nTargetLevel < nGroupCount) {
-                    const quint32 nTargetTable =
-                        nSymbolTableOffset + nTargetLevel * 4;
+                    const quint32 nTargetTable = nSymbolTableOffset + nTargetLevel * 4;
                     const quint32 nTargetSlot = read32(nTargetTable);
-                    nAccumulator =
-                        (nAccumulator - read16s(read32(nTargetSlot))) &
-                        0xffff;
-                    const quint32 nTargetGroupSize =
-                        read16u(nGroupCountOffset + nTargetLevel * 2);
+                    nAccumulator = (nAccumulator - read16s(read32(nTargetSlot))) & 0xffff;
+                    const quint32 nTargetGroupSize = read16u(nGroupCountOffset + nTargetLevel * 2);
                     const quint32 nNextSlot = read32(nTargetSlot + 4);
                     const quint32 nNextWeight = read16u(nNextSlot);
-                    if ((nTargetGroupSize > 1) &&
-                        ((nAccumulator & 0x8000) ||
-                         (quint32(nAccumulator) < nNextWeight))) {
+                    if ((nTargetGroupSize > 1) && ((nAccumulator & 0x8000) || (quint32(nAccumulator) < nNextWeight))) {
                         bFound = true;
                         break;
                     }
@@ -561,27 +517,20 @@ private:
                     return;
                 }
                 write32(nMovingTableOffset, nMovingValue - 4);
-                write16(nGroupCountOffset + nLevel * 2,
-                        read16s(nGroupCountOffset + nLevel * 2) + 2);
-                write32(nTableOffset + 8,
-                        read32(nTableOffset + 8) + 4);
-                const quint32 nBeforeTarget =
-                    (nTargetLevel - 1) & 0xffff;
+                write16(nGroupCountOffset + nLevel * 2, read16s(nGroupCountOffset + nLevel * 2) + 2);
+                write32(nTableOffset + 8, read32(nTableOffset + 8) + 4);
+                const quint32 nBeforeTarget = (nTargetLevel - 1) & 0xffff;
                 if (nLevel < nBeforeTarget) {
                     const quint32 nSpan = nBeforeTarget - nLevel;
                     nLevel += nSpan;
                     for (quint32 i = 0; i < nSpan; ++i) {
-                        write32(nMovingTableOffset + 8,
-                                read32(nMovingTableOffset + 8) + 4);
+                        write32(nMovingTableOffset + 8, read32(nMovingTableOffset + 8) + 4);
                         nMovingTableOffset += 4;
                     }
                 }
-                write16(nGroupCountOffset + nLevel * 2,
-                        read16s(nGroupCountOffset + nLevel * 2) + 1);
-                write32(nMovingTableOffset + 4,
-                        read32(nMovingTableOffset + 4) + 4);
-                write16(nGroupCountOffset + (nLevel + 1) * 2,
-                        read16s(nGroupCountOffset + (nLevel + 1) * 2) - 2);
+                write16(nGroupCountOffset + nLevel * 2, read16s(nGroupCountOffset + nLevel * 2) + 1);
+                write32(nMovingTableOffset + 4, read32(nMovingTableOffset + 4) + 4);
+                write16(nGroupCountOffset + (nLevel + 1) * 2, read16s(nGroupCountOffset + (nLevel + 1) * 2) - 2);
                 if (read16s(nGroupCountOffset + nLastGroup * 2) == 0) {
                     if (nGroupCount == 0) {
                         m_bValid = false;
@@ -598,11 +547,9 @@ private:
                     return;
                 }
                 ++nMoved;
-                write16(nGroupOffset - 2,
-                        read16s(nGroupOffset - 2) + 1);
+                write16(nGroupOffset - 2, read16s(nGroupOffset - 2) + 1);
                 write16(nGroupOffset, read16s(nGroupOffset) - 3);
-                write16(nGroupOffset + 2,
-                        read16s(nGroupOffset + 2) + 2);
+                write16(nGroupOffset + 2, read16s(nGroupOffset + 2) + 2);
                 write32(nTableOffset, read32(nTableOffset) + 4);
                 const quint32 nEnd = read32(nTableOffset + 4);
                 if (nEnd < 8) {
@@ -645,13 +592,9 @@ private:
 };
 }  // namespace
 
-bool XRTPatchDecoder::decode(const QByteArray &packed, qint64 expectedSize,
-                             QByteArray *output,
-                             XBinary::PDSTRUCT *pPdStruct)
+bool XRTPatchDecoder::decode(const QByteArray &packed, qint64 expectedSize, QByteArray *output, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (!output || (packed.size() < 8) || (expectedSize < 0) ||
-        (expectedSize > (std::numeric_limits<qint32>::max)()) ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!output || (packed.size() < 8) || (expectedSize < 0) || (expectedSize > (std::numeric_limits<qint32>::max)()) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -662,28 +605,18 @@ bool XRTPatchDecoder::decode(const QByteArray &packed, qint64 expectedSize,
     quint32 nInitialPeriod = 0;
     quint32 nUpdatePeriod = 0;
     quint32 nWindowFlag = 0;
-    if (!input.readBits(16, &nMagic) || (nMagic != RTPATCH_DIFF_MAGIC) ||
-        !input.readBits(8, &nUseRawLiterals) ||
-        !input.readBits(8, &nReserved) ||
-        !input.readBits(12, &nInitialPeriod) ||
-        !input.readBits(12, &nUpdatePeriod) ||
-        !input.readBits(4, &nWindowFlag) ||
-        (nUseRawLiterals > 1) || (nReserved != 0xff) ||
+    if (!input.readBits(16, &nMagic) || (nMagic != RTPATCH_DIFF_MAGIC) || !input.readBits(8, &nUseRawLiterals) || !input.readBits(8, &nReserved) ||
+        !input.readBits(12, &nInitialPeriod) || !input.readBits(12, &nUpdatePeriod) || !input.readBits(4, &nWindowFlag) || (nUseRawLiterals > 1) || (nReserved != 0xff) ||
         (nInitialPeriod == 0) || (nUpdatePeriod == 0)) {
         return false;
     }
 
-    const qint32 nDistanceBits =
-        (nWindowFlag == RTPATCH_WINDOW_FLAG_8K) ? 7 : 6;
+    const qint32 nDistanceBits = (nWindowFlag == RTPATCH_WINDOW_FLAG_8K) ? 7 : 6;
     RTPatchHuffmanTree literalTree;
     RTPatchHuffmanTree lengthTree;
     RTPatchHuffmanTree distanceTree;
-    if (((nUseRawLiterals == 0) &&
-         !literalTree.initialize(8, 0x10, nInitialPeriod,
-                                 nUpdatePeriod)) ||
-        !lengthTree.initialize(6, 0x0c, nInitialPeriod, nUpdatePeriod) ||
-        !distanceTree.initialize(6, 0x0c, nInitialPeriod,
-                                 nUpdatePeriod)) {
+    if (((nUseRawLiterals == 0) && !literalTree.initialize(8, 0x10, nInitialPeriod, nUpdatePeriod)) || !lengthTree.initialize(6, 0x0c, nInitialPeriod, nUpdatePeriod) ||
+        !distanceTree.initialize(6, 0x0c, nInitialPeriod, nUpdatePeriod)) {
         return false;
     }
     literalTree.bindInput(&packed);
@@ -692,8 +625,7 @@ bool XRTPatchDecoder::decode(const QByteArray &packed, qint64 expectedSize,
 
     QByteArray decoded;
     decoded.reserve(qint32(expectedSize));
-    while ((decoded.size() < expectedSize) &&
-           XBinary::isPdStructNotCanceled(pPdStruct)) {
+    while ((decoded.size() < expectedSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         quint32 nFlag = 0;
         if (!input.readBit(&nFlag)) return false;
         if (nFlag == 0) {
@@ -710,12 +642,10 @@ bool XRTPatchDecoder::decode(const QByteArray &packed, qint64 expectedSize,
         } else {
             quint32 nDistanceLow = 0;
             quint16 nDistanceHigh = 0;
-            if (!input.readBits(nDistanceBits, &nDistanceLow) ||
-                !distanceTree.decode(&input, &nDistanceHigh)) {
+            if (!input.readBits(nDistanceBits, &nDistanceLow) || !distanceTree.decode(&input, &nDistanceHigh)) {
                 return false;
             }
-            const quint32 nDistance =
-                (quint32(nDistanceHigh) << nDistanceBits) | nDistanceLow;
+            const quint32 nDistance = (quint32(nDistanceHigh) << nDistanceBits) | nDistanceLow;
             if (nDistance == 0) break;
             quint16 nLengthSymbol = 0;
             if (!lengthTree.decode(&input, &nLengthSymbol)) return false;
@@ -724,18 +654,15 @@ bool XRTPatchDecoder::decode(const QByteArray &packed, qint64 expectedSize,
             const qint32 nBack = qint32(nDistance + 1);
             for (qint32 i = 0; i < nLength; ++i) {
                 const qint32 nPosition = decoded.size();
-                decoded.append((nPosition >= nBack)
-                                   ? decoded.at(nPosition - nBack) : '\0');
+                decoded.append((nPosition >= nBack) ? decoded.at(nPosition - nBack) : '\0');
             }
         }
-        if ((decoded.size() & 0xffff) == 0 &&
-            !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        if ((decoded.size() & 0xffff) == 0 && !XBinary::isPdStructNotCanceled(pPdStruct)) {
             return false;
         }
     }
 
-    if ((decoded.size() != expectedSize) ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if ((decoded.size() != expectedSize) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
     *output = decoded;

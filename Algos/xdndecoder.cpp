@@ -19,21 +19,12 @@ const qint32 DN_MAX_BITS = 15;
 const qint32 DN_MAX_HUFFMAN_SYMBOLS = 288;
 const qint32 DN_MAX_DYNAMIC_LENGTHS = 286 + 30;
 
-const std::array<quint16, 29> DN_LENGTH_BASE = {
-    3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27,
-    31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258};
-const std::array<quint8, 29> DN_LENGTH_EXTRA = {
-    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2,
-    2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0};
-const std::array<quint16, 30> DN_DISTANCE_BASE = {
-    1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129,
-    193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097,
-    6145, 8193, 12289, 16385, 24577};
-const std::array<quint8, 30> DN_DISTANCE_EXTRA = {
-    0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6,
-    6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13};
-const std::array<quint8, 19> DN_CODE_LENGTH_ORDER = {
-    16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
+const std::array<quint16, 29> DN_LENGTH_BASE = {3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258};
+const std::array<quint8, 29> DN_LENGTH_EXTRA = {0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0};
+const std::array<quint16, 30> DN_DISTANCE_BASE = {1,   2,   3,   4,   5,   7,    9,    13,   17,   25,   33,   49,   65,    97,    129,
+                                                  193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577};
+const std::array<quint8, 30> DN_DISTANCE_EXTRA = {0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13};
+const std::array<quint8, 19> DN_CODE_LENGTH_ORDER = {16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
 
 struct DN_STATE;
 
@@ -114,8 +105,7 @@ struct DN_STATE {
 
 bool dnPrepareProcessState(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct, quint32 *pCompressedSize, quint32 *pRawSize)
 {
-    if (!pState || !pCompressedSize || !pRawSize || !pState->pDeviceInput || !pState->pDeviceOutput || (pState->nInputOffset < 0) ||
-        (pState->nInputLimit < 0)) {
+    if (!pState || !pCompressedSize || !pRawSize || !pState->pDeviceInput || !pState->pDeviceOutput || (pState->nInputOffset < 0) || (pState->nInputLimit < 0)) {
         return false;
     }
 
@@ -140,12 +130,10 @@ bool dnPrepareProcessState(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT
     pState->nCountInput = 0;
     pState->nCountOutput = 0;
 
-    if (!pState->pDeviceInput->isReadable() || !pState->pDeviceInput->seek(pState->nInputOffset) ||
-        (pState->pDeviceInput->pos() != pState->nInputOffset)) {
+    if (!pState->pDeviceInput->isReadable() || !pState->pDeviceInput->seek(pState->nInputOffset) || (pState->pDeviceInput->pos() != pState->nInputOffset)) {
         pState->bReadError = true;
     }
-    if (!pState->pDeviceOutput->isWritable() || (!pState->pDeviceOutput->isSequential() && !pState->pDeviceOutput->seek(0)) ||
-        (pState->pDeviceOutput->pos() != 0)) {
+    if (!pState->pDeviceOutput->isWritable() || (!pState->pDeviceOutput->isSequential() && !pState->pDeviceOutput->seek(0)) || (pState->pDeviceOutput->pos() != 0)) {
         pState->bWriteError = true;
     }
     if (pState->bReadError || pState->bWriteError || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
@@ -157,8 +145,7 @@ bool dnPrepareProcessState(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT
 
 bool dnRefillInput(DN_STATE *pState)
 {
-    if (!pState || pState->bError || !pState->pProcessState || (pState->nCompressedLeft == 0) ||
-        !XBinary::isPdStructNotCanceled(pState->pPdStruct)) {
+    if (!pState || pState->bError || !pState->pProcessState || (pState->nCompressedLeft == 0) || !XBinary::isPdStructNotCanceled(pState->pPdStruct)) {
         return false;
     }
 
@@ -177,8 +164,7 @@ bool dnRefillInput(DN_STATE *pState)
 
 bool dnReadByte(DN_STATE *pState, quint8 *pValue)
 {
-    if (!pState || !pValue || pState->bError || (pState->nCompressedLeft == 0) ||
-        !XBinary::isPdStructNotCanceled(pState->pPdStruct)) {
+    if (!pState || !pValue || pState->bError || (pState->nCompressedLeft == 0) || !XBinary::isPdStructNotCanceled(pState->pPdStruct)) {
         return false;
     }
     if ((pState->nInputPosition >= pState->nInputSize) && !dnRefillInput(pState)) return false;
@@ -269,8 +255,7 @@ bool dnEmitByte(DN_STATE *pState, quint8 nValue)
 bool dnCopyMatch(DN_STATE *pState, quint32 nDistance, quint32 nLength)
 {
     if (!pState || pState->bError || (nDistance == 0) || (nDistance > DN_WINDOW_SIZE) ||
-        (nDistance > (std::min)(pState->nProduced, static_cast<quint32>(DN_WINDOW_SIZE))) ||
-        (nLength > (pState->nRawSize - pState->nProduced))) {
+        (nDistance > (std::min)(pState->nProduced, static_cast<quint32>(DN_WINDOW_SIZE))) || (nLength > (pState->nRawSize - pState->nProduced))) {
         return false;
     }
 
@@ -308,8 +293,7 @@ bool dnBuildDynamicTrees(DN_STATE *pState, DN_HUFFMAN *pLiteralTree, DN_HUFFMAN 
 
     // Classic DN's inflater reads these fields in HDIST, HCLEN, HLIT order.
     // This is the sole format-level difference from an RFC 1951 dynamic block.
-    if (!dnReadBits(pState, 5, &nDistanceCount) || !dnReadBits(pState, 4, &nCodeLengthCount) ||
-        !dnReadBits(pState, 5, &nLiteralCount)) {
+    if (!dnReadBits(pState, 5, &nDistanceCount) || !dnReadBits(pState, 4, &nCodeLengthCount) || !dnReadBits(pState, 5, &nLiteralCount)) {
         return false;
     }
     ++nDistanceCount;
@@ -403,8 +387,8 @@ bool dnDecodeStoredBlock(DN_STATE *pState)
 
     quint32 nLength = 0;
     quint32 nComplement = 0;
-    if (!dnReadBits(pState, 16, &nLength) || !dnReadBits(pState, 16, &nComplement) ||
-        ((nLength ^ 0xffffU) != nComplement) || (nLength > (pState->nRawSize - pState->nProduced))) {
+    if (!dnReadBits(pState, 16, &nLength) || !dnReadBits(pState, 16, &nComplement) || ((nLength ^ 0xffffU) != nComplement) ||
+        (nLength > (pState->nRawSize - pState->nProduced))) {
         return false;
     }
     for (quint32 i = 0; i < nLength; ++i) {
@@ -448,8 +432,7 @@ bool XDNDecoder::decompress(XBinary::DATAPROCESS_STATE *pProcessState, XBinary::
         } else if (nBlockType == 2) {
             DN_HUFFMAN literalTree;
             DN_HUFFMAN distanceTree;
-            if (!dnBuildDynamicTrees(pState.get(), &literalTree, &distanceTree) ||
-                !dnDecodeHuffmanBlock(pState.get(), literalTree, distanceTree)) {
+            if (!dnBuildDynamicTrees(pState.get(), &literalTree, &distanceTree) || !dnDecodeHuffmanBlock(pState.get(), literalTree, distanceTree)) {
                 return false;
             }
         } else {
@@ -459,9 +442,8 @@ bool XDNDecoder::decompress(XBinary::DATAPROCESS_STATE *pProcessState, XBinary::
 
     // The final EOB may leave up to seven padding bits in its last byte, but
     // no additional byte is valid inside the member's declared packed extent.
-    const bool bCodecExact = !pState->bError && (pState->nProduced == nRawSize) && (pState->nCompressedLeft == 0) &&
-                             (pState->nInputPosition == pState->nInputSize) && dnFlushOutput(pState.get());
-    return bCodecExact && !pState->bError && !pProcessState->bReadError && !pProcessState->bWriteError &&
-           (pProcessState->nCountInput == nCompressedSize) && (pProcessState->nCountOutput == nRawSize) &&
-           XBinary::isPdStructNotCanceled(pPdStruct);
+    const bool bCodecExact = !pState->bError && (pState->nProduced == nRawSize) && (pState->nCompressedLeft == 0) && (pState->nInputPosition == pState->nInputSize) &&
+                             dnFlushOutput(pState.get());
+    return bCodecExact && !pState->bError && !pProcessState->bReadError && !pProcessState->bWriteError && (pProcessState->nCountInput == nCompressedSize) &&
+           (pProcessState->nCountOutput == nRawSize) && XBinary::isPdStructNotCanceled(pPdStruct);
 }

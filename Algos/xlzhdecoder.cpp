@@ -1340,14 +1340,9 @@ struct Lzhuf {
 };
 }  // namespace
 
-qint64 XLZHDecoder::lh1MeasureStream(const quint8 *pData, qint64 nMaxSize,
-                                     qint64 nUncompressedSize,
-                                     XBinary::PDSTRUCT *pPdStruct)
+qint64 XLZHDecoder::lh1MeasureStream(const quint8 *pData, qint64 nMaxSize, qint64 nUncompressedSize, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (!pData || nMaxSize < 1 ||
-        nMaxSize > (std::numeric_limits<qint64>::max)() / 8 ||
-        nUncompressedSize < 1 ||
-        nUncompressedSize > LH1_MAX_UNPACKED_BUFFER_SIZE ||
+    if (!pData || nMaxSize < 1 || nMaxSize > (std::numeric_limits<qint64>::max)() / 8 || nUncompressedSize < 1 || nUncompressedSize > LH1_MAX_UNPACKED_BUFFER_SIZE ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return -1;
     }
@@ -1477,13 +1472,12 @@ size_t legacyLhaRead(void *pBuffer, size_t nLength, void *pContext)
 
 bool XLZHDecoder::decompressLegacyLha(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (!pState || !pState->pDeviceInput || !pState->pDeviceOutput ||
-        !pState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE)) return false;
+    if (!pState || !pState->pDeviceInput || !pState->pDeviceOutput || !pState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE)) return false;
     bool bExpectedValid = false;
     const qint64 nExpected = pState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong(&bExpectedValid);
     const qint64 nLimit = 128 * 1024 * 1024;
-    if (!bExpectedValid || (nExpected < 0) || (nExpected > nLimit) || (pState->nInputOffset < 0) ||
-        (pState->nInputLimit < 0) || (pState->nInputLimit > nLimit)) return false;
+    if (!bExpectedValid || (nExpected < 0) || (nExpected > nLimit) || (pState->nInputOffset < 0) || (pState->nInputLimit < 0) || (pState->nInputLimit > nLimit))
+        return false;
     const QByteArray baMethod = pState->mapProperties.value(XBinary::FPART_PROP_COMPRESSPROPERTIES).toByteArray();
     const XLhaLegacyDecoderType *pType = nullptr;
     if (baMethod == "-lzs-") pType = &xlha_legacy_lzs_decoder;
@@ -1526,6 +1520,5 @@ bool XLZHDecoder::decompressLegacyLha(XBinary::DATAPROCESS_STATE *pState, XBinar
         }
     }
     if (pType->free) pType->free(context.get());
-    return bResult && !pState->bReadError && !pState->bWriteError &&
-           (pState->nCountOutput == nExpected) && XBinary::isPdStructNotCanceled(pPdStruct);
+    return bResult && !pState->bReadError && !pState->bWriteError && (pState->nCountOutput == nExpected) && XBinary::isPdStructNotCanceled(pPdStruct);
 }

@@ -1937,7 +1937,10 @@ static bool decompressBzip2Streams(XBinary::DATAPROCESS_STATE *pDecompressState,
 
                     if (nBufferSize > 0) {
                         strm.avail_in = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
-                        if (!guardedInput || !guardedOutput) { ret = BZ_IO_ERROR; break; }
+                        if (!guardedInput || !guardedOutput) {
+                            ret = BZ_IO_ERROR;
+                            break;
+                        }
 
                         if (strm.avail_in > 0) {
                             strm.next_in = bufferIn;
@@ -1964,7 +1967,10 @@ static bool decompressBzip2Streams(XBinary::DATAPROCESS_STATE *pDecompressState,
                             strm.next_in = bufferIn;
                             const qint32 nRequest = Algo_utils::getReadChunkSize(pDecompressState, 4 - strm.avail_in);
                             const qint32 nRead = nRequest > 0 ? XBinary::_readDevice(bufferIn + strm.avail_in, nRequest, pDecompressState) : 0;
-                            if (!guardedInput || !guardedOutput) { ret = BZ_IO_ERROR; break; }
+                            if (!guardedInput || !guardedOutput) {
+                                ret = BZ_IO_ERROR;
+                                break;
+                            }
                             if (nRead <= 0) bReadMore = false;
                             else strm.avail_in += nRead;
                         }
@@ -1980,7 +1986,8 @@ static bool decompressBzip2Streams(XBinary::DATAPROCESS_STATE *pDecompressState,
                                 if (!input || nStreamEnd <= 0 || nStreamEnd > pDecompressState->nCountInput ||
                                     pDecompressState->nInputOffset > (std::numeric_limits<qint64>::max)() - nStreamEnd ||
                                     !input->seek(pDecompressState->nInputOffset + nStreamEnd) || !input) {
-                                    ret = BZ_DATA_ERROR; break;
+                                    ret = BZ_DATA_ERROR;
+                                    break;
                                 }
                                 pDecompressState->nCountInput = nStreamEnd;
                                 bAcceptedOverlay = true;
@@ -1989,13 +1996,19 @@ static bool decompressBzip2Streams(XBinary::DATAPROCESS_STATE *pDecompressState,
                         }
                     }
                     if (!strm.avail_in) break;
-                    if (++nMembers > 65536) { ret = BZ_DATA_ERROR; break; }
+                    if (++nMembers > 65536) {
+                        ret = BZ_DATA_ERROR;
+                        break;
+                    }
                     char *pRemaining = strm.next_in;
                     unsigned nRemaining = strm.avail_in;
                     X_BZ2_bzDecompressEnd(&strm);
                     strm = bz_stream();
                     rc = X_BZ2_bzDecompressInit(&strm, 0, 0);
-                    if (rc != BZ_OK) { ret = rc; break; }
+                    if (rc != BZ_OK) {
+                        ret = rc;
+                        break;
+                    }
                     strm.next_in = pRemaining;
                     strm.avail_in = nRemaining;
                     ret = BZ_OK;
@@ -2039,8 +2052,8 @@ static bool decompressBzip2Streams(XBinary::DATAPROCESS_STATE *pDecompressState,
             const bool bExpectedOutput = !pDecompressState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE) ||
                                          ((pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong() >= 0) &&
                                           (pDecompressState->nCountOutput == pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong()));
-            bResult = (ret == BZ_STREAM_END) && bConsumedInput && bExpectedOutput && !pDecompressState->bReadError && !pDecompressState->bWriteError &&
-                      guardedInput && guardedOutput && XBinary::isPdStructNotCanceled(pPdStruct);
+            bResult = (ret == BZ_STREAM_END) && bConsumedInput && bExpectedOutput && !pDecompressState->bReadError && !pDecompressState->bWriteError && guardedInput &&
+                      guardedOutput && XBinary::isPdStructNotCanceled(pPdStruct);
         }
 
         delete[] bufferIn;

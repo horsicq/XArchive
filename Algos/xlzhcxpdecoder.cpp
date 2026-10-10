@@ -34,9 +34,7 @@ const qint32 LZHCXP_MAX_WIDTH = 12;
 class LzhcxpBitReader {
 public:
     explicit LzhcxpBitReader(const QByteArray &baInput)
-        : m_pData(reinterpret_cast<const quint8 *>(baInput.constData())),
-          m_nSize(baInput.size()), m_nPosition(0), m_nBlockLeft(0),
-          m_nAccumulator(0), m_nBitCount(0)
+        : m_pData(reinterpret_cast<const quint8 *>(baInput.constData())), m_nSize(baInput.size()), m_nPosition(0), m_nBlockLeft(0), m_nAccumulator(0), m_nBitCount(0)
     {
     }
 
@@ -78,8 +76,7 @@ private:
 };
 }  // namespace
 
-bool XLzhcxpDecoder::decode(const QByteArray &baInput, qint64 nExpectedSize,
-                            qint64 nMaxOutput, QByteArray *pbaResult)
+bool XLzhcxpDecoder::decode(const QByteArray &baInput, qint64 nExpectedSize, qint64 nMaxOutput, QByteArray *pbaResult)
 {
     if (!pbaResult) return false;
     pbaResult->clear();
@@ -148,8 +145,7 @@ bool XLzhcxpDecoder::decode(const QByteArray &baInput, qint64 nExpectedSize,
         if (nStackTop >= LZHCXP_MAX_CODE) return false;
         baStack[nStackTop++] = char(quint8(nCode & 0xff));
 
-        if ((nMaxOutput >= 0) &&
-            ((qint64(nStackTop) + pbaResult->size()) > nMaxOutput)) {
+        if ((nMaxOutput >= 0) && ((qint64(nStackTop) + pbaResult->size()) > nMaxOutput)) {
             return false;
         }
         while (nStackTop > 0) {

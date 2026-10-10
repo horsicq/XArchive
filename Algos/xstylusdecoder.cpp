@@ -40,9 +40,7 @@ const qint32 STYLUS_CANCEL_INTERVAL = 0xffff;
 // the format has no terminator and stops when the member's bytes run out.
 class StylusDeviceReader {
 public:
-    StylusDeviceReader(XBinary::DATAPROCESS_STATE *pState,
-                       XBinary::PDSTRUCT *pPdStruct)
-        : m_pState(pState), m_pPdStruct(pPdStruct), m_bError(false)
+    StylusDeviceReader(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct) : m_pState(pState), m_pPdStruct(pPdStruct), m_bError(false)
     {
     }
 
@@ -52,8 +50,7 @@ public:
             m_bError = true;
             return -1;
         }
-        if ((m_pState->nInputLimit != -1) &&
-            (m_pState->nCountInput >= m_pState->nInputLimit)) {
+        if ((m_pState->nInputLimit != -1) && (m_pState->nCountInput >= m_pState->nInputLimit)) {
             m_bError = (m_pState->nCountInput != m_pState->nInputLimit);
             return -1;
         }
@@ -63,8 +60,7 @@ public:
             if ((nRead < 0) || m_pState->bReadError) m_bError = true;
             return -1;
         }
-        return static_cast<qint32>(
-            static_cast<quint8>(static_cast<quint8>(cByte) ^ STYLUS_XOR_KEY));
+        return static_cast<qint32>(static_cast<quint8>(static_cast<quint8>(cByte) ^ STYLUS_XOR_KEY));
     }
 
     bool hasError() const
@@ -81,8 +77,7 @@ private:
 // Byte source over a memory block, used by measure().
 class StylusMemoryReader {
 public:
-    StylusMemoryReader(const quint8 *pData, qint64 nSize)
-        : m_pData(pData), m_nSize(nSize), m_nPosition(0)
+    StylusMemoryReader(const quint8 *pData, qint64 nSize) : m_pData(pData), m_nSize(nSize), m_nPosition(0)
     {
     }
 
@@ -90,8 +85,7 @@ public:
     {
         if (!m_pData || (m_nPosition >= m_nSize)) return -1;
         const quint8 nByte = m_pData[m_nPosition++];
-        return static_cast<qint32>(
-            static_cast<quint8>(nByte ^ STYLUS_XOR_KEY));
+        return static_cast<qint32>(static_cast<quint8>(nByte ^ STYLUS_XOR_KEY));
     }
 
     bool hasError() const
@@ -107,8 +101,7 @@ private:
 
 class StylusDeviceWriter {
 public:
-    explicit StylusDeviceWriter(XBinary::DATAPROCESS_STATE *pState)
-        : m_pState(pState), m_nProduced(0)
+    explicit StylusDeviceWriter(XBinary::DATAPROCESS_STATE *pState) : m_pState(pState), m_nProduced(0)
     {
     }
 
@@ -118,8 +111,7 @@ public:
         if (nSize == 0) return true;
         // _writeDevice applies the caller's output window and the unpack
         // output limit itself and returns the full chunk size on success.
-        if (XBinary::_writeDevice(reinterpret_cast<const char *>(pData), nSize,
-                                  m_pState) != nSize) {
+        if (XBinary::_writeDevice(reinterpret_cast<const char *>(pData), nSize, m_pState) != nSize) {
             return false;
         }
         m_nProduced += nSize;
@@ -176,8 +168,7 @@ bool stylusCore(READER &reader, WRITER &writer, XBinary::PDSTRUCT *pPdStruct)
     qint32 nCancelCounter = 0;
 
     for (;;) {
-        if (((++nCancelCounter & STYLUS_CANCEL_INTERVAL) == 0) &&
-            !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        if (((++nCancelCounter & STYLUS_CANCEL_INTERVAL) == 0) && !XBinary::isPdStructNotCanceled(pPdStruct)) {
             return false;
         }
 
@@ -204,13 +195,8 @@ bool stylusCore(READER &reader, WRITER &writer, XBinary::PDSTRUCT *pPdStruct)
         } else {
             const qint32 nSecond = reader.get();
             if (nSecond < 0) break;
-            qint32 nPosition =
-                static_cast<qint32>(
-                    ((static_cast<quint32>(nSecond) >> 4) << 8) |
-                    static_cast<quint32>(nByte)) +
-                STYLUS_MATCH_BIAS;
-            const qint32 nLength =
-                (nSecond & 0x0f) + STYLUS_MATCH_MIN_LENGTH;
+            qint32 nPosition = static_cast<qint32>(((static_cast<quint32>(nSecond) >> 4) << 8) | static_cast<quint32>(nByte)) + STYLUS_MATCH_BIAS;
+            const qint32 nLength = (nSecond & 0x0f) + STYLUS_MATCH_MIN_LENGTH;
             for (qint32 i = 0; i < nLength; i++) {
                 const quint8 nCopied = abWindow[nPosition & STYLUS_WINDOW_MASK];
                 nPosition = (nPosition & STYLUS_WINDOW_MASK) + 1;
@@ -226,8 +212,7 @@ bool stylusCore(READER &reader, WRITER &writer, XBinary::PDSTRUCT *pPdStruct)
     }
 
     if (reader.hasError()) return false;
-    if ((nWindowPosition > 0) &&
-        !writer.write(abWindow.data(), nWindowPosition)) {
+    if ((nWindowPosition > 0) && !writer.write(abWindow.data(), nWindowPosition)) {
         return false;
     }
     return XBinary::isPdStructNotCanceled(pPdStruct);
@@ -238,24 +223,19 @@ XStylusDecoder::XStylusDecoder(QObject *parent) : QObject(parent)
 {
 }
 
-bool XStylusDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState,
-                                XBinary::PDSTRUCT *pPdStruct)
+bool XStylusDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (!pDecompressState || !pDecompressState->pDeviceInput ||
-        !pDecompressState->pDeviceOutput ||
-        (pDecompressState->nInputOffset < 0) ||
+    if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput || (pDecompressState->nInputOffset < 0) ||
         (pDecompressState->nInputLimit < -1)) {
         return false;
     }
 
     Algo_utils::prepareState(pDecompressState);
-    if (pDecompressState->bReadError || pDecompressState->bWriteError ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (pDecompressState->bReadError || pDecompressState->bWriteError || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
-    if ((pDecompressState->nProcessedOffset < 0) ||
-        (pDecompressState->nProcessedLimit < -1)) {
+    if ((pDecompressState->nProcessedOffset < 0) || (pDecompressState->nProcessedLimit < -1)) {
         pDecompressState->bWriteError = true;
         return false;
     }
@@ -265,8 +245,7 @@ bool XStylusDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState,
     return stylusCore(reader, writer, pPdStruct);
 }
 
-qint64 XStylusDecoder::measure(const quint8 *pData, qint64 nSize,
-                               XBinary::PDSTRUCT *pPdStruct)
+qint64 XStylusDecoder::measure(const quint8 *pData, qint64 nSize, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pData || (nSize < 0)) return -1;
     StylusMemoryReader reader(pData, nSize);

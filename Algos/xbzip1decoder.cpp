@@ -196,8 +196,8 @@ private:
     qint32 m_nLast;
     qint32 m_nOrigPtr;
 
-    QByteArray m_baMtfBlock;   // the BWT output, "ll" in the original description
-    QByteArray m_baBlock;      // the block after the inverse transform
+    QByteArray m_baMtfBlock;    // the BWT output, "ll" in the original description
+    QByteArray m_baBlock;       // the block after the inverse transform
     QVector<qint32> m_vecNext;  // the inverse-BWT successor vector
 
     QByteArray m_baOutput;
@@ -360,14 +360,14 @@ bool Bzip1Decoder::decodeUInt32(quint32 *pnValue)
 --*/
 void Bzip1Decoder::initStructuredModels()
 {
-    bzip1InitModel(&m_models[0], 11, 12, 1000);   // first level
-    bzip1InitModel(&m_models[1], 2, 4, 1000);     // 2..3
-    bzip1InitModel(&m_models[2], 4, 3, 1000);     // 4..7
-    bzip1InitModel(&m_models[3], 8, 3, 1000);     // 8..15
-    bzip1InitModel(&m_models[4], 16, 3, 1000);    // 16..31
-    bzip1InitModel(&m_models[5], 32, 3, 1000);    // 32..63
-    bzip1InitModel(&m_models[6], 64, 2, 1000);    // 64..127
-    bzip1InitModel(&m_models[7], 128, 1, 1000);   // 128..255
+    bzip1InitModel(&m_models[0], 11, 12, 1000);  // first level
+    bzip1InitModel(&m_models[1], 2, 4, 1000);    // 2..3
+    bzip1InitModel(&m_models[2], 4, 3, 1000);    // 4..7
+    bzip1InitModel(&m_models[3], 8, 3, 1000);    // 8..15
+    bzip1InitModel(&m_models[4], 16, 3, 1000);   // 16..31
+    bzip1InitModel(&m_models[5], 32, 3, 1000);   // 32..63
+    bzip1InitModel(&m_models[6], 64, 2, 1000);   // 64..127
+    bzip1InitModel(&m_models[7], 128, 1, 1000);  // 128..255
 }
 
 bool Bzip1Decoder::decodeMTFValue(qint32 *pnValue)
@@ -671,8 +671,7 @@ bool Bzip1Decoder::run()
         if (!readRawByte(&nMagic[i])) return false;
     }
 
-    if ((nMagic[0] != quint32('B')) || (nMagic[1] != quint32('Z')) || (nMagic[2] != quint32('0')) || (nMagic[3] < quint32('1')) ||
-        (nMagic[3] > quint32('9'))) {
+    if ((nMagic[0] != quint32('B')) || (nMagic[1] != quint32('Z')) || (nMagic[2] != quint32('0')) || (nMagic[3] < quint32('1')) || (nMagic[3] > quint32('9'))) {
         return false;
     }
 
@@ -743,10 +742,9 @@ bool XBZIP1Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
         const bool bDecoded = pDecoder->run();
         delete pDecoder;
 
-        const bool bExpectedOutput =
-            !pDecompressState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE) ||
-            ((pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong() >= 0) &&
-             (pDecompressState->nCountOutput == pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong()));
+        const bool bExpectedOutput = !pDecompressState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE) ||
+                                     ((pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong() >= 0) &&
+                                      (pDecompressState->nCountOutput == pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong()));
 
         bResult = bDecoded && bExpectedOutput && !pDecompressState->bReadError && !pDecompressState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct);
     }

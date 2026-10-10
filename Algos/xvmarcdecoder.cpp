@@ -25,13 +25,13 @@
 #include <cstring>
 
 namespace {
-const qint32 VMARC_ENTRIES = 4096;        // dictionary entries
-const qint32 VMARC_TOP = 0x101;           // first recyclable entry
-const qint32 VMARC_LIMIT = 4095;          // last recyclable entry
-const qint32 VMARC_SCRATCH = 4096;        // used when nothing can be recycled
-const qint32 VMARC_SLOTS = 4097;          // entries plus the scratch slot
-const qint32 VMARC_PARENT_ROOT = -1;      // the 257 seeded entries
-const qint32 VMARC_PARENT_UNSET = -2;     // never assigned
+const qint32 VMARC_ENTRIES = 4096;     // dictionary entries
+const qint32 VMARC_TOP = 0x101;        // first recyclable entry
+const qint32 VMARC_LIMIT = 4095;       // last recyclable entry
+const qint32 VMARC_SCRATCH = 4096;     // used when nothing can be recycled
+const qint32 VMARC_SLOTS = 4097;       // entries plus the scratch slot
+const qint32 VMARC_PARENT_ROOT = -1;   // the 257 seeded entries
+const qint32 VMARC_PARENT_UNSET = -2;  // never assigned
 const qint64 VMARC_CANCEL_STEP = 0x10000;
 
 // The CMS record sink (translate flag OFF).  put() returns 1 to continue and
@@ -309,8 +309,7 @@ bool XVMARCDecoder::run(const QByteArray &baData, qint64 nOffset, quint16 nLRECL
     return bResult;
 }
 
-bool XVMARCDecoder::decode(const QByteArray &baPacked, const QByteArray &baProperties, qint64 nUncompressedSize, QByteArray *pbaResult,
-                           XBinary::PDSTRUCT *pPdStruct)
+bool XVMARCDecoder::decode(const QByteArray &baPacked, const QByteArray &baProperties, qint64 nUncompressedSize, QByteArray *pbaResult, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pbaResult) return false;
     if ((nUncompressedSize < 0) || (nUncompressedSize > MAX_UNCOMPRESSED_SIZE)) return false;

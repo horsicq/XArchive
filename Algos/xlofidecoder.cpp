@@ -28,8 +28,7 @@ const qint64 LOFI_MAX_SEGMENT_SIZE = 64 * 1024 * 1024;
 const qint64 LOFI_MAX_INDEX_ENTRIES = 64 * 1024 * 1024;
 }  // namespace
 
-bool XLOFIDecoder::parseGeometry(const QByteArray &baHeader, qint64 nInputSize,
-                                 GEOMETRY *pGeometry, QList<qint64> *pListIndex)
+bool XLOFIDecoder::parseGeometry(const QByteArray &baHeader, qint64 nInputSize, GEOMETRY *pGeometry, QList<qint64> *pListIndex)
 {
     if (!pGeometry) return false;
     if (baHeader.size() < LOFI_MIN_HEADER) return false;
@@ -92,8 +91,7 @@ bool XLOFIDecoder::parseGeometry(const QByteArray &baHeader, qint64 nInputSize,
     return true;
 }
 
-bool XLOFIDecoder::decode(const QByteArray &packed, qint64 nUncompressedSize,
-                          QByteArray *pOutput, XBinary::PDSTRUCT *pPdStruct)
+bool XLOFIDecoder::decode(const QByteArray &packed, qint64 nUncompressedSize, QByteArray *pOutput, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pOutput) return false;
     if ((nUncompressedSize <= 0) || (nUncompressedSize > qint64((std::numeric_limits<qint32>::max)()))) return false;
@@ -167,8 +165,8 @@ bool XLOFIDecoder::decode(const QByteArray &packed, qint64 nUncompressedSize,
             SizeT nDestLength = SizeT(nOutputLeft);
             SizeT nSourceLength = SizeT(nInputLeft);
             ELzmaStatus status = LZMA_STATUS_NOT_SPECIFIED;
-            const SRes ret = X_LzmaDec_DecodeToBuf(&state, reinterpret_cast<Byte *>(result.data()) + nProduced, &nDestLength,
-                                                  reinterpret_cast<const Byte *>(pInput), &nSourceLength, LZMA_FINISH_ANY, &status);
+            const SRes ret = X_LzmaDec_DecodeToBuf(&state, reinterpret_cast<Byte *>(result.data()) + nProduced, &nDestLength, reinterpret_cast<const Byte *>(pInput),
+                                                   &nSourceLength, LZMA_FINISH_ANY, &status);
             if (ret != 0) {
                 bResult = false;
                 break;

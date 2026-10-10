@@ -10,14 +10,14 @@
 #include <limits>
 
 namespace {
-const qint32 BSN_NC = 510;          // literal/length alphabet (256 + 254 lengths)
-const qint32 BSN_CBIT = 9;          // width of the literal-table symbol count
-const qint32 BSN_NT = 19;           // pre-table alphabet
-const qint32 BSN_TBIT = 5;          // width of the pre-table symbol count
-const qint32 BSN_NP = 16;           // position alphabet -> 15-bit distances
-const qint32 BSN_PBIT = 5;          // width of the position-table symbol count
-const qint32 BSN_THRESHOLD = 3;     // shortest encodable match
-const qint32 BSN_PT_SPECIAL = 3;    // pre-table index carrying the 2-bit zero run
+const qint32 BSN_NC = 510;        // literal/length alphabet (256 + 254 lengths)
+const qint32 BSN_CBIT = 9;        // width of the literal-table symbol count
+const qint32 BSN_NT = 19;         // pre-table alphabet
+const qint32 BSN_TBIT = 5;        // width of the pre-table symbol count
+const qint32 BSN_NP = 16;         // position alphabet -> 15-bit distances
+const qint32 BSN_PBIT = 5;        // width of the position-table symbol count
+const qint32 BSN_THRESHOLD = 3;   // shortest encodable match
+const qint32 BSN_PT_SPECIAL = 3;  // pre-table index carrying the 2-bit zero run
 const qint32 BSN_MAX_CODE_LENGTH = 16;
 const qint32 BSN_WINDOW_SIZE = 32768;
 const qint32 BSN_WINDOW_MASK = BSN_WINDOW_SIZE - 1;
@@ -30,25 +30,20 @@ const qint64 BSN_CANCEL_CHECK_INTERVAL = 0x10000;
 // MSB-first bit reader.  Every read is bounds-checked against the packed
 // buffer: a truncated member must fail, never read past the payload into the
 // next member's header.
-class BsnBitReader
-{
+class BsnBitReader {
 public:
-    explicit BsnBitReader(const QByteArray &data)
-        : m_pData(reinterpret_cast<const quint8 *>(data.constData())),
-          m_nBitCount(qint64(data.size()) * 8), m_nBitPosition(0)
+    explicit BsnBitReader(const QByteArray &data) : m_pData(reinterpret_cast<const quint8 *>(data.constData())), m_nBitCount(qint64(data.size()) * 8), m_nBitPosition(0)
     {
     }
 
     bool readBits(qint32 nCount, quint32 *pValue)
     {
-        if (!pValue || (nCount < 0) || (nCount > 24) ||
-            (m_nBitPosition > m_nBitCount - nCount)) {
+        if (!pValue || (nCount < 0) || (nCount > 24) || (m_nBitPosition > m_nBitCount - nCount)) {
             return false;
         }
         quint32 nResult = 0;
         for (qint32 i = 0; i < nCount; ++i) {
-            const quint32 nBit =
-                (m_pData[m_nBitPosition >> 3] >> (7 - (m_nBitPosition & 7))) & 1U;
+            const quint32 nBit = (m_pData[m_nBitPosition >> 3] >> (7 - (m_nBitPosition & 7))) & 1U;
             nResult = (nResult << 1) | nBit;
             ++m_nBitPosition;
         }
@@ -56,7 +51,10 @@ public:
         return true;
     }
 
-    qint64 consumedSize() const { return (m_nBitPosition + 7) / 8; }
+    qint64 consumedSize() const
+    {
+        return (m_nBitPosition + 7) / 8;
+    }
 
 private:
     const quint8 *m_pData;
@@ -67,8 +65,7 @@ private:
 // Canonical Huffman decode table.  bConstant covers LHA's "n == 0" shape,
 // where the block declares a single symbol and spends no bits on it; that
 // path is not theoretical here - the position table takes it in this corpus.
-struct BsnTree
-{
+struct BsnTree {
     quint32 nCount[BSN_MAX_CODE_LENGTH + 1];
     quint32 nFirstCode[BSN_MAX_CODE_LENGTH + 1];
     qint32 nFirstIndex[BSN_MAX_CODE_LENGTH + 1];
@@ -136,8 +133,7 @@ bool bsnBuildTree(const QVector<quint8> &vLengths, BsnTree *pTree)
     return true;
 }
 
-bool bsnDecodeSymbol(BsnBitReader *pReader, const BsnTree &tree,
-                     quint32 *pSymbol)
+bool bsnDecodeSymbol(BsnBitReader *pReader, const BsnTree &tree, quint32 *pSymbol)
 {
     if (!pSymbol) return false;
     if (tree.bConstant) {
@@ -149,12 +145,8 @@ bool bsnDecodeSymbol(BsnBitReader *pReader, const BsnTree &tree,
         quint32 nBit = 0;
         if (!pReader->readBits(1, &nBit)) return false;
         nCode = (nCode << 1) | nBit;
-        if (tree.nCount[nLength] &&
-            (nCode >= tree.nFirstCode[nLength]) &&
-            (nCode - tree.nFirstCode[nLength] < tree.nCount[nLength])) {
-            *pSymbol = tree.vSymbols.at(
-                tree.nFirstIndex[nLength] +
-                qint32(nCode - tree.nFirstCode[nLength]));
+        if (tree.nCount[nLength] && (nCode >= tree.nFirstCode[nLength]) && (nCode - tree.nFirstCode[nLength] < tree.nCount[nLength])) {
+            *pSymbol = tree.vSymbols.at(tree.nFirstIndex[nLength] + qint32(nCode - tree.nFirstCode[nLength]));
             return true;
         }
     }
@@ -166,8 +158,7 @@ bool bsnDecodeSymbol(BsnBitReader *pReader, const BsnTree &tree,
 // (LHA's fillbuf(c - 3)).  Dropping that consume yields Kraft-invalid tables
 // on about two thirds of the members while the short ones still decode
 // perfectly - a very convincing partial success, so it is called out here.
-bool bsnReadPtLen(BsnBitReader *pReader, qint32 nAlphabet, qint32 nCountBits,
-                  qint32 nSpecialIndex, BsnTree *pTree)
+bool bsnReadPtLen(BsnBitReader *pReader, qint32 nAlphabet, qint32 nCountBits, qint32 nSpecialIndex, BsnTree *pTree)
 {
     bsnResetTree(pTree);
 
@@ -175,8 +166,7 @@ bool bsnReadPtLen(BsnBitReader *pReader, qint32 nAlphabet, qint32 nCountBits,
     if (!pReader->readBits(nCountBits, &nNumber)) return false;
     if (nNumber == 0) {
         quint32 nSymbol = 0;
-        if (!pReader->readBits(nCountBits, &nSymbol) ||
-            (nSymbol >= quint32(nAlphabet))) {
+        if (!pReader->readBits(nCountBits, &nSymbol) || (nSymbol >= quint32(nAlphabet))) {
             return false;
         }
         pTree->bConstant = true;
@@ -220,8 +210,7 @@ bool bsnReadCLen(BsnBitReader *pReader, const BsnTree &preTree, BsnTree *pTree)
     if (!pReader->readBits(BSN_CBIT, &nNumber)) return false;
     if (nNumber == 0) {
         quint32 nSymbol = 0;
-        if (!pReader->readBits(BSN_CBIT, &nSymbol) ||
-            (nSymbol >= quint32(BSN_NC))) {
+        if (!pReader->readBits(BSN_CBIT, &nSymbol) || (nSymbol >= quint32(BSN_NC))) {
             return false;
         }
         pTree->bConstant = true;
@@ -264,14 +253,11 @@ qint32 XBSNDecoder::windowSize()
     return BSN_WINDOW_SIZE;
 }
 
-bool XBSNDecoder::decode(const QByteArray &packed, qint64 nUncompressedSize,
-                         const QByteArray &baHistory, QByteArray *pOutput,
-                         XBinary::PDSTRUCT *pPdStruct)
+bool XBSNDecoder::decode(const QByteArray &packed, qint64 nUncompressedSize, const QByteArray &baHistory, QByteArray *pOutput, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pOutput) return false;
     pOutput->clear();
-    if ((nUncompressedSize < 0) || (nUncompressedSize > BSN_MAX_OUTPUT) ||
-        (nUncompressedSize > qint64((std::numeric_limits<qint32>::max)()))) {
+    if ((nUncompressedSize < 0) || (nUncompressedSize > BSN_MAX_OUTPUT) || (nUncompressedSize > qint64((std::numeric_limits<qint32>::max)()))) {
         return false;
     }
     if (nUncompressedSize == 0) return packed.isEmpty();
@@ -283,13 +269,9 @@ bool XBSNDecoder::decode(const QByteArray &packed, qint64 nUncompressedSize,
     // d <= n and stays 0x20 beyond it - exactly the solid semantics the
     // corpus was validated against.
     QByteArray baWindow(BSN_WINDOW_SIZE, ' ');
-    const qint32 nHistorySize =
-        qMin<qint32>(BSN_WINDOW_SIZE, qint32(qMin<qint64>(
-                         baHistory.size(), BSN_WINDOW_SIZE)));
+    const qint32 nHistorySize = qMin<qint32>(BSN_WINDOW_SIZE, qint32(qMin<qint64>(baHistory.size(), BSN_WINDOW_SIZE)));
     if (nHistorySize > 0) {
-        memcpy(baWindow.data() + (BSN_WINDOW_SIZE - nHistorySize),
-               baHistory.constData() + (baHistory.size() - nHistorySize),
-               size_t(nHistorySize));
+        memcpy(baWindow.data() + (BSN_WINDOW_SIZE - nHistorySize), baHistory.constData() + (baHistory.size() - nHistorySize), size_t(nHistorySize));
     }
     quint8 *pWindow = reinterpret_cast<quint8 *>(baWindow.data());
     qint32 nWindowPosition = 0;
@@ -315,13 +297,10 @@ bool XBSNDecoder::decode(const QByteArray &packed, qint64 nUncompressedSize,
         if (nBlockRemaining == 0) {
             // A member may hold several blocks; each one restates all three
             // tables in-stream, immediately after the 16-bit symbol count.
-            if (!reader.readBits(16, &nBlockRemaining) ||
-                (nBlockRemaining == 0)) {
+            if (!reader.readBits(16, &nBlockRemaining) || (nBlockRemaining == 0)) {
                 return false;
             }
-            if (!bsnReadPtLen(&reader, BSN_NT, BSN_TBIT, BSN_PT_SPECIAL,
-                              &preTree) ||
-                !bsnReadCLen(&reader, preTree, &literalTree) ||
+            if (!bsnReadPtLen(&reader, BSN_NT, BSN_TBIT, BSN_PT_SPECIAL, &preTree) || !bsnReadCLen(&reader, preTree, &literalTree) ||
                 !bsnReadPtLen(&reader, BSN_NP, BSN_PBIT, -1, &positionTree)) {
                 return false;
             }
@@ -337,11 +316,9 @@ bool XBSNDecoder::decode(const QByteArray &packed, qint64 nUncompressedSize,
             continue;
         }
 
-        const qint32 nMatchLength =
-            qint32(nSymbol) - 256 + BSN_THRESHOLD;
+        const qint32 nMatchLength = qint32(nSymbol) - 256 + BSN_THRESHOLD;
         quint32 nPositionSymbol = 0;
-        if (!bsnDecodeSymbol(&reader, positionTree, &nPositionSymbol) ||
-            (nPositionSymbol >= quint32(BSN_NP))) {
+        if (!bsnDecodeSymbol(&reader, positionTree, &nPositionSymbol) || (nPositionSymbol >= quint32(BSN_NP))) {
             return false;
         }
         quint32 nDistance = 0;
@@ -356,13 +333,11 @@ bool XBSNDecoder::decode(const QByteArray &packed, qint64 nUncompressedSize,
         // A genuine stream never overruns the declared member size, and a
         // distance can never exceed the dictionary.  Both are hard errors:
         // silently clamping either one would emit wrong bytes.
-        if ((nDistance > quint32(BSN_WINDOW_SIZE)) ||
-            (qint64(baResult.size()) + nMatchLength > nUncompressedSize)) {
+        if ((nDistance > quint32(BSN_WINDOW_SIZE)) || (qint64(baResult.size()) + nMatchLength > nUncompressedSize)) {
             return false;
         }
 
-        qint32 nCopyPosition =
-            (nWindowPosition - qint32(nDistance)) & BSN_WINDOW_MASK;
+        qint32 nCopyPosition = (nWindowPosition - qint32(nDistance)) & BSN_WINDOW_MASK;
         for (qint32 i = 0; i < nMatchLength; ++i) {
             const quint8 nByte = pWindow[nCopyPosition];
             nCopyPosition = (nCopyPosition + 1) & BSN_WINDOW_MASK;
@@ -372,9 +347,7 @@ bool XBSNDecoder::decode(const QByteArray &packed, qint64 nUncompressedSize,
         }
     }
 
-    if ((baResult.size() != nUncompressedSize) ||
-        (reader.consumedSize() > packed.size()) ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if ((baResult.size() != nUncompressedSize) || (reader.consumedSize() > packed.size()) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 

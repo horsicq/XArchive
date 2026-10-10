@@ -6,9 +6,7 @@
 
 #include "xdearkengine_p.h"
 
-bool XDearkDecoder::extractToZip(const QString &inputPath,
-                                 const QString &outputPath,
-                                 const LIMITS &limits, RESULT *result)
+bool XDearkDecoder::extractToZip(const QString &inputPath, const QString &outputPath, const LIMITS &limits, RESULT *result)
 {
     if (!result) return false;
     *result = RESULT();
@@ -19,8 +17,7 @@ bool XDearkDecoder::extractToZip(const QString &inputPath,
     engineLimits.maxTotalSize = limits.maxTotalSize;
 
     XDearkEngine::RESULT engineResult;
-    const bool success = XDearkEngine::extractToZip(
-        inputPath, outputPath, engineLimits, &engineResult);
+    const bool success = XDearkEngine::extractToZip(inputPath, outputPath, engineLimits, &engineResult);
 
     result->runResult = engineResult.runResult;
     result->fatalError = engineResult.fatalError;
@@ -34,7 +31,5 @@ bool XDearkDecoder::extractToZip(const QString &inputPath,
 
 bool XDearkDecoder::isSupportedModule(const QString &module)
 {
-    return !module.isEmpty() &&
-           XDearkEngine::supportedModules().contains(module,
-                                                      Qt::CaseSensitive);
+    return !module.isEmpty() && XDearkEngine::supportedModules().contains(module, Qt::CaseSensitive);
 }

@@ -23,12 +23,9 @@ const quint8 ROMPAQDEC_METHOD_STORED = 1;
 const quint8 ROMPAQDEC_METHOD_IMPLODE = 2;
 }  // namespace
 
-bool XRomPaqDecoder::decode(const QByteArray &baPacked,
-                            qint64 nUncompressedSize, QByteArray *pbaUnpacked,
-                            XBinary::PDSTRUCT *pPdStruct)
+bool XRomPaqDecoder::decode(const QByteArray &baPacked, qint64 nUncompressedSize, QByteArray *pbaUnpacked, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (!pbaUnpacked || (nUncompressedSize <= 0) ||
-        (nUncompressedSize > (std::numeric_limits<qint32>::max)())) {
+    if (!pbaUnpacked || (nUncompressedSize <= 0) || (nUncompressedSize > (std::numeric_limits<qint32>::max)())) {
         return false;
     }
 
@@ -46,16 +43,13 @@ bool XRomPaqDecoder::decode(const QByteArray &baPacked,
         if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
         if (nOffset > nTotalSize - ROMPAQDEC_HEADER_SIZE) return false;
 
-        const quint16 nVersion =
-            qFromLittleEndian<quint16>(pData + nOffset + ROMPAQDEC_OFFSET_VERSION);
-        if ((nVersion != ROMPAQDEC_VERSION_100) &&
-            (nVersion != ROMPAQDEC_VERSION_101)) {
+        const quint16 nVersion = qFromLittleEndian<quint16>(pData + nOffset + ROMPAQDEC_OFFSET_VERSION);
+        if ((nVersion != ROMPAQDEC_VERSION_100) && (nVersion != ROMPAQDEC_VERSION_101)) {
             return false;
         }
 
         const quint8 nMethod = pData[nOffset + ROMPAQDEC_OFFSET_METHOD];
-        const qint32 nPartSize = static_cast<qint32>(
-            qFromLittleEndian<quint32>(pData + nOffset + ROMPAQDEC_OFFSET_PARTSIZE));
+        const qint32 nPartSize = static_cast<qint32>(qFromLittleEndian<quint32>(pData + nOffset + ROMPAQDEC_OFFSET_PARTSIZE));
 
         qint64 nPayloadOffset = nOffset + ROMPAQDEC_HEADER_SIZE;
 
@@ -67,26 +61,20 @@ bool XRomPaqDecoder::decode(const QByteArray &baPacked,
             if (qFromLittleEndian<quint16>(pData + nPayloadOffset) == 0) {
                 nPayloadOffset += 2;
             }
-            if ((nPartSize <= 0) ||
-                (static_cast<qint64>(nPartSize) > nTotalSize - nPayloadOffset)) {
+            if ((nPartSize <= 0) || (static_cast<qint64>(nPartSize) > nTotalSize - nPayloadOffset)) {
                 return false;
             }
             const qint64 nRemaining = nUncompressedSize - baResult.size();
             if (nRemaining <= 0) return false;
             QByteArray baBank;
-            if (!XDclDecoder::decode(
-                    QByteArray(baPacked.constData() + nPayloadOffset,
-                               static_cast<qint32>(nPartSize)),
-                    &baBank, nRemaining, nullptr)) {
+            if (!XDclDecoder::decode(QByteArray(baPacked.constData() + nPayloadOffset, static_cast<qint32>(nPartSize)), &baBank, nRemaining, nullptr)) {
                 return false;
             }
             if (baBank.size() > nRemaining) return false;
             baResult.append(baBank);
         } else if (nMethod == ROMPAQDEC_METHOD_STORED) {
-            if ((nPartSize < 0) ||
-                (static_cast<qint64>(nPartSize) > nTotalSize - nPayloadOffset) ||
-                (static_cast<qint64>(nPartSize) >
-                 nUncompressedSize - baResult.size())) {
+            if ((nPartSize < 0) || (static_cast<qint64>(nPartSize) > nTotalSize - nPayloadOffset) ||
+                (static_cast<qint64>(nPartSize) > nUncompressedSize - baResult.size())) {
                 return false;
             }
             if (nPartSize > 0) {

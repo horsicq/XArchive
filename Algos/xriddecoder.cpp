@@ -22,22 +22,18 @@ const qint64 RID_MAX_MEMBER_SIZE = Q_INT64_C(0x00ffffff);
 // of the reference corpus uses 8 frames.
 const qint32 RID_MAX_BLOCKS = 100000;
 
-bool ridReadFrame(const uchar *pData, qint64 nSize, qint64 nOffset,
-                  qint64 *pnBlockSize, quint8 *pnBlockType)
+bool ridReadFrame(const uchar *pData, qint64 nSize, qint64 nOffset, qint64 *pnBlockSize, quint8 *pnBlockType)
 {
-    if ((nOffset < 0) || (nSize < XRidDecoder::BLOCK_FRAME_SIZE) ||
-        (nOffset > nSize - XRidDecoder::BLOCK_FRAME_SIZE)) {
+    if ((nOffset < 0) || (nSize < XRidDecoder::BLOCK_FRAME_SIZE) || (nOffset > nSize - XRidDecoder::BLOCK_FRAME_SIZE)) {
         return false;
     }
-    *pnBlockSize =
-        static_cast<qint64>(qFromLittleEndian<quint16>(pData + nOffset));
+    *pnBlockSize = static_cast<qint64>(qFromLittleEndian<quint16>(pData + nOffset));
     *pnBlockType = pData[nOffset + 2];
     return true;
 }
 }  // namespace
 
-bool XRidDecoder::measure(const uchar *pData, qint64 nSize, qint64 *pnConsumed,
-                          qint32 *pnBlocks)
+bool XRidDecoder::measure(const uchar *pData, qint64 nSize, qint64 *pnConsumed, qint32 *pnBlocks)
 {
     if (!pData || (nSize < 0)) return false;
 
@@ -59,8 +55,7 @@ bool XRidDecoder::measure(const uchar *pData, qint64 nSize, qint64 *pnConsumed,
             if (pnBlocks) *pnBlocks = nBlocks;
             return true;
         }
-        if ((nBlockType != BLOCK_TYPE_STORED) &&
-            (nBlockType != BLOCK_TYPE_PACKED)) {
+        if ((nBlockType != BLOCK_TYPE_STORED) && (nBlockType != BLOCK_TYPE_PACKED)) {
             return false;
         }
         if ((nBlockSize <= 0) || (nBlockSize > RID_MAX_BLOCK_SIZE)) {
@@ -73,8 +68,7 @@ bool XRidDecoder::measure(const uchar *pData, qint64 nSize, qint64 *pnConsumed,
     return false;
 }
 
-bool XRidDecoder::decode(const QByteArray &baPacked, qint64 nUncompressedSize,
-                         QByteArray *pbaUnpacked)
+bool XRidDecoder::decode(const QByteArray &baPacked, qint64 nUncompressedSize, QByteArray *pbaUnpacked)
 {
     if (!pbaUnpacked) return false;
     pbaUnpacked->clear();
@@ -105,21 +99,17 @@ bool XRidDecoder::decode(const QByteArray &baPacked, qint64 nUncompressedSize,
             *pbaUnpacked = baResult;
             return true;
         }
-        if ((nBlockSize <= 0) || (nBlockSize > RID_MAX_BLOCK_SIZE) ||
-            (nBlockSize > nSize - nOffset)) {
+        if ((nBlockSize <= 0) || (nBlockSize > RID_MAX_BLOCK_SIZE) || (nBlockSize > nSize - nOffset)) {
             return false;
         }
         if (nBlockType == BLOCK_TYPE_STORED) {
             if (baResult.size() > nUncompressedSize - nBlockSize) return false;
-            baResult.append(baPacked.mid(static_cast<int>(nOffset),
-                                         static_cast<int>(nBlockSize)));
+            baResult.append(baPacked.mid(static_cast<int>(nOffset), static_cast<int>(nBlockSize)));
         } else if (nBlockType == BLOCK_TYPE_PACKED) {
             QByteArray baBlock;
             const qint64 nBudget = nUncompressedSize - baResult.size();
             if (nBudget < 0) return false;
-            if (!XDclDecoder::decode(baPacked.mid(static_cast<int>(nOffset),
-                                                 static_cast<int>(nBlockSize)),
-                                     &baBlock, nBudget, nullptr)) {
+            if (!XDclDecoder::decode(baPacked.mid(static_cast<int>(nOffset), static_cast<int>(nBlockSize)), &baBlock, nBudget, nullptr)) {
                 return false;
             }
             if (baBlock.size() > nBudget) return false;
@@ -133,8 +123,7 @@ bool XRidDecoder::decode(const QByteArray &baPacked, qint64 nUncompressedSize,
     return false;
 }
 
-bool XRidDecoder::probe(const QByteArray &baPacked, qint64 nMaxOutput,
-                        bool *pbComplete, qint64 *pnRawSize)
+bool XRidDecoder::probe(const QByteArray &baPacked, qint64 nMaxOutput, bool *pbComplete, qint64 *pnRawSize)
 {
     if (pbComplete) *pbComplete = false;
     if (pnRawSize) *pnRawSize = -1;
@@ -159,17 +148,14 @@ bool XRidDecoder::probe(const QByteArray &baPacked, qint64 nMaxOutput,
             if (pnRawSize) *pnRawSize = nRawSize;
             return true;
         }
-        if ((nBlockSize <= 0) || (nBlockSize > RID_MAX_BLOCK_SIZE) ||
-            (nBlockSize > nSize - nOffset)) {
+        if ((nBlockSize <= 0) || (nBlockSize > RID_MAX_BLOCK_SIZE) || (nBlockSize > nSize - nOffset)) {
             return false;
         }
         if (nBlockType == BLOCK_TYPE_STORED) {
             nRawSize += nBlockSize;
         } else if (nBlockType == BLOCK_TYPE_PACKED) {
             QByteArray baBlock;
-            if (!XDclDecoder::decode(baPacked.mid(static_cast<int>(nOffset),
-                                                 static_cast<int>(nBlockSize)),
-                                     &baBlock, RID_MAX_MEMBER_SIZE, nullptr)) {
+            if (!XDclDecoder::decode(baPacked.mid(static_cast<int>(nOffset), static_cast<int>(nBlockSize)), &baBlock, RID_MAX_MEMBER_SIZE, nullptr)) {
                 return false;
             }
             nRawSize += baBlock.size();

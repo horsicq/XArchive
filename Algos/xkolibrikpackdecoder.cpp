@@ -43,8 +43,7 @@ const qint64 KPACK_CALLTRICK_TRAILER_SIZE = 5;
 
 class KPackRangeDecoder {
 public:
-    KPackRangeDecoder(const quint8 *pData, qint64 nSize, qint64 nPos)
-        : m_pData(pData), m_nSize(nSize), m_nPos(nPos), m_nRange(0xFFFFFFFF), m_nCode(0), m_bOverread(false)
+    KPackRangeDecoder(const quint8 *pData, qint64 nSize, qint64 nPos) : m_pData(pData), m_nSize(nSize), m_nPos(nPos), m_nRange(0xFFFFFFFF), m_nCode(0), m_bOverread(false)
     {
         // kpack's initialiser consumes exactly four bytes, little-endian.
         quint32 nB0 = nextByte();
@@ -197,8 +196,8 @@ struct KPackLzmaProbs {
     std::vector<quint16> literal;
 };
 
-quint32 kpackDecodeLength(KPackRangeDecoder *pRc, std::vector<quint16> *pChoice, std::vector<quint16> *pLow, std::vector<quint16> *pMid,
-                          std::vector<quint16> *pHigh, quint32 nPosState)
+quint32 kpackDecodeLength(KPackRangeDecoder *pRc, std::vector<quint16> *pChoice, std::vector<quint16> *pLow, std::vector<quint16> *pMid, std::vector<quint16> *pHigh,
+                          quint32 nPosState)
 {
     if (pRc->decodeBit(&(*pChoice)[0]) == 0) {
         return pRc->bitTreeDecode(&(*pLow)[nPosState << 3], 3) + 2;

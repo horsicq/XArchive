@@ -6,23 +6,19 @@
 
 #include <limits>
 
-namespace
-{
-const qint32 IPK_MAXBITS = 16;      // longest Shannon-Fano code observed / legal
-const qint32 IPK_NSYMBOLS = 64;     // both trees are exactly 64 symbols wide
-const qint32 IPK_DICT_BITS = 6;     // 4K window: 6 distance bits read verbatim
-const qint32 IPK_MIN_MATCH = 2;     // NOT 3 - see the header comment
-const qint32 IPK_LENGTH_ESCAPE = 63;  // length symbol 63 takes 8 extra bits
+namespace {
+const qint32 IPK_MAXBITS = 16;             // longest Shannon-Fano code observed / legal
+const qint32 IPK_NSYMBOLS = 64;            // both trees are exactly 64 symbols wide
+const qint32 IPK_DICT_BITS = 6;            // 4K window: 6 distance bits read verbatim
+const qint32 IPK_MIN_MATCH = 2;            // NOT 3 - see the header comment
+const qint32 IPK_LENGTH_ESCAPE = 63;       // length symbol 63 takes 8 extra bits
 const qint64 IPK_MAX_OUTPUT = 0x10000000;  // 256 MB sanity cap
 
 // LSB-first bit reader.  Never reads past the end of the packed buffer: a
 // truncated stream fails instead of decoding zero bits.
-class IpkBits
-{
+class IpkBits {
 public:
-    IpkBits(const quint8 *pData, qint64 nSize)
-        : m_pData(pData), m_nSize(nSize), m_nPosition(0), m_nBuffer(0),
-          m_nCount(0)
+    IpkBits(const quint8 *pData, qint64 nSize) : m_pData(pData), m_nSize(nSize), m_nPosition(0), m_nBuffer(0), m_nCount(0)
     {
     }
 
@@ -41,7 +37,10 @@ public:
         return true;
     }
 
-    qint64 position() const { return m_nPosition; }
+    qint64 position() const
+    {
+        return m_nPosition;
+    }
 
 private:
     const quint8 *m_pData;
@@ -54,8 +53,7 @@ private:
 // Canonical prefix code, ordered by (length, symbol) ascending.  The bits of a
 // code arrive least-significant-byte-first but most-significant-bit-first
 // within the code, and each bit is inverted - the PKWARE convention.
-struct IpkTree
-{
+struct IpkTree {
     qint32 nCount[IPK_MAXBITS + 1];
     qint32 nSymbol[IPK_NSYMBOLS];
 };
@@ -64,8 +62,7 @@ struct IpkTree
 // Each pair byte carries (bit length - 1) in the low nibble and
 // (repeat count - 1) in the high nibble; the runs must cover all 64 symbols
 // exactly.  That exact-cover rule is the format's cheapest self-check.
-bool ipkReadTree(const quint8 *pData, qint64 nSize, qint64 *pPosition,
-                 IpkTree *pTree)
+bool ipkReadTree(const quint8 *pData, qint64 nSize, qint64 *pPosition, IpkTree *pTree)
 {
     if (!pData || !pPosition || !pTree) return false;
     qint64 nPosition = *pPosition;
@@ -136,10 +133,7 @@ bool ipkDecodeSymbol(IpkBits *pBits, const IpkTree *pTree, qint32 *pSymbol)
 }
 }  // namespace
 
-bool XInfogramesPakDecoder::decode(const QByteArray &packed,
-                                   qint64 nExpectedSize, QByteArray *pOutput,
-                                   qint64 *pConsumedSize,
-                                   XBinary::PDSTRUCT *pPdStruct)
+bool XInfogramesPakDecoder::decode(const QByteArray &packed, qint64 nExpectedSize, QByteArray *pOutput, qint64 *pConsumedSize, XBinary::PDSTRUCT *pPdStruct)
 {
     if (pConsumedSize) *pConsumedSize = 0;
     if (!pOutput) return false;
@@ -183,8 +177,7 @@ bool XInfogramesPakDecoder::decode(const QByteArray &packed,
         if (!bits.read(IPK_DICT_BITS, &nLow)) return false;
         qint32 nDistanceCode = 0;
         if (!ipkDecodeSymbol(&bits, &distanceTree, &nDistanceCode)) return false;
-        const qint64 nDistance =
-            (qint64(nDistanceCode) << IPK_DICT_BITS) + qint64(nLow) + 1;
+        const qint64 nDistance = (qint64(nDistanceCode) << IPK_DICT_BITS) + qint64(nLow) + 1;
 
         qint32 nLengthCode = 0;
         if (!ipkDecodeSymbol(&bits, &lengthTree, &nLengthCode)) return false;

@@ -9,9 +9,9 @@
 
 namespace {
 
-const qint32 HZL_N = 8192;            // ring size, mask 0x1fff
-const qint32 HZL_F = 60;              // longest match
-const qint32 HZL_THRESHOLD = 2;       // shortest match is THRESHOLD + 1
+const qint32 HZL_N = 8192;                              // ring size, mask 0x1fff
+const qint32 HZL_F = 60;                                // longest match
+const qint32 HZL_THRESHOLD = 2;                         // shortest match is THRESHOLD + 1
 const qint32 HZL_N_CHAR = 256 + HZL_F - HZL_THRESHOLD;  // 314, no stop code
 const qint32 HZL_T = HZL_N_CHAR * 2 - 1;                // 627
 const qint32 HZL_R = HZL_T - 1;                         // 626
@@ -23,12 +23,14 @@ const qint64 HZL_TAIL_SLACK = 8;
 
 class HZLBitReader {
 public:
-    HZLBitReader(const uchar *pData, qint64 nSize)
-        : m_pData(pData), m_nSize(nSize)
+    HZLBitReader(const uchar *pData, qint64 nSize) : m_pData(pData), m_nSize(nSize)
     {
     }
 
-    bool isOverrun() const { return m_nPosition > (m_nSize + HZL_TAIL_SLACK); }
+    bool isOverrun() const
+    {
+        return m_nPosition > (m_nSize + HZL_TAIL_SLACK);
+    }
 
     qint32 readBit()
     {
@@ -213,8 +215,7 @@ qint32 hzlDecodePosition(HZLBitReader *pReader, const HZLPositionTable &table)
 
 }  // namespace
 
-bool XHZLDecoder::decode(const QByteArray &baPacked, qint32 nUncompressedSize,
-                         QByteArray *pOutput, XBinary::PDSTRUCT *pPdStruct)
+bool XHZLDecoder::decode(const QByteArray &baPacked, qint32 nUncompressedSize, QByteArray *pOutput, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pOutput || (nUncompressedSize < 0)) return false;
     if (nUncompressedSize == 0) {
@@ -226,8 +227,7 @@ bool XHZLDecoder::decode(const QByteArray &baPacked, qint32 nUncompressedSize,
     static const HZLPositionTable table;
     if (!table.bValid) return false;
 
-    HZLBitReader reader(reinterpret_cast<const uchar *>(baPacked.constData()),
-                        baPacked.size());
+    HZLBitReader reader(reinterpret_cast<const uchar *>(baPacked.constData()), baPacked.size());
     HZLHuffman huffman;
 
     std::array<quint8, HZL_N + HZL_F> ring;
@@ -239,8 +239,7 @@ bool XHZLDecoder::decode(const QByteArray &baPacked, qint32 nUncompressedSize,
     const qint32 nMask = HZL_N - 1;
 
     while (nProduced < nUncompressedSize) {
-        if (((nProduced & 0x3fff) == 0) &&
-            !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        if (((nProduced & 0x3fff) == 0) && !XBinary::isPdStructNotCanceled(pPdStruct)) {
             return false;
         }
         const qint32 nCharacter = huffman.decodeCharacter(&reader);

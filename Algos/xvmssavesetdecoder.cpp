@@ -348,8 +348,7 @@ QByteArray XVMSSaveSetDecoder::memberProperties(const MEMBER &member)
     return baResult;
 }
 
-bool XVMSSaveSetDecoder::decode(const QByteArray &baPacked, qint64 nUncompressedSize, const QByteArray &baProperty, QByteArray *pbaResult,
-                                XBinary::PDSTRUCT *pPdStruct)
+bool XVMSSaveSetDecoder::decode(const QByteArray &baPacked, qint64 nUncompressedSize, const QByteArray &baProperty, QByteArray *pbaResult, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pbaResult || (nUncompressedSize < 0)) return false;
     pbaResult->clear();

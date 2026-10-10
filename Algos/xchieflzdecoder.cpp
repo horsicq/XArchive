@@ -22,7 +22,7 @@
 
 namespace {
 const qint32 CHIEFLZ_SYMBOLS = 629;
-const qint32 CHIEFLZ_NODES = CHIEFLZ_SYMBOLS * 2 - 1;   // 1257
+const qint32 CHIEFLZ_NODES = CHIEFLZ_SYMBOLS * 2 - 1;  // 1257
 const qint32 CHIEFLZ_ROOT = 1;
 const qint32 CHIEFLZ_END_SYMBOL = 0x100;
 const qint32 CHIEFLZ_FIRST_MATCH = 0x101;

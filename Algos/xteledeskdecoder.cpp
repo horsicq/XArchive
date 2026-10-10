@@ -99,7 +99,15 @@ private:
 class TeleDeskLzwReader : public TeleDeskReader {
 public:
     TeleDeskLzwReader(const QByteArray &baData, qint64 nPosition)
-        : m_baData(baData), m_nPosition(nPosition), m_nAccumulator(0), m_nBitCount(0), m_nLeft(0), m_nNext(0), m_nStackPointer(0), m_nLast(0), m_nPrevious(0),
+        : m_baData(baData),
+          m_nPosition(nPosition),
+          m_nAccumulator(0),
+          m_nBitCount(0),
+          m_nLeft(0),
+          m_nNext(0),
+          m_nStackPointer(0),
+          m_nLast(0),
+          m_nPrevious(0),
           m_bDead(false)
     {
         memset(m_nPrefix, 0, sizeof(m_nPrefix));

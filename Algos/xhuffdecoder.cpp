@@ -27,8 +27,7 @@ namespace {
 class HuffBitReader {
 public:
     explicit HuffBitReader(const QByteArray &baInput)
-        : m_pData(reinterpret_cast<const quint8 *>(baInput.constData())),
-          m_nSize(baInput.size()), m_nPosition(0), m_nUsed(8), m_nByte(0)
+        : m_pData(reinterpret_cast<const quint8 *>(baInput.constData())), m_nSize(baInput.size()), m_nPosition(0), m_nUsed(8), m_nByte(0)
     {
     }
 
@@ -58,8 +57,7 @@ private:
 };
 }  // namespace
 
-QByteArray XHuffDecoder::packTree(const QByteArray &baSymbols,
-                                  const QByteArray &baTreeBits)
+QByteArray XHuffDecoder::packTree(const QByteArray &baSymbols, const QByteArray &baTreeBits)
 {
     QByteArray baResult;
     if ((baSymbols.size() <= 0) || (baSymbols.size() > MAX_SYMBOLS)) {
@@ -73,12 +71,10 @@ QByteArray XHuffDecoder::packTree(const QByteArray &baSymbols,
     return baResult;
 }
 
-bool XHuffDecoder::unpackTree(const QByteArray &baProperty,
-                              QByteArray *pbaSymbols, QByteArray *pbaTreeBits)
+bool XHuffDecoder::unpackTree(const QByteArray &baProperty, QByteArray *pbaSymbols, QByteArray *pbaTreeBits)
 {
     if (!pbaSymbols || !pbaTreeBits || (baProperty.size() < 2)) return false;
-    const qint32 nCount = qint32(quint8(baProperty.at(0))) |
-                          (qint32(quint8(baProperty.at(1))) << 8);
+    const qint32 nCount = qint32(quint8(baProperty.at(0))) | (qint32(quint8(baProperty.at(1))) << 8);
     if ((nCount <= 0) || (nCount > MAX_SYMBOLS)) return false;
     if (baProperty.size() < (2 + nCount)) return false;
     *pbaSymbols = baProperty.mid(2, nCount);
@@ -86,9 +82,7 @@ bool XHuffDecoder::unpackTree(const QByteArray &baProperty,
     return true;
 }
 
-bool XHuffDecoder::buildTree(const QByteArray &baTreeBits,
-                             const QByteArray &baSymbols,
-                             QVector<NODE> *pListNodes, qint64 *pnBytesUsed)
+bool XHuffDecoder::buildTree(const QByteArray &baTreeBits, const QByteArray &baSymbols, QVector<NODE> *pListNodes, qint64 *pnBytesUsed)
 {
     if (!pListNodes) return false;
     pListNodes->clear();
@@ -129,8 +123,7 @@ bool XHuffDecoder::buildTree(const QByteArray &baTreeBits,
         if (!reader.readBit(&nBit)) return false;
         if (nBit == 0) {
             if (nSymbolIndex >= baSymbols.size()) return false;
-            (*pListNodes)[nIndex].nSymbol =
-                quint8(baSymbols.at(nSymbolIndex));
+            (*pListNodes)[nIndex].nSymbol = quint8(baSymbols.at(nSymbolIndex));
             ++nSymbolIndex;
         } else {
             PENDING child1 = {nIndex, 1};
@@ -147,9 +140,7 @@ bool XHuffDecoder::buildTree(const QByteArray &baTreeBits,
     return true;
 }
 
-bool XHuffDecoder::decodeSymbols(const QVector<NODE> &listNodes,
-                                 const QByteArray &baInput, qint64 nCount,
-                                 qint64 nLimit, QByteArray *pbaResult)
+bool XHuffDecoder::decodeSymbols(const QVector<NODE> &listNodes, const QByteArray &baInput, qint64 nCount, qint64 nLimit, QByteArray *pbaResult)
 {
     if (!pbaResult || listNodes.isEmpty()) return false;
     pbaResult->clear();
@@ -163,8 +154,7 @@ bool XHuffDecoder::decodeSymbols(const QVector<NODE> &listNodes,
         while (listNodes.at(nNode).nChild0 != -1) {
             qint32 nBit = 0;
             if (!reader.readBit(&nBit)) return false;
-            const qint32 nNext = nBit ? listNodes.at(nNode).nChild0
-                                      : listNodes.at(nNode).nChild1;
+            const qint32 nNext = nBit ? listNodes.at(nNode).nChild0 : listNodes.at(nNode).nChild1;
             if ((nNext < 0) || (nNext >= listNodes.size())) return false;
             nNode = nNext;
         }
@@ -183,10 +173,7 @@ bool XHuffDecoder::decodeSymbols(const QVector<NODE> &listNodes,
     }
 }
 
-bool XHuffDecoder::decodeWithProperty(const QByteArray &baProperty,
-                                      const QByteArray &baInput,
-                                      qint64 nUncompressedSize,
-                                      QByteArray *pbaResult)
+bool XHuffDecoder::decodeWithProperty(const QByteArray &baProperty, const QByteArray &baInput, qint64 nUncompressedSize, QByteArray *pbaResult)
 {
     if (!pbaResult || (nUncompressedSize < 0)) return false;
     QByteArray baSymbols;

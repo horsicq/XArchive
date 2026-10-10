@@ -47,27 +47,24 @@ const qint32 SQX_L3EXTRA[15] = {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}
 const qint32 SQX_LENBASE[26] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 20, 24, 32, 40, 48, 64, 80, 96, 128, 160, 192, 224, 0, 0};
 const qint32 SQX_LENEXTRA[26] = {0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 5, 5, 0, 0};
 // Distance base/extra, dictionary < 2 MiB.
-const qint32 SQX_D48BASE[49] = {0,      1,      2,      3,      4,      6,      8,      12,     16,     24,     32,     48,     64,
-                                96,     128,    192,    256,    384,    512,    768,    1024,   1536,   2048,   3072,   4096,   6144,
-                                8192,   12288,  16384,  24576,  32768,  49152,  65536,  98304,  131072, 196608, 262144, 327680, 393216,
-                                458752, 524288, 589824, 655360, 720896, 786432, 851968, 917504, 983040, 1048576};
-const qint32 SQX_D48EXTRA[49] = {0, 0, 0, 0, 1,  1,  2,  2,  3,  3,  4,  4,  5,  5,  6,  6,  7,  7,  8, 8, 9, 9, 10, 10, 11,
+const qint32 SQX_D48BASE[49] = {0,      1,      2,      3,      4,      6,      8,      12,     16,     24,     32,     48,     64,     96,     128,    192,   256,
+                                384,    512,    768,    1024,   1536,   2048,   3072,   4096,   6144,   8192,   12288,  16384,  24576,  32768,  49152,  65536, 98304,
+                                131072, 196608, 262144, 327680, 393216, 458752, 524288, 589824, 655360, 720896, 786432, 851968, 917504, 983040, 1048576};
+const qint32 SQX_D48EXTRA[49] = {0,  0,  0,  0,  1,  1,  2,  2,  3,  3,  4,  4,  5,  5,  6,  6,  7,  7,  8,  8,  9,  9,  10, 10, 11,
                                  11, 12, 12, 13, 13, 14, 14, 15, 15, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 0};
 // Distance base/extra, dictionary == 2 MiB.
-const qint32 SQX_D50BASE[51] = {0,       1,       2,       3,       4,       6,       8,       12,      16,      24,      32,     48,   64,
-                                96,      128,     192,     256,     384,     512,     768,     1024,    1536,    2048,    3072,   4096, 6144,
-                                8192,    12288,   16384,   24576,   32768,   49152,   65536,   98304,   131072,  196608,  262144, 393216,
-                                524288,  655360,  786432,  917504,  1048576, 1179648, 1310720, 1441792, 1572864, 1703936, 1835008, 1966080,
-                                2097152};
-const qint32 SQX_D50EXTRA[51] = {0, 0, 0, 0, 1,  1,  2,  2,  3,  3,  4,  4,  5,  5,  6,  6,  7,  7,  8,  8,  9, 9, 10, 10, 11, 11,
+const qint32 SQX_D50BASE[51] = {0,      1,      2,      3,       4,       6,       8,       12,      16,      24,      32,      48,     64,
+                                96,     128,    192,    256,     384,     512,     768,     1024,    1536,    2048,    3072,    4096,   6144,
+                                8192,   12288,  16384,  24576,   32768,   49152,   65536,   98304,   131072,  196608,  262144,  393216, 524288,
+                                655360, 786432, 917504, 1048576, 1179648, 1310720, 1441792, 1572864, 1703936, 1835008, 1966080, 2097152};
+const qint32 SQX_D50EXTRA[51] = {0,  0,  0,  0,  1,  1,  2,  2,  3,  3,  4,  4,  5,  5,  6,  6,  7,  7,  8,  8,  9,  9,  10, 10, 11, 11,
                                  12, 12, 13, 13, 14, 14, 15, 15, 16, 16, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 0};
 // Distance base/extra, dictionary == 4 MiB.
-const qint32 SQX_D52BASE[53] = {0,       1,       2,       3,       4,       6,       8,       12,      16,      24,      32,      48,
-                                64,      96,      128,     192,     256,     384,     512,     768,     1024,    1536,    2048,    3072,
-                                4096,    6144,    8192,    12288,   16384,   24576,   32768,   49152,   65536,   98304,   131072,  196608,
-                                262144,  393216,  524288,  786432,  1048576, 1310720, 1572864, 1835008, 2097152, 2359296, 2621440, 2883584,
-                                3145728, 3407872, 3670016, 3932160, 4194304};
-const qint32 SQX_D52EXTRA[53] = {0, 0, 0, 0, 1,  1,  2,  2,  3,  3,  4,  4,  5,  5,  6,  6,  7,  7,  8,  8,  9,  9, 10, 10, 11, 11, 12,
+const qint32 SQX_D52BASE[53] = {0,       1,       2,       3,       4,       6,       8,       12,      16,      24,      32,     48,     64,      96,
+                                128,     192,     256,     384,     512,     768,     1024,    1536,    2048,    3072,    4096,   6144,   8192,    12288,
+                                16384,   24576,   32768,   49152,   65536,   98304,   131072,  196608,  262144,  393216,  524288, 786432, 1048576, 1310720,
+                                1572864, 1835008, 2097152, 2359296, 2621440, 2883584, 3145728, 3407872, 3670016, 3932160, 4194304};
+const qint32 SQX_D52EXTRA[53] = {0,  0,  0,  0,  1,  1,  2,  2,  3,  3,  4,  4,  5,  5,  6,  6,  7,  7,  8,  8,  9,  9,  10, 10, 11, 11, 12,
                                  12, 13, 13, 14, 14, 15, 15, 16, 16, 17, 17, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 0};
 
 // MSB-first inside little-endian 32-bit words.
@@ -306,8 +303,7 @@ public:
     SqxState();
 
     bool init();
-    bool unpackMember(const QByteArray &baPacked, qint64 nUncompressedSize, quint16 nFlags, quint8 nFilter, QByteArray *pbaOut,
-                      XBinary::PDSTRUCT *pPdStruct);
+    bool unpackMember(const QByteArray &baPacked, qint64 nUncompressedSize, quint16 nFlags, quint8 nFilter, QByteArray *pbaOut, XBinary::PDSTRUCT *pPdStruct);
 
 private:
     bool readBlockHeader(SqxBits *pBits, qint32 *pnCount, qint32 *pnMode, qint32 *pnThreshold);
@@ -453,8 +449,7 @@ bool SqxState::init()
     return true;
 }
 
-bool SqxState::unpackMember(const QByteArray &baPacked, qint64 nUncompressedSize, quint16 nFlags, quint8 nFilter, QByteArray *pbaOut,
-                            XBinary::PDSTRUCT *pPdStruct)
+bool SqxState::unpackMember(const QByteArray &baPacked, qint64 nUncompressedSize, quint16 nFlags, quint8 nFilter, QByteArray *pbaOut, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!m_pWindow) return false;
 
@@ -627,8 +622,7 @@ QByteArray XSQXDecoder::startTable()
     return baTable;
 }
 
-bool XSQXDecoder::appendEntry(QByteArray *pbaTable, qint64 nDataOffset, qint64 nPackedSize, qint64 nUncompressedSize, quint16 nFlags, quint8 nFilter,
-                              quint8 nMethod)
+bool XSQXDecoder::appendEntry(QByteArray *pbaTable, qint64 nDataOffset, qint64 nPackedSize, qint64 nUncompressedSize, quint16 nFlags, quint8 nFilter, quint8 nMethod)
 {
     if (!pbaTable) return false;
     if (pbaTable->size() < TABLE_HEADER_SIZE) return false;
@@ -661,8 +655,7 @@ QByteArray XSQXDecoder::finishTable(const QByteArray &baTable, qint32 nTargetInd
     return baResult;
 }
 
-bool XSQXDecoder::decode(const QByteArray &baPacked, const QByteArray &baProperties, qint64 nUncompressedSize, QByteArray *pbaResult,
-                         XBinary::PDSTRUCT *pPdStruct)
+bool XSQXDecoder::decode(const QByteArray &baPacked, const QByteArray &baProperties, qint64 nUncompressedSize, QByteArray *pbaResult, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pbaResult) return false;
     if ((nUncompressedSize < 0) || (nUncompressedSize > MAX_UNCOMPRESSED_SIZE)) return false;

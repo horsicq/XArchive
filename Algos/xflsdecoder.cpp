@@ -62,8 +62,7 @@ struct FLS_STATE {
 
 bool flsPrepareProcessState(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct, quint32 *pCompressedSize, quint32 *pRawSize)
 {
-    if (!pState || !pCompressedSize || !pRawSize || !pState->pDeviceInput || !pState->pDeviceOutput || (pState->nInputOffset < 0) ||
-        (pState->nInputLimit < 0)) {
+    if (!pState || !pCompressedSize || !pRawSize || !pState->pDeviceInput || !pState->pDeviceOutput || (pState->nInputOffset < 0) || (pState->nInputLimit < 0)) {
         return false;
     }
 
@@ -88,12 +87,10 @@ bool flsPrepareProcessState(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUC
     pState->nCountInput = 0;
     pState->nCountOutput = 0;
 
-    if (!pState->pDeviceInput->isReadable() || !pState->pDeviceInput->seek(pState->nInputOffset) ||
-        (pState->pDeviceInput->pos() != pState->nInputOffset)) {
+    if (!pState->pDeviceInput->isReadable() || !pState->pDeviceInput->seek(pState->nInputOffset) || (pState->pDeviceInput->pos() != pState->nInputOffset)) {
         pState->bReadError = true;
     }
-    if (!pState->pDeviceOutput->isWritable() || (!pState->pDeviceOutput->isSequential() && !pState->pDeviceOutput->seek(0)) ||
-        (pState->pDeviceOutput->pos() != 0)) {
+    if (!pState->pDeviceOutput->isWritable() || (!pState->pDeviceOutput->isSequential() && !pState->pDeviceOutput->seek(0)) || (pState->pDeviceOutput->pos() != 0)) {
         pState->bWriteError = true;
     }
     if (pState->bReadError || pState->bWriteError || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
@@ -118,8 +115,7 @@ void flsInitializeDictionary(FLS_STATE *pState)
     }
 
     for (qint32 nClass = 0; nClass < FLS_CLASS_COUNT; ++nClass) {
-        std::fill(pState->anCodeClasses.begin() + FLS_CLASS_BASE[nClass], pState->anCodeClasses.begin() + FLS_CLASS_END[nClass],
-                  static_cast<quint8>(nClass));
+        std::fill(pState->anCodeClasses.begin() + FLS_CLASS_BASE[nClass], pState->anCodeClasses.begin() + FLS_CLASS_END[nClass], static_cast<quint8>(nClass));
     }
 
     // Each replacement cursor begins immediately before the class it scans.
@@ -129,8 +125,7 @@ void flsInitializeDictionary(FLS_STATE *pState)
 
 bool flsRefillInput(FLS_STATE *pState)
 {
-    if (!pState || pState->bError || !pState->pProcessState || (pState->nCompressedLeft == 0) ||
-        !XBinary::isPdStructNotCanceled(pState->pPdStruct)) {
+    if (!pState || pState->bError || !pState->pProcessState || (pState->nCompressedLeft == 0) || !XBinary::isPdStructNotCanceled(pState->pPdStruct)) {
         return false;
     }
 
@@ -149,8 +144,7 @@ bool flsRefillInput(FLS_STATE *pState)
 
 bool flsReadByte(FLS_STATE *pState, quint8 *pValue)
 {
-    if (!pState || !pValue || pState->bError || (pState->nCompressedLeft == 0) ||
-        !XBinary::isPdStructNotCanceled(pState->pPdStruct)) {
+    if (!pState || !pValue || pState->bError || (pState->nCompressedLeft == 0) || !XBinary::isPdStructNotCanceled(pState->pPdStruct)) {
         return false;
     }
     if ((pState->nInputPosition >= pState->nInputSize) && !flsRefillInput(pState)) return false;
@@ -193,8 +187,7 @@ bool flsReadClassOrder(FLS_STATE *pState)
 {
     quint32 nFirst = 0;
     quint32 nSecond = 0;
-    if (!flsReadBits(pState, 3, &nFirst) || !flsReadBits(pState, 3, &nSecond) || (nFirst >= FLS_CLASS_COUNT) ||
-        (nSecond >= FLS_CLASS_COUNT) || (nFirst == nSecond)) {
+    if (!flsReadBits(pState, 3, &nFirst) || !flsReadBits(pState, 3, &nSecond) || (nFirst >= FLS_CLASS_COUNT) || (nSecond >= FLS_CLASS_COUNT) || (nFirst == nSecond)) {
         return false;
     }
 
@@ -256,11 +249,9 @@ bool flsSwapCodes(FLS_STATE *pState, quint16 nLeft, quint16 nRight)
 
 bool flsInsertPhrase(FLS_STATE *pState, quint16 nCurrentEntry, const quint8 *pCurrent, qint32 nCurrentLength)
 {
-    if (!pState || !pCurrent || (nCurrentEntry >= FLS_ENTRY_COUNT) || (nCurrentLength <= 0) ||
-        (nCurrentLength > FLS_MAX_PHRASE_LENGTH) || (pState->nPreviousEntry >= FLS_ENTRY_COUNT) ||
-        (pState->nPreviousLength >= FLS_MAX_PHRASE_LENGTH) ||
-        (pState->anPhraseLengths[pState->nPreviousEntry] != pState->nPreviousLength) ||
-        (pState->anReferenceCounts[pState->nPreviousEntry] == 0xffff)) {
+    if (!pState || !pCurrent || (nCurrentEntry >= FLS_ENTRY_COUNT) || (nCurrentLength <= 0) || (nCurrentLength > FLS_MAX_PHRASE_LENGTH) ||
+        (pState->nPreviousEntry >= FLS_ENTRY_COUNT) || (pState->nPreviousLength >= FLS_MAX_PHRASE_LENGTH) ||
+        (pState->anPhraseLengths[pState->nPreviousEntry] != pState->nPreviousLength) || (pState->anReferenceCounts[pState->nPreviousEntry] == 0xffff)) {
         return false;
     }
     ++pState->anReferenceCounts[pState->nPreviousEntry];
@@ -353,8 +344,7 @@ bool flsFlushOutput(FLS_STATE *pState)
 
 bool flsEmitPhrase(FLS_STATE *pState, const quint8 *pData, qint32 nSize)
 {
-    if (!pState || !pData || pState->bError || (nSize <= 0) ||
-        (static_cast<quint32>(nSize) > (pState->nRawSize - pState->nProduced))) {
+    if (!pState || !pData || pState->bError || (nSize <= 0) || (static_cast<quint32>(nSize) > (pState->nRawSize - pState->nProduced))) {
         return false;
     }
 
@@ -419,8 +409,7 @@ bool XFLSDecoder::decompress(XBinary::DATAPROCESS_STATE *pProcessState, XBinary:
             break;
         }
         const qint32 nLength = pState->anPhraseLengths[nEntry];
-        if ((nLength <= 0) || (nLength > FLS_MAX_PHRASE_LENGTH) ||
-            (static_cast<quint32>(nLength) > (pState->nRawSize - pState->nProduced)) ||
+        if ((nLength <= 0) || (nLength > FLS_MAX_PHRASE_LENGTH) || (static_cast<quint32>(nLength) > (pState->nRawSize - pState->nProduced)) ||
             !flsEmitPhrase(pState.get(), pState->aanPhrases[nEntry].data(), nLength)) {
             pState->bError = true;
             break;
@@ -446,7 +435,6 @@ bool XFLSDecoder::decompress(XBinary::DATAPROCESS_STATE *pProcessState, XBinary:
     // no additional byte is valid inside the member's declared packed extent.
     const bool bCodecExact = bEndSeen && !pState->bError && (pState->nProduced == nRawSize) && (pState->nCompressedLeft == 0) &&
                              (pState->nInputPosition == pState->nInputSize) && flsFlushOutput(pState.get());
-    return bCodecExact && !pState->bError && !pProcessState->bReadError && !pProcessState->bWriteError &&
-           (pProcessState->nCountInput == nCompressedSize) && (pProcessState->nCountOutput == nRawSize) &&
-           XBinary::isPdStructNotCanceled(pPdStruct);
+    return bCodecExact && !pState->bError && !pProcessState->bReadError && !pProcessState->bWriteError && (pProcessState->nCountInput == nCompressedSize) &&
+           (pProcessState->nCountOutput == nRawSize) && XBinary::isPdStructNotCanceled(pPdStruct);
 }

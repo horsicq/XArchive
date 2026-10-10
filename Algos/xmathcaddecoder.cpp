@@ -26,9 +26,9 @@
 #include "algo_utils.h"
 
 namespace {
-const qint32 N_MATHCAD_WINDOW_SIZE = 4096;    // 12-bit ring position field
-const qint32 N_MATHCAD_WINDOW_START = 1;      // position 0 is reserved for EOF
-const qint32 N_MATHCAD_LENGTH_BIAS = 2;       // 4-bit field encodes length - 2
+const qint32 N_MATHCAD_WINDOW_SIZE = 4096;  // 12-bit ring position field
+const qint32 N_MATHCAD_WINDOW_START = 1;    // position 0 is reserved for EOF
+const qint32 N_MATHCAD_LENGTH_BIAS = 2;     // 4-bit field encodes length - 2
 const qint32 N_MATHCAD_INPUT_BUFFER = 16384;
 const qint32 N_MATHCAD_OUTPUT_BUFFER = 65536;
 

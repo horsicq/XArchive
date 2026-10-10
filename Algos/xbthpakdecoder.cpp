@@ -32,8 +32,7 @@ const qint32 BTHPAK_SKIP_BIAS = 127;
 // length field and the whole chain; this rule fires in nearly every table.
 //
 // pLeft/pRight may be null when the caller only needs to skip the table.
-bool bthpakParseTable(const uchar *pData, qint64 nSize, qint64 *pnPosition,
-                      quint8 *pLeft, quint8 *pRight)
+bool bthpakParseTable(const uchar *pData, qint64 nSize, qint64 *pnPosition, quint8 *pLeft, quint8 *pRight)
 {
     if (!pData || !pnPosition) return false;
 
@@ -92,14 +91,12 @@ bool bthpakParseTable(const uchar *pData, qint64 nSize, qint64 *pnPosition,
 
 // Reads the block's packed length.  BIG-endian, inside an otherwise
 // little-endian container.
-bool bthpakReadBlockSize(const uchar *pData, qint64 nSize, qint64 *pnPosition,
-                         qint32 *pnBlockSize)
+bool bthpakReadBlockSize(const uchar *pData, qint64 nSize, qint64 *pnPosition, qint32 *pnBlockSize)
 {
     if (!pData || !pnPosition || !pnBlockSize) return false;
     if (*pnPosition < 0 || *pnPosition > nSize - 2) return false;
 
-    const qint32 nBlockSize = (static_cast<qint32>(pData[*pnPosition]) << 8) |
-                              static_cast<qint32>(pData[*pnPosition + 1]);
+    const qint32 nBlockSize = (static_cast<qint32>(pData[*pnPosition]) << 8) | static_cast<qint32>(pData[*pnPosition + 1]);
     *pnPosition += 2;
     // A zero-length block makes the original decoder spin forever; the genuine
     // minimum in the family is 5.
@@ -111,9 +108,7 @@ bool bthpakReadBlockSize(const uchar *pData, qint64 nSize, qint64 *pnPosition,
 }
 }  // namespace
 
-bool XBTHPAKDecoder::scanChain(const QByteArray &payload,
-                               bool bRequireExactEnd, qint32 nBlockLimit,
-                               qint64 *pnConsumed, qint32 *pnBlockCount,
+bool XBTHPAKDecoder::scanChain(const QByteArray &payload, bool bRequireExactEnd, qint32 nBlockLimit, qint64 *pnConsumed, qint32 *pnBlockCount,
                                XBinary::PDSTRUCT *pPdStruct)
 {
     if (pnConsumed) *pnConsumed = 0;
@@ -150,13 +145,10 @@ bool XBTHPAKDecoder::scanChain(const QByteArray &payload,
     return true;
 }
 
-bool XBTHPAKDecoder::decode(const QByteArray &packed, qint64 expectedSize,
-                            QByteArray *output, XBinary::PDSTRUCT *pPdStruct)
+bool XBTHPAKDecoder::decode(const QByteArray &packed, qint64 expectedSize, QByteArray *output, XBinary::PDSTRUCT *pPdStruct)
 {
     if (output) output->clear();
-    if (!output || packed.isEmpty() || expectedSize <= 0 ||
-        expectedSize > (std::numeric_limits<qint32>::max)() ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!output || packed.isEmpty() || expectedSize <= 0 || expectedSize > (std::numeric_limits<qint32>::max)() || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -216,8 +208,7 @@ bool XBTHPAKDecoder::decode(const QByteArray &packed, qint64 expectedSize,
     // The chain carries no end marker, so "consumed the payload exactly" and
     // "produced exactly the declared length" are the only completeness proofs
     // available.  Both hold on every genuine file.
-    if ((nPosition != nSize) || (result.size() != expectedSize) ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if ((nPosition != nSize) || (result.size() != expectedSize) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 

@@ -268,13 +268,13 @@ qint32 XTERSEDecoder::detect(const QByteArray &baFile)
         bHeader = true;
     }
     // The reference implementation
-    if (!bHeader && (pData[0] == 0x09) && (pData[1] < 2) && ((pData[2] | pData[3]) != 0) && (pData[4] != 0) && (pData[8] == 0) && (pData[9] == 0) &&
-        (pData[10] == 0) && (pData[11] == 0)) {
+    if (!bHeader && (pData[0] == 0x09) && (pData[1] < 2) && ((pData[2] | pData[3]) != 0) && (pData[4] != 0) && (pData[8] == 0) && (pData[9] == 0) && (pData[10] == 0) &&
+        (pData[11] == 0)) {
         bHeader = true;
     }
     // The reference implementation
-    if (!bHeader && (pData[0] == 0x02) && (pData[1] < 2) && ((pData[2] | pData[3]) != 0) && (pData[4] != 0) && (pData[8] == 0) && (pData[9] == 0) &&
-        (pData[10] == 0) && (pData[11] == 0)) {
+    if (!bHeader && (pData[0] == 0x02) && (pData[1] < 2) && ((pData[2] | pData[3]) != 0) && (pData[4] != 0) && (pData[8] == 0) && (pData[9] == 0) && (pData[10] == 0) &&
+        (pData[11] == 0)) {
         bHeader = true;
     }
     if (!bHeader) return -1;

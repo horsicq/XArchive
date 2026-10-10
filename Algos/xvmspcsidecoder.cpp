@@ -164,8 +164,8 @@ bool pcsiParseTables(const quint8 *pData, qint64 nSize, quint32 nTableSize, QByt
 // One pass over every record.  pOutput may be null, in which case the walk only
 // counts - that is how the container's output size is learned without an
 // allocation.
-bool pcsiRunRecords(const quint8 *pData, qint64 nSize, qint64 nPosition, const quint8 *pSlots, qint32 nRecordCount, quint8 *pOutput,
-                    qint64 nOutputCapacity, qint64 *pnProduced, XBinary::PDSTRUCT *pPdStruct)
+bool pcsiRunRecords(const quint8 *pData, qint64 nSize, qint64 nPosition, const quint8 *pSlots, qint32 nRecordCount, quint8 *pOutput, qint64 nOutputCapacity,
+                    qint64 *pnProduced, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pnProduced) return false;
 
@@ -216,8 +216,7 @@ bool pcsiRunRecords(const quint8 *pData, qint64 nSize, qint64 nPosition, const q
     return true;
 }
 
-bool pcsiPrepare(const QByteArray &baFile, QByteArray *pbaContexts, qint32 *pnContextCount, qint32 *pnRecordCount, qint64 *pnRecordsOffset,
-                 XBinary::PDSTRUCT *pPdStruct)
+bool pcsiPrepare(const QByteArray &baFile, QByteArray *pbaContexts, qint32 *pnContextCount, qint32 *pnRecordCount, qint64 *pnRecordsOffset, XBinary::PDSTRUCT *pPdStruct)
 {
     const qint64 nSize = baFile.size();
     if (nSize < (PCSI_TABLE_OFFSET + PCSI_TABLE_HEADER_SIZE)) return false;
@@ -250,8 +249,8 @@ bool XVMSPCSIDecoder::measure(const QByteArray &baFile, qint64 *pnUncompressedSi
     if (!pcsiPrepare(baFile, &baContexts, &nContextCount, &nRecordCount, &nRecordsOffset, pPdStruct)) return false;
 
     qint64 nProduced = 0;
-    if (!pcsiRunRecords((const quint8 *)baFile.constData(), baFile.size(), nRecordsOffset, (const quint8 *)baContexts.constData(), nRecordCount, nullptr,
-                        PCSI_MAX_OUTPUT, &nProduced, pPdStruct)) {
+    if (!pcsiRunRecords((const quint8 *)baFile.constData(), baFile.size(), nRecordsOffset, (const quint8 *)baContexts.constData(), nRecordCount, nullptr, PCSI_MAX_OUTPUT,
+                        &nProduced, pPdStruct)) {
         return false;
     }
     if (nProduced <= 0) return false;

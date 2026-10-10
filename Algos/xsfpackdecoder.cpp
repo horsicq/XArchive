@@ -340,8 +340,7 @@ bool XSFPACKDecoder::decodeSample(const QByteArray &baFile, qint64 nOffset, QByt
             for (qint32 i = 0; i < nCount; ++i) {
                 const qint32 nResidual = coder.sgamma(nK, &bOk);
                 if (!bOk) return false;
-                pBuffer[nHistory + i] =
-                    (qint32)((quint32)nResidual + 2U * (quint32)pBuffer[nHistory + i - 1] - (quint32)pBuffer[nHistory + i - 2]);
+                pBuffer[nHistory + i] = (qint32)((quint32)nResidual + 2U * (quint32)pBuffer[nHistory + i - 1] - (quint32)pBuffer[nHistory + i - 2]);
             }
         } else if (nCommand == 3) {
             for (qint32 i = 0; i < nCount; ++i) {

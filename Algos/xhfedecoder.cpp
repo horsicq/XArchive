@@ -32,14 +32,13 @@ bool hfeParseHeader(const QByteArray &baFile, HFEHeader *pHeader)
     if (!pHeader || (baFile.size() < HFE_HEADER_SIZE)) return false;
     const uchar *p = reinterpret_cast<const uchar *>(baFile.constData());
     if (memcmp(p, "HXCPICFE", 8) != 0) return false;
-    if (p[8] != 0) return false;                       // revision 0 only
-    if (p[9] == 0) return false;                       // number of tracks
-    if ((p[10] != 1) && (p[10] != 2)) return false;    // number of sides
+    if (p[8] != 0) return false;                     // revision 0 only
+    if (p[9] == 0) return false;                     // number of tracks
+    if ((p[10] != 1) && (p[10] != 2)) return false;  // number of sides
     pHeader->nTracks = p[9];
     pHeader->nSides = p[10];
     pHeader->nEncoding = p[11];
-    pHeader->nLutOffset =
-        static_cast<qint64>(qFromLittleEndian<quint16>(p + 0x12)) * HFE_BLOCK;
+    pHeader->nLutOffset = static_cast<qint64>(qFromLittleEndian<quint16>(p + 0x12)) * HFE_BLOCK;
     if (pHeader->nTracks > HFE_MAX_TRACKS) return false;
     if (pHeader->nLutOffset < HFE_HEADER_SIZE) return false;
     const qint64 nLutSize = qint64(pHeader->nTracks) * 4;
@@ -48,18 +47,13 @@ bool hfeParseHeader(const QByteArray &baFile, HFEHeader *pHeader)
 }
 
 // Splits one LUT track into per-side bit-cell streams (one entry per cell).
-bool hfeTrackBits(const QByteArray &baFile, const HFEHeader &header,
-                  qint32 nTrack, std::vector<quint8> *pSide0,
-                  std::vector<quint8> *pSide1)
+bool hfeTrackBits(const QByteArray &baFile, const HFEHeader &header, qint32 nTrack, std::vector<quint8> *pSide0, std::vector<quint8> *pSide1)
 {
     const uchar *p = reinterpret_cast<const uchar *>(baFile.constData());
     const qint64 nEntry = header.nLutOffset + qint64(nTrack) * 4;
-    const qint64 nOffset =
-        static_cast<qint64>(qFromLittleEndian<quint16>(p + nEntry)) * HFE_BLOCK;
-    const qint64 nLength =
-        static_cast<qint64>(qFromLittleEndian<quint16>(p + nEntry + 2));
-    if ((nLength <= 0) || (nOffset < HFE_HEADER_SIZE) ||
-        (nLength > baFile.size() - nOffset)) {
+    const qint64 nOffset = static_cast<qint64>(qFromLittleEndian<quint16>(p + nEntry)) * HFE_BLOCK;
+    const qint64 nLength = static_cast<qint64>(qFromLittleEndian<quint16>(p + nEntry + 2));
+    if ((nLength <= 0) || (nOffset < HFE_HEADER_SIZE) || (nLength > baFile.size() - nOffset)) {
         return false;
     }
     pSide0->clear();
@@ -85,16 +79,14 @@ quint16 hfeCrc16(const quint8 *pData, qint32 nSize, quint16 nCrc)
     for (qint32 i = 0; i < nSize; ++i) {
         nCrc ^= quint16(pData[i]) << 8;
         for (qint32 k = 0; k < 8; ++k) {
-            nCrc = (nCrc & 0x8000) ? quint16((nCrc << 1) ^ 0x1021)
-                                   : quint16(nCrc << 1);
+            nCrc = (nCrc & 0x8000) ? quint16((nCrc << 1) ^ 0x1021) : quint16(nCrc << 1);
         }
     }
     return nCrc;
 }
 
 // One MFM byte is 16 cells; the data bits are the odd-indexed ones.
-bool hfeMfmByte(const std::vector<quint8> &bits, qint64 nPosition,
-                quint8 *pValue)
+bool hfeMfmByte(const std::vector<quint8> &bits, qint64 nPosition, quint8 *pValue)
 {
     if ((nPosition < 0) || (nPosition + 16 > qint64(bits.size()))) return false;
     quint32 nValue = 0;
@@ -105,8 +97,7 @@ bool hfeMfmByte(const std::vector<quint8> &bits, qint64 nPosition,
     return true;
 }
 
-bool hfeMfmBytes(const std::vector<quint8> &bits, qint64 nPosition,
-                 qint32 nCount, std::vector<quint8> *pOut)
+bool hfeMfmBytes(const std::vector<quint8> &bits, qint64 nPosition, qint32 nCount, std::vector<quint8> *pOut)
 {
     pOut->resize(size_t(nCount));
     for (qint32 i = 0; i < nCount; ++i) {
@@ -126,8 +117,7 @@ struct HFESector {
     std::vector<quint8> data;
 };
 
-void hfeDecodeTrack(const std::vector<quint8> &bits,
-                    std::vector<HFESector> *pSectors)
+void hfeDecodeTrack(const std::vector<quint8> &bits, std::vector<HFESector> *pSectors)
 {
     // Collect the positions of every 0x4489 address-mark cell pattern.
     std::vector<qint64> syncs;
@@ -169,9 +159,7 @@ void hfeDecodeTrack(const std::vector<quint8> &bits,
                 const quint8 preamble[4] = {0xa1, 0xa1, 0xa1, nMarkValue};
                 quint16 nCrc = hfeCrc16(preamble, 4, 0xffff);
                 nCrc = hfeCrc16(field.data(), nSize, nCrc);
-                const quint16 nStored =
-                    quint16((field[size_t(nSize)] << 8) |
-                            field[size_t(nSize) + 1]);
+                const quint16 nStored = quint16((field[size_t(nSize)] << 8) | field[size_t(nSize) + 1]);
                 HFESector sector = identifier;
                 sector.bValid = identifier.bValid && (nCrc == nStored);
                 sector.data.assign(field.begin(), field.begin() + nSize);
@@ -197,9 +185,7 @@ struct HFEKey {
 
 // Walks every track once, collecting the sectors.  bGeometryOnly stops after
 // cylinder 0, which is all probeGeometry() needs.
-bool hfeCollect(const QByteArray &baFile, const HFEHeader &header,
-                bool bGeometryOnly, std::map<HFEKey, HFESector> *pSectors,
-                qint32 *pnMaxSector, qint32 *pnSectorSize,
+bool hfeCollect(const QByteArray &baFile, const HFEHeader &header, bool bGeometryOnly, std::map<HFEKey, HFESector> *pSectors, qint32 *pnMaxSector, qint32 *pnSectorSize,
                 XBinary::PDSTRUCT *pPdStruct)
 {
     std::vector<quint8> side0;
@@ -213,8 +199,7 @@ bool hfeCollect(const QByteArray &baFile, const HFEHeader &header,
             found.clear();
             hfeDecodeTrack(nSide ? side1 : side0, &found);
             for (const HFESector &sector : found) {
-                if ((sector.nSector <= 0) ||
-                    (sector.nSector > HFE_MAX_SECTORS)) {
+                if ((sector.nSector <= 0) || (sector.nSector > HFE_MAX_SECTORS)) {
                     continue;
                 }
                 if (*pnSectorSize == 0) {
@@ -226,8 +211,7 @@ bool hfeCollect(const QByteArray &baFile, const HFEHeader &header,
                 if (sector.nSector > *pnMaxSector) {
                     *pnMaxSector = sector.nSector;
                 }
-                const HFEKey key = {sector.nCylinder, sector.nHead,
-                                    sector.nSector};
+                const HFEKey key = {sector.nCylinder, sector.nHead, sector.nSector};
                 (*pSectors)[key] = sector;
             }
         }
@@ -237,8 +221,7 @@ bool hfeCollect(const QByteArray &baFile, const HFEHeader &header,
 
 }  // namespace
 
-bool XHFEDecoder::probeGeometry(const QByteArray &baFile, GEOMETRY *pGeometry,
-                                XBinary::PDSTRUCT *pPdStruct)
+bool XHFEDecoder::probeGeometry(const QByteArray &baFile, GEOMETRY *pGeometry, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pGeometry) return false;
     HFEHeader header;
@@ -247,8 +230,7 @@ bool XHFEDecoder::probeGeometry(const QByteArray &baFile, GEOMETRY *pGeometry,
     std::map<HFEKey, HFESector> sectors;
     qint32 nMaxSector = 0;
     qint32 nSectorSize = 0;
-    if (!hfeCollect(baFile, header, true, &sectors, &nMaxSector, &nSectorSize,
-                    pPdStruct)) {
+    if (!hfeCollect(baFile, header, true, &sectors, &nMaxSector, &nSectorSize, pPdStruct)) {
         return false;
     }
 
@@ -256,14 +238,11 @@ bool XHFEDecoder::probeGeometry(const QByteArray &baFile, GEOMETRY *pGeometry,
     pGeometry->nSides = header.nSides;
     pGeometry->nSectorsPerTrack = nMaxSector;
     pGeometry->nSectorSize = nSectorSize;
-    pGeometry->nImageSize = qint64(header.nTracks) * header.nSides *
-                            nMaxSector * nSectorSize;
-    return (pGeometry->nImageSize > 0) &&
-           (pGeometry->nImageSize <= HFE_MAX_IMAGE_SIZE);
+    pGeometry->nImageSize = qint64(header.nTracks) * header.nSides * nMaxSector * nSectorSize;
+    return (pGeometry->nImageSize > 0) && (pGeometry->nImageSize <= HFE_MAX_IMAGE_SIZE);
 }
 
-bool XHFEDecoder::decode(const QByteArray &baFile, qint64 nImageSize,
-                         QByteArray *pOutput, XBinary::PDSTRUCT *pPdStruct)
+bool XHFEDecoder::decode(const QByteArray &baFile, qint64 nImageSize, QByteArray *pOutput, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pOutput || (nImageSize <= 0) || (nImageSize > HFE_MAX_IMAGE_SIZE)) {
         return false;
@@ -274,12 +253,10 @@ bool XHFEDecoder::decode(const QByteArray &baFile, qint64 nImageSize,
     std::map<HFEKey, HFESector> sectors;
     qint32 nMaxSector = 0;
     qint32 nSectorSize = 0;
-    if (!hfeCollect(baFile, header, false, &sectors, &nMaxSector, &nSectorSize,
-                    pPdStruct)) {
+    if (!hfeCollect(baFile, header, false, &sectors, &nMaxSector, &nSectorSize, pPdStruct)) {
         return false;
     }
-    const qint64 nExpected = qint64(header.nTracks) * header.nSides *
-                             nMaxSector * nSectorSize;
+    const qint64 nExpected = qint64(header.nTracks) * header.nSides * nMaxSector * nSectorSize;
     if (nExpected != nImageSize) return false;
 
     QByteArray baImage(qint32(nImageSize), 0);
@@ -290,12 +267,9 @@ bool XHFEDecoder::decode(const QByteArray &baFile, qint64 nImageSize,
         for (qint32 nHead = 0; nHead < header.nSides; ++nHead) {
             for (qint32 nSector = 1; nSector <= nMaxSector; ++nSector) {
                 const HFEKey key = {nCylinder, nHead, nSector};
-                const std::map<HFEKey, HFESector>::iterator it =
-                    sectors.find(key);
-                if ((it != sectors.end()) && it->second.bValid &&
-                    (qint32(it->second.data.size()) == nSectorSize)) {
-                    memcpy(pImage + nCursor, it->second.data.data(),
-                           size_t(nSectorSize));
+                const std::map<HFEKey, HFESector>::iterator it = sectors.find(key);
+                if ((it != sectors.end()) && it->second.bValid && (qint32(it->second.data.size()) == nSectorSize)) {
+                    memcpy(pImage + nCursor, it->second.data.data(), size_t(nSectorSize));
                 }
                 // A missing or CRC-failed sector stays as zeroes so the image
                 // keeps its geometry.

@@ -23,21 +23,14 @@ const qint32 SQZ_MAX_BITS = 16;
 const qint32 SQZ_MAX_PADDING_BYTES = 2;
 
 // SQZ methods 3/4 map C symbols 0x100..0x11f through these tables.
-const quint8 SQZ_LENGTH_EXTRA[32] = {
-    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2,
-    3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6};
-const quint16 SQZ_LENGTH_BASE[32] = {
-    0,   1,   2,   3,   4,   5,   6,   7,   8,   10,  12,  14,  16,  20,  24,  28,
-    32,  40,  48,  56,  64,  80,  96,  112, 128, 160, 192, 224, 256, 320, 384, 448};
+const quint8 SQZ_LENGTH_EXTRA[32] = {0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6};
+const quint16 SQZ_LENGTH_BASE[32] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 20, 24, 28, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 448};
 
 // Methods 2/4 use the distance tables embedded in SQZ.EXE.  Index 31 is not
 // part of the 31-symbol P alphabet and is intentionally omitted.
-const quint8 SQZ_DISTANCE_EXTRA[31] = {
-    0, 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6,
-    6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13};
-const quint16 SQZ_DISTANCE_BASE[31] = {
-    0,   1,   2,   3,   4,    5,    7,    9,    13,   17,   25,   33,   49,   65,   97,   129,
-    193, 257, 385, 513, 769,  1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577};
+const quint8 SQZ_DISTANCE_EXTRA[31] = {0, 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13};
+const quint16 SQZ_DISTANCE_BASE[31] = {0,   1,   2,   3,   4,   5,    7,    9,    13,   17,   25,   33,   49,    65,    97,   129,
+                                       193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577};
 
 struct SQZ_STATE;
 
@@ -161,8 +154,7 @@ struct SQZ_STATE {
 
 bool sqzPrepareProcessState(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct, quint32 *pCompressedSize, quint32 *pRawSize)
 {
-    if (!pState || !pCompressedSize || !pRawSize || !pState->pDeviceInput || !pState->pDeviceOutput || (pState->nInputOffset < 0) ||
-        (pState->nInputLimit < 0)) {
+    if (!pState || !pCompressedSize || !pRawSize || !pState->pDeviceInput || !pState->pDeviceOutput || (pState->nInputOffset < 0) || (pState->nInputLimit < 0)) {
         return false;
     }
 
@@ -187,12 +179,10 @@ bool sqzPrepareProcessState(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUC
     pState->nCountInput = 0;
     pState->nCountOutput = 0;
 
-    if (!pState->pDeviceInput->isReadable() || !pState->pDeviceInput->seek(pState->nInputOffset) ||
-        (pState->pDeviceInput->pos() != pState->nInputOffset)) {
+    if (!pState->pDeviceInput->isReadable() || !pState->pDeviceInput->seek(pState->nInputOffset) || (pState->pDeviceInput->pos() != pState->nInputOffset)) {
         pState->bReadError = true;
     }
-    if (!pState->pDeviceOutput->isWritable() || (!pState->pDeviceOutput->isSequential() && !pState->pDeviceOutput->seek(0)) ||
-        (pState->pDeviceOutput->pos() != 0)) {
+    if (!pState->pDeviceOutput->isWritable() || (!pState->pDeviceOutput->isSequential() && !pState->pDeviceOutput->seek(0)) || (pState->pDeviceOutput->pos() != 0)) {
         pState->bWriteError = true;
     }
     if (pState->bReadError || pState->bWriteError || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
@@ -204,8 +194,7 @@ bool sqzPrepareProcessState(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUC
 
 bool sqzRefillInput(SQZ_STATE *pState)
 {
-    if (!pState || pState->bError || !pState->pProcessState || (pState->nCompressedLeft == 0) ||
-        !XBinary::isPdStructNotCanceled(pState->pPdStruct)) {
+    if (!pState || pState->bError || !pState->pProcessState || (pState->nCompressedLeft == 0) || !XBinary::isPdStructNotCanceled(pState->pPdStruct)) {
         return false;
     }
 
@@ -375,8 +364,7 @@ bool sqzReadBlock(SQZ_STATE *pState)
     SQZ_HUFFMAN ptTree;
     SQZ_HUFFMAN cTree;
     SQZ_HUFFMAN pTree;
-    if (!sqzReadPtLengths(pState, SQZ_NT, 5, 3, &ptTree) || !sqzReadCLengths(pState, ptTree, &cTree) ||
-        !sqzReadPtLengths(pState, SQZ_NP, 5, -1, &pTree)) {
+    if (!sqzReadPtLengths(pState, SQZ_NT, 5, 3, &ptTree) || !sqzReadCLengths(pState, ptTree, &cTree) || !sqzReadPtLengths(pState, SQZ_NP, 5, -1, &pTree)) {
         return false;
     }
 
@@ -484,8 +472,7 @@ bool sqzFinalizeInput(SQZ_STATE *pState)
         quint8 nIgnored = 0;
         if (!sqzReadByte(pState, &nIgnored)) return false;
     }
-    return (pState->nInputPosition == pState->nInputSize) &&
-           (pState->pProcessState->nCountInput == pState->pProcessState->nInputLimit);
+    return (pState->nInputPosition == pState->nInputSize) && (pState->pProcessState->nCountInput == pState->pProcessState->nInputLimit);
 }
 }  // namespace
 
@@ -497,8 +484,7 @@ bool XSQZDecoder::decompress(XBinary::DATAPROCESS_STATE *pProcessState, qint32 n
     quint32 nRawSize = 0;
     if (!sqzPrepareProcessState(pProcessState, pPdStruct, &nCompressedSize, &nRawSize)) return false;
     if (nRawSize == 0) {
-        return (nCompressedSize == 0) && !pProcessState->bReadError && !pProcessState->bWriteError &&
-               XBinary::isPdStructNotCanceled(pPdStruct);
+        return (nCompressedSize == 0) && !pProcessState->bReadError && !pProcessState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct);
     }
     if (nCompressedSize == 0) return false;
 
@@ -559,6 +545,6 @@ bool XSQZDecoder::decompress(XBinary::DATAPROCESS_STATE *pProcessState, qint32 n
     // produced, and valid archives can therefore leave tokens in the final
     // block.  The packed extent and output size are still enforced exactly.
     const bool bCodecExact = !pState->bError && (pState->nProduced == nRawSize) && sqzFinalizeInput(pState.get()) && sqzFlushOutput(pState.get());
-    return bCodecExact && !pState->bError && !pProcessState->bReadError && !pProcessState->bWriteError &&
-           (pProcessState->nCountOutput == nRawSize) && XBinary::isPdStructNotCanceled(pPdStruct);
+    return bCodecExact && !pState->bError && !pProcessState->bReadError && !pProcessState->bWriteError && (pProcessState->nCountOutput == nRawSize) &&
+           XBinary::isPdStructNotCanceled(pPdStruct);
 }

@@ -137,7 +137,7 @@ bool ash0ReadTree(BITREADER *pReader, qint32 nWidth, TREE *pTree)
         if (nBit) {
             // A tree over <= nMax leaves has <= nMax - 1 internal nodes; the
             // System Menu's tables hold exactly that many.
-            if (nNext >= nTable) return false;  // too many internal nodes
+            if (nNext >= nTable) return false;                                       // too many internal nodes
             if (static_cast<quint32>(vecStack.size()) + 2 > 2 * nMax) return false;  // cannot happen given the line above
             vecStack.append(nNext | ASH0_FLAG_RIGHT);
             vecStack.append(nNext | ASH0_FLAG_LEFT);
@@ -194,8 +194,8 @@ bool ash0ReadCode(BITREADER *pReader, const TREE *pTree, quint32 *pnValue)
     return true;
 }
 
-bool ash0DecodeStreams(const quint8 *pData, qint64 nPackedSize, const XASH0Decoder::HEADER &header, qint32 nSymBits, qint32 nDistBits,
-                       QByteArray *pbaResult, bool *pbTight, XBinary::PDSTRUCT *pPdStruct)
+bool ash0DecodeStreams(const quint8 *pData, qint64 nPackedSize, const XASH0Decoder::HEADER &header, qint32 nSymBits, qint32 nDistBits, QByteArray *pbaResult,
+                       bool *pbTight, XBinary::PDSTRUCT *pPdStruct)
 {
     BITREADER symReader = {};
     BITREADER distReader = {};
@@ -258,8 +258,8 @@ bool XASH0Decoder::parseHeader(const quint8 *pHeader, qint64 nHeaderSize, qint64
     if (nPackedSize < ASH0_MIN_SIZE) return false;
     if ((pHeader[0] != 'A') || (pHeader[1] != 'S') || (pHeader[2] != 'H') || (pHeader[3] != '0')) return false;
 
-    const quint32 nSizeWord = (static_cast<quint32>(pHeader[4]) << 24) | (static_cast<quint32>(pHeader[5]) << 16) | (static_cast<quint32>(pHeader[6]) << 8) |
-                              static_cast<quint32>(pHeader[7]);
+    const quint32 nSizeWord =
+        (static_cast<quint32>(pHeader[4]) << 24) | (static_cast<quint32>(pHeader[5]) << 16) | (static_cast<quint32>(pHeader[6]) << 8) | static_cast<quint32>(pHeader[7]);
     const quint32 nDistWord = (static_cast<quint32>(pHeader[8]) << 24) | (static_cast<quint32>(pHeader[9]) << 16) | (static_cast<quint32>(pHeader[10]) << 8) |
                               static_cast<quint32>(pHeader[11]);
 
@@ -282,8 +282,8 @@ bool XASH0Decoder::parseHeader(const quint8 *pHeader, qint64 nHeaderSize, qint64
     return true;
 }
 
-bool XASH0Decoder::decodeWithBits(const QByteArray &baPacked, qint64 nUncompressedSize, qint32 nSymBits, qint32 nDistBits, QByteArray *pbaResult,
-                                  bool *pbTight, XBinary::PDSTRUCT *pPdStruct)
+bool XASH0Decoder::decodeWithBits(const QByteArray &baPacked, qint64 nUncompressedSize, qint32 nSymBits, qint32 nDistBits, QByteArray *pbaResult, bool *pbTight,
+                                  XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pbaResult || !pbTight) return false;
     pbaResult->clear();

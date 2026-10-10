@@ -35,7 +35,7 @@ const qint32 ARC_LZW_MIN_BITS = 9;
 const qint32 ARC_LZW_CRUNCH_MAX_BITS = 12;  // method 8
 const qint32 ARC_LZW_SQUASH_BITS = 13;      // method 9
 const quint32 ARC_LZW_CLEAR = 256;          // dynamic-width methods only
-const qint32 ARC_LZW_MAX_BITS = 16;  // ARC 0x7f Unix-compress flag limit.
+const qint32 ARC_LZW_MAX_BITS = 16;         // ARC 0x7f Unix-compress flag limit.
 
 const qint32 ARC_SQUEEZE_NUMVALS = 257;  // 256 byte values + the end marker
 const qint32 ARC_SQUEEZE_EOF = 256;
@@ -391,7 +391,6 @@ bool arcDecodeSqueeze(ArcSource *pSource, ArcSink *pSink, XBinary::PDSTRUCT *pPd
     return XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
-
 // original 12-bit hash-table crunch. Unlike the
 // later ARC LZW method, literal codes are themselves hashed and there is no
 // CLEAR code. Keep the reference implementation's dictionary and pending nibble local to this decode.
@@ -404,7 +403,9 @@ struct ArcHashEntry {
 
 class ArcNibbleReader {
 public:
-    explicit ArcNibbleReader(ArcSource *source) : m_source(source), m_nibble(-1) {}
+    explicit ArcNibbleReader(ArcSource *source) : m_source(source), m_nibble(-1)
+    {
+    }
     // -1 is the end of the bounded stream; -2 is a missing second byte.
     qint32 read()
     {
@@ -419,6 +420,7 @@ public:
         m_nibble = second & 15;
         return (qint32(first) << 4) | (second >> 4);
     }
+
 private:
     ArcSource *m_source;
     qint32 m_nibble;

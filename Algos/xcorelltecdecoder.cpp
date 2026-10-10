@@ -38,9 +38,7 @@ const qint64 LTEC_TAIL_SLACK_BITS = 16;
 class LtecBitReader {
 public:
     explicit LtecBitReader(const QByteArray &data)
-        : m_pData(reinterpret_cast<const quint8 *>(data.constData())),
-          m_nSize(data.size()), m_nBitCount(qint64(data.size()) * 8),
-          m_nBitPosition(0)
+        : m_pData(reinterpret_cast<const quint8 *>(data.constData())), m_nSize(data.size()), m_nBitCount(qint64(data.size()) * 8), m_nBitPosition(0)
     {
     }
 
@@ -151,8 +149,7 @@ bool ltecBuildTree(const QVector<quint8> &vLengths, LtecTree *pTree)
     return true;
 }
 
-bool ltecDecodeSymbol(LtecBitReader *pReader, const LtecTree &tree,
-                      quint32 *pSymbol)
+bool ltecDecodeSymbol(LtecBitReader *pReader, const LtecTree &tree, quint32 *pSymbol)
 {
     if (!pSymbol) return false;
     if (tree.bConstant) {
@@ -164,10 +161,8 @@ bool ltecDecodeSymbol(LtecBitReader *pReader, const LtecTree &tree,
         quint32 nBit = 0;
         if (!pReader->readBits(1, &nBit)) return false;
         nCode = (nCode << 1) | nBit;
-        if (tree.nCount[nLength] && (nCode >= tree.nFirstCode[nLength]) &&
-            (nCode - tree.nFirstCode[nLength] < tree.nCount[nLength])) {
-            *pSymbol = tree.vSymbols.at(tree.nFirstIndex[nLength] +
-                                        qint32(nCode - tree.nFirstCode[nLength]));
+        if (tree.nCount[nLength] && (nCode >= tree.nFirstCode[nLength]) && (nCode - tree.nFirstCode[nLength] < tree.nCount[nLength])) {
+            *pSymbol = tree.vSymbols.at(tree.nFirstIndex[nLength] + qint32(nCode - tree.nFirstCode[nLength]));
             return true;
         }
     }
@@ -178,8 +173,7 @@ bool ltecDecodeSymbol(LtecBitReader *pReader, const LtecTree &tree,
 // extended by counting the following 1-bits AND consuming the terminating 0
 // bit (LHA's fillbuf(c - 3)).  Dropping that consume still decodes the short
 // tables perfectly while corrupting the long ones, so it is called out here.
-bool ltecReadPtLen(LtecBitReader *pReader, qint32 nAlphabet, qint32 nCountBits,
-                   qint32 nSpecialIndex, LtecTree *pTree)
+bool ltecReadPtLen(LtecBitReader *pReader, qint32 nAlphabet, qint32 nCountBits, qint32 nSpecialIndex, LtecTree *pTree)
 {
     ltecResetTree(pTree);
 
@@ -187,8 +181,7 @@ bool ltecReadPtLen(LtecBitReader *pReader, qint32 nAlphabet, qint32 nCountBits,
     if (!pReader->readBits(nCountBits, &nNumber)) return false;
     if (nNumber == 0) {
         quint32 nSymbol = 0;
-        if (!pReader->readBits(nCountBits, &nSymbol) ||
-            (nSymbol >= quint32(nAlphabet))) {
+        if (!pReader->readBits(nCountBits, &nSymbol) || (nSymbol >= quint32(nAlphabet))) {
             return false;
         }
         pTree->bConstant = true;
@@ -224,8 +217,7 @@ bool ltecReadPtLen(LtecBitReader *pReader, qint32 nAlphabet, qint32 nCountBits,
     return ltecBuildTree(vLengths, pTree);
 }
 
-bool ltecReadCLen(LtecBitReader *pReader, const LtecTree &preTree,
-                  LtecTree *pTree)
+bool ltecReadCLen(LtecBitReader *pReader, const LtecTree &preTree, LtecTree *pTree)
 {
     ltecResetTree(pTree);
 
@@ -233,8 +225,7 @@ bool ltecReadCLen(LtecBitReader *pReader, const LtecTree &preTree,
     if (!pReader->readBits(LTEC_CBIT, &nNumber)) return false;
     if (nNumber == 0) {
         quint32 nSymbol = 0;
-        if (!pReader->readBits(LTEC_CBIT, &nSymbol) ||
-            (nSymbol >= quint32(LTEC_NC))) {
+        if (!pReader->readBits(LTEC_CBIT, &nSymbol) || (nSymbol >= quint32(LTEC_NC))) {
             return false;
         }
         pTree->bConstant = true;
@@ -277,8 +268,7 @@ bool ltecReadCLen(LtecBitReader *pReader, const LtecTree &preTree,
 // plaintext produced so far - a match may reach back to the block's very
 // first byte and never before it, which is what makes a flat buffer both
 // correct and stricter than an LHA ring window pre-filled with spaces.
-bool ltecDecodeBlock(const QByteArray &packed, qint64 nStopSize,
-                     QByteArray *pOutput, XBinary::PDSTRUCT *pPdStruct)
+bool ltecDecodeBlock(const QByteArray &packed, qint64 nStopSize, QByteArray *pOutput, XBinary::PDSTRUCT *pPdStruct)
 {
     pOutput->clear();
     if (nStopSize == 0) return true;
@@ -310,9 +300,7 @@ bool ltecDecodeBlock(const QByteArray &packed, qint64 nStopSize,
             if (!reader.readBits(16, &nBlockRemaining) || (nBlockRemaining == 0)) {
                 return false;
             }
-            if (!ltecReadPtLen(&reader, LTEC_NT, LTEC_TBIT, LTEC_PT_SPECIAL,
-                               &preTree) ||
-                !ltecReadCLen(&reader, preTree, &literalTree) ||
+            if (!ltecReadPtLen(&reader, LTEC_NT, LTEC_TBIT, LTEC_PT_SPECIAL, &preTree) || !ltecReadCLen(&reader, preTree, &literalTree) ||
                 !ltecReadPtLen(&reader, LTEC_NP, LTEC_PBIT, -1, &positionTree)) {
                 return false;
             }
@@ -329,8 +317,7 @@ bool ltecDecodeBlock(const QByteArray &packed, qint64 nStopSize,
 
         const qint32 nMatchLength = qint32(nSymbol) - 256 + LTEC_THRESHOLD;
         quint32 nPositionSymbol = 0;
-        if (!ltecDecodeSymbol(&reader, positionTree, &nPositionSymbol) ||
-            (nPositionSymbol >= quint32(LTEC_NP))) {
+        if (!ltecDecodeSymbol(&reader, positionTree, &nPositionSymbol) || (nPositionSymbol >= quint32(LTEC_NP))) {
             return false;
         }
         quint32 nDistance = 0;
@@ -364,12 +351,10 @@ qint32 XCorelLtecDecoder::positionAlphabetSize()
     return LTEC_NP;
 }
 
-QByteArray XCorelLtecDecoder::packProperties(qint64 nBlockSize,
-                                             qint64 nOffsetInBlock)
+QByteArray XCorelLtecDecoder::packProperties(qint64 nBlockSize, qint64 nOffsetInBlock)
 {
     QByteArray baResult;
-    if ((nBlockSize < 0) || (nBlockSize > LTEC_MAX_BLOCK_SIZE) ||
-        (nOffsetInBlock < 0) || (nOffsetInBlock > LTEC_MAX_BLOCK_SIZE)) {
+    if ((nBlockSize < 0) || (nBlockSize > LTEC_MAX_BLOCK_SIZE) || (nOffsetInBlock < 0) || (nOffsetInBlock > LTEC_MAX_BLOCK_SIZE)) {
         return baResult;
     }
     quint32 nValues[2];
@@ -379,16 +364,11 @@ QByteArray XCorelLtecDecoder::packProperties(qint64 nBlockSize,
     return baResult;
 }
 
-bool XCorelLtecDecoder::decode(const QByteArray &packed,
-                               qint64 nUncompressedSize,
-                               const QByteArray &baProperties,
-                               QByteArray *pOutput,
-                               XBinary::PDSTRUCT *pPdStruct)
+bool XCorelLtecDecoder::decode(const QByteArray &packed, qint64 nUncompressedSize, const QByteArray &baProperties, QByteArray *pOutput, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pOutput) return false;
     pOutput->clear();
-    if ((nUncompressedSize < 0) ||
-        (nUncompressedSize > qint64((std::numeric_limits<qint32>::max)()))) {
+    if ((nUncompressedSize < 0) || (nUncompressedSize > qint64((std::numeric_limits<qint32>::max)()))) {
         return false;
     }
 
@@ -396,17 +376,14 @@ bool XCorelLtecDecoder::decode(const QByteArray &packed,
     qint64 nOffsetInBlock = 0;
     if (!baProperties.isEmpty()) {
         if (baProperties.size() != 8) return false;
-        const uchar *pProperties =
-            reinterpret_cast<const uchar *>(baProperties.constData());
+        const uchar *pProperties = reinterpret_cast<const uchar *>(baProperties.constData());
         nBlockSize = qint64(qFromLittleEndian<quint32>(pProperties));
         nOffsetInBlock = qint64(qFromLittleEndian<quint32>(pProperties + 4));
     }
-    if ((nBlockSize < 0) || (nBlockSize > LTEC_MAX_BLOCK_SIZE) ||
-        (nBlockSize > qint64((std::numeric_limits<qint32>::max)()))) {
+    if ((nBlockSize < 0) || (nBlockSize > LTEC_MAX_BLOCK_SIZE) || (nBlockSize > qint64((std::numeric_limits<qint32>::max)()))) {
         return false;
     }
-    if ((nOffsetInBlock < 0) || (nOffsetInBlock > nBlockSize) ||
-        (nUncompressedSize > nBlockSize - nOffsetInBlock)) {
+    if ((nOffsetInBlock < 0) || (nOffsetInBlock > nBlockSize) || (nUncompressedSize > nBlockSize - nOffsetInBlock)) {
         return false;
     }
     if (nUncompressedSize == 0) return true;
@@ -423,11 +400,9 @@ bool XCorelLtecDecoder::decode(const QByteArray &packed,
     return qint64(pOutput->size()) == nUncompressedSize;
 }
 
-bool XCorelLtecDecoder::probe(const QByteArray &packed, qint64 nBlockSize,
-                              qint64 nProbeSize, XBinary::PDSTRUCT *pPdStruct)
+bool XCorelLtecDecoder::probe(const QByteArray &packed, qint64 nBlockSize, qint64 nProbeSize, XBinary::PDSTRUCT *pPdStruct)
 {
-    if ((nBlockSize <= 0) || (nBlockSize > LTEC_MAX_BLOCK_SIZE) ||
-        (nBlockSize > qint64((std::numeric_limits<qint32>::max)()))) {
+    if ((nBlockSize <= 0) || (nBlockSize > LTEC_MAX_BLOCK_SIZE) || (nBlockSize > qint64((std::numeric_limits<qint32>::max)()))) {
         return false;
     }
     if (nProbeSize <= 0) return false;

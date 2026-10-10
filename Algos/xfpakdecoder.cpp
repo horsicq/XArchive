@@ -14,21 +14,16 @@ const qint64 MAX_FPAK_OUTPUT = Q_INT64_C(512) * 1024 * 1024;
 const qint32 MAX_FPAK_TREE_SYMBOLS = 256;
 const qint32 FPAK_CODE_TREE_SYMBOLS = 64;
 
-class FpakBits
-{
+class FpakBits {
 public:
-    FpakBits(const QByteArray &data, qint32 bytePosition)
-        : m_data(data), m_bitPosition(qint64(bytePosition) * 8)
+    FpakBits(const QByteArray &data, qint32 bytePosition) : m_data(data), m_bitPosition(qint64(bytePosition) * 8)
     {
     }
 
     bool readBit(quint32 *value)
     {
-        if (!value || (m_bitPosition < 0) ||
-            (m_bitPosition >= qint64(m_data.size()) * 8))
-            return false;
-        const uchar *pData =
-            reinterpret_cast<const uchar *>(m_data.constData());
+        if (!value || (m_bitPosition < 0) || (m_bitPosition >= qint64(m_data.size()) * 8)) return false;
+        const uchar *pData = reinterpret_cast<const uchar *>(m_data.constData());
         *value = (pData[m_bitPosition >> 3] >> (m_bitPosition & 7)) & 1U;
         ++m_bitPosition;
         return true;
@@ -36,9 +31,7 @@ public:
 
     bool readBits(quint32 count, quint32 *value)
     {
-        if (!value || (count > 24) || (m_bitPosition < 0) ||
-            (m_bitPosition > qint64(m_data.size()) * 8 - count))
-            return false;
+        if (!value || (count > 24) || (m_bitPosition < 0) || (m_bitPosition > qint64(m_data.size()) * 8 - count)) return false;
         quint32 result = 0;
         for (quint32 i = 0; i < count; ++i) {
             quint32 bit = 0;
@@ -49,15 +42,17 @@ public:
         return true;
     }
 
-    qint64 consumedSize() const { return (m_bitPosition + 7) / 8; }
+    qint64 consumedSize() const
+    {
+        return (m_bitPosition + 7) / 8;
+    }
 
 private:
     const QByteArray &m_data;
     qint64 m_bitPosition;
 };
 
-struct FpakTree
-{
+struct FpakTree {
     std::array<quint32, 17> count = {};
     std::array<quint32, 17> firstCode = {};
     std::array<qint32, 17> firstSymbol = {};
@@ -67,13 +62,9 @@ struct FpakTree
 
 // symbolTotal is 64 for the length and distance trees and 256 for the literal
 // tree; the run-length encoding of the code lengths is identical for all three.
-bool readTree(const QByteArray &packed, qint32 *position, qint32 symbolTotal,
-              FpakTree *tree)
+bool readTree(const QByteArray &packed, qint32 *position, qint32 symbolTotal, FpakTree *tree)
 {
-    if (!position || !tree || (*position < 0) ||
-        (*position >= packed.size()) || (symbolTotal < 1) ||
-        (symbolTotal > MAX_FPAK_TREE_SYMBOLS))
-        return false;
+    if (!position || !tree || (*position < 0) || (*position >= packed.size()) || (symbolTotal < 1) || (symbolTotal > MAX_FPAK_TREE_SYMBOLS)) return false;
 
     std::array<quint8, MAX_FPAK_TREE_SYMBOLS> lengths = {};
     const quint32 pairCount = quint8(packed.at((*position)++)) + 1U;
@@ -87,8 +78,7 @@ bool readTree(const QByteArray &packed, qint32 *position, qint32 symbolTotal,
         const qint32 repeat = (descriptor >> 4) + 1;
         const quint8 length = (descriptor & 0x0fU) + 1U;
         if ((symbolCount > symbolTotal - repeat) || (length > 16U)) return false;
-        for (qint32 j = 0; j < repeat; ++j)
-            lengths[symbolCount++] = length;
+        for (qint32 j = 0; j < repeat; ++j) lengths[symbolCount++] = length;
     }
     if (symbolCount != symbolTotal) return false;
 
@@ -111,12 +101,10 @@ bool readTree(const QByteArray &packed, qint32 *position, qint32 symbolTotal,
         tree->firstCode[length] = code;
         tree->firstSymbol[length] = outputIndex;
         for (qint32 symbol = 0; symbol < symbolTotal; ++symbol) {
-            if (lengths[symbol] == length)
-                tree->symbols[outputIndex++] = quint8(symbol);
+            if (lengths[symbol] == length) tree->symbols[outputIndex++] = quint8(symbol);
         }
     }
-    return (outputIndex == symbolTotal) &&
-           (code + tree->count[16] == (1U << 16));
+    return (outputIndex == symbolTotal) && (code + tree->count[16] == (1U << 16));
 }
 
 bool decodeSymbol(FpakBits *bits, const FpakTree &tree, quint32 *symbol)
@@ -135,8 +123,7 @@ bool decodeSymbol(FpakBits *bits, const FpakTree &tree, quint32 *symbol)
         const quint32 first = tree.firstCode[length];
         const quint32 count = tree.count[length];
         if (count && (code >= first) && ((code - first) < count)) {
-            const qint32 index =
-                tree.firstSymbol[length] + qint32(code - first);
+            const qint32 index = tree.firstSymbol[length] + qint32(code - first);
             if ((index < 0) || (index >= tree.symbolCount)) return false;
             *symbol = tree.symbols[index];
             return true;
@@ -146,16 +133,12 @@ bool decodeSymbol(FpakBits *bits, const FpakTree &tree, quint32 *symbol)
 }
 }  // namespace
 
-bool XFpakDecoder::decode(const QByteArray &packed, quint16 method,
-                          quint16 flags, qint64 expectedSize,
-                          QByteArray *output, qint64 *consumedSize,
+bool XFpakDecoder::decode(const QByteArray &packed, quint16 method, quint16 flags, qint64 expectedSize, QByteArray *output, qint64 *consumedSize,
                           XBinary::PDSTRUCT *pPdStruct)
 {
     if (output) output->clear();
     if (consumedSize) *consumedSize = 0;
-    if (!output || packed.isEmpty() || (expectedSize < 1) ||
-        (expectedSize > MAX_FPAK_OUTPUT) ||
-        (expectedSize > (std::numeric_limits<qint32>::max)()) ||
+    if (!output || packed.isEmpty() || (expectedSize < 1) || (expectedSize > MAX_FPAK_OUTPUT) || (expectedSize > (std::numeric_limits<qint32>::max)()) ||
         !XBinary::isPdStructNotCanceled(pPdStruct))
         return false;
 
@@ -179,11 +162,8 @@ bool XFpakDecoder::decode(const QByteArray &packed, quint16 method,
     FpakTree literalTree;
     FpakTree lengthTree;
     FpakTree distanceTree;
-    if (bLiteralTree &&
-        !readTree(packed, &position, MAX_FPAK_TREE_SYMBOLS, &literalTree))
-        return false;
-    if (!readTree(packed, &position, FPAK_CODE_TREE_SYMBOLS, &lengthTree) ||
-        !readTree(packed, &position, FPAK_CODE_TREE_SYMBOLS, &distanceTree) ||
+    if (bLiteralTree && !readTree(packed, &position, MAX_FPAK_TREE_SYMBOLS, &literalTree)) return false;
+    if (!readTree(packed, &position, FPAK_CODE_TREE_SYMBOLS, &lengthTree) || !readTree(packed, &position, FPAK_CODE_TREE_SYMBOLS, &distanceTree) ||
         (position >= packed.size()))
         return false;
 
@@ -195,11 +175,7 @@ bool XFpakDecoder::decode(const QByteArray &packed, quint16 method,
     while (result.size() < expectedSize) {
         if (result.size() >= nextCancelCheck) {
             if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
-            nextCancelCheck = result.size() <=
-                                      (std::numeric_limits<qint32>::max)() -
-                                          16384
-                                  ? result.size() + 16384
-                                  : (std::numeric_limits<qint32>::max)();
+            nextCancelCheck = result.size() <= (std::numeric_limits<qint32>::max)() - 16384 ? result.size() + 16384 : (std::numeric_limits<qint32>::max)();
         }
 
         quint32 literalFlag = 0;
@@ -218,9 +194,7 @@ bool XFpakDecoder::decode(const QByteArray &packed, quint16 method,
         quint32 lowDistance = 0;
         quint32 distanceSymbol = 0;
         quint32 lengthSymbol = 0;
-        if (!bits.readBits(nDistanceBits, &lowDistance) ||
-            !decodeSymbol(&bits, distanceTree, &distanceSymbol) ||
-            !decodeSymbol(&bits, lengthTree, &lengthSymbol))
+        if (!bits.readBits(nDistanceBits, &lowDistance) || !decodeSymbol(&bits, distanceTree, &distanceSymbol) || !decodeSymbol(&bits, lengthTree, &lengthSymbol))
             return false;
 
         quint32 length = lengthSymbol + nMinimumMatch;
@@ -229,28 +203,21 @@ bool XFpakDecoder::decode(const QByteArray &packed, quint16 method,
             if (!bits.readBits(8, &extraLength)) return false;
             length += extraLength;
         }
-        const quint32 distance =
-            (distanceSymbol << nDistanceBits) + lowDistance + 1U;
-        if (!distance || (distance > nDictionarySize) ||
-            (length > quint64(expectedSize - result.size())))
-            return false;
+        const quint32 distance = (distanceSymbol << nDistanceBits) + lowDistance + 1U;
+        if (!distance || (distance > nDictionarySize) || (length > quint64(expectedSize - result.size()))) return false;
 
         // PKZIP Implode starts with a zero-filled dictionary.  A legal early
         // match may therefore point before the first produced byte; once the
         // source enters produced data, appending one byte at a time naturally
         // implements overlapping LZ copies.
         for (quint32 i = 0; i < length; ++i) {
-            const char value = distance <= quint32(result.size())
-                                   ? result.at(result.size() - qint32(distance))
-                                   : '\0';
+            const char value = distance <= quint32(result.size()) ? result.at(result.size() - qint32(distance)) : '\0';
             result.append(value);
         }
     }
 
     const qint64 consumed = bits.consumedSize();
-    if ((result.size() != expectedSize) || (consumed != packed.size()) ||
-        !XBinary::isPdStructNotCanceled(pPdStruct))
-        return false;
+    if ((result.size() != expectedSize) || (consumed != packed.size()) || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
     *output = result;
     if (consumedSize) *consumedSize = consumed;

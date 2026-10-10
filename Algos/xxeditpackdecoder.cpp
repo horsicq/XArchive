@@ -29,8 +29,14 @@ const quint8 XEP_BLANK = 0x40;  // the EBCDIC space
 class Walker {
 public:
     Walker(const QByteArray &baPacked, QByteArray *pbaOut, qint64 nCeiling)
-        : m_pData((const quint8 *)baPacked.constData()), m_nSize(baPacked.size()), m_nPosition(0), m_pbaOut(pbaOut), m_nProduced(0), m_nCeiling(nCeiling),
-          m_bOverflow(false), m_bTruncated(false)
+        : m_pData((const quint8 *)baPacked.constData()),
+          m_nSize(baPacked.size()),
+          m_nPosition(0),
+          m_pbaOut(pbaOut),
+          m_nProduced(0),
+          m_nCeiling(nCeiling),
+          m_bOverflow(false),
+          m_bTruncated(false)
     {
     }
 

@@ -16,8 +16,17 @@
 namespace {
 const qint64 MAX_BUFFER = Q_INT64_C(256) * 1024 * 1024;
 const quint64 MAX_DICTIONARY = Q_UINT64_C(64) * 1024 * 1024;
-enum Kind { Store, Lzma, Rep, Exe, Delta };
-struct Method { Kind kind = Store; QByteArray properties; };
+enum Kind {
+    Store,
+    Lzma,
+    Rep,
+    Exe,
+    Delta
+};
+struct Method {
+    Kind kind = Store;
+    QByteArray properties;
+};
 
 bool decimal(QByteArray value, quint64 *number)
 {
@@ -37,14 +46,29 @@ bool memory(QByteArray value, quint64 *number)
 {
     quint64 multiplier = 1;
     bool power = false;
-    if (value.endsWith("gb")) { multiplier = Q_UINT64_C(1) << 30; value.chop(2); }
-    else if (value.endsWith('g')) { multiplier = Q_UINT64_C(1) << 30; value.chop(1); }
-    else if (value.endsWith("mb")) { multiplier = Q_UINT64_C(1) << 20; value.chop(2); }
-    else if (value.endsWith('m')) { multiplier = Q_UINT64_C(1) << 20; value.chop(1); }
-    else if (value.endsWith("kb")) { multiplier = 1024; value.chop(2); }
-    else if (value.endsWith('k')) { multiplier = 1024; value.chop(1); }
-    else if (value.endsWith('b')) value.chop(1);
-    else { power = true; if (value.endsWith('^')) value.chop(1); }
+    if (value.endsWith("gb")) {
+        multiplier = Q_UINT64_C(1) << 30;
+        value.chop(2);
+    } else if (value.endsWith('g')) {
+        multiplier = Q_UINT64_C(1) << 30;
+        value.chop(1);
+    } else if (value.endsWith("mb")) {
+        multiplier = Q_UINT64_C(1) << 20;
+        value.chop(2);
+    } else if (value.endsWith('m')) {
+        multiplier = Q_UINT64_C(1) << 20;
+        value.chop(1);
+    } else if (value.endsWith("kb")) {
+        multiplier = 1024;
+        value.chop(2);
+    } else if (value.endsWith('k')) {
+        multiplier = 1024;
+        value.chop(1);
+    } else if (value.endsWith('b')) value.chop(1);
+    else {
+        power = true;
+        if (value.endsWith('^')) value.chop(1);
+    }
     quint64 n = 0;
     if (!decimal(value, &n)) return false;
     if (power) {
@@ -82,8 +106,9 @@ bool parseMethod(const QByteArray &text, Method *method)
         QByteArray option = parts.at(i);
         if (option.startsWith('*')) option.remove(0, 1);
         quint64 n = 0;
-        if (option == "fastest" || option == "fast" || option == "normal" || option == "max" || option == "ultra" ||
-            option == "ht4" || option == "hc4" || option == "bt2" || option == "bt3" || option == "bt4") continue;
+        if (option == "fastest" || option == "fast" || option == "normal" || option == "max" || option == "ultra" || option == "ht4" || option == "hc4" ||
+            option == "bt2" || option == "bt3" || option == "bt4")
+            continue;
         if (option.startsWith("lc") || option.startsWith("lp") || option.startsWith("pb")) {
             if (!decimal(option.mid(2), &n)) return false;
             if (option.startsWith("lc")) lc = n;
@@ -102,7 +127,7 @@ bool parseMethod(const QByteArray &text, Method *method)
         } else if (option.startsWith('h')) {
             if (!memory(option.mid(1), &n) || n > quint64(MAX_BUFFER)) return false;
         } else if (decimal(option, &n)) {
-            if (n < 5 || n > 273) return false; // encoder fast-byte count
+            if (n < 5 || n > 273) return false;  // encoder fast-byte count
         } else if (!memory(option, &dictionary)) return false;
     }
     if (!dictionary || dictionary > MAX_DICTIONARY || lc > 8 || lp > 4 || pb > 4 || lc + lp > 4) return false;
@@ -142,7 +167,10 @@ bool append(QByteArray *out, const char *data, qint64 length, qint64 limit)
 
 class LimitedBuffer : public QBuffer {
 public:
-    LimitedBuffer(QByteArray *data, qint64 limit) : QBuffer(data), m_limit(limit) {}
+    LimitedBuffer(QByteArray *data, qint64 limit) : QBuffer(data), m_limit(limit)
+    {
+    }
+
 protected:
     qint64 writeData(const char *data, qint64 length) override
     {
@@ -151,6 +179,7 @@ protected:
         if (size > buffer().capacity()) buffer().reserve(size);
         return QBuffer::writeData(data, length);
     }
+
 private:
     qint64 m_limit;
 };
@@ -172,9 +201,8 @@ bool lzma(const QByteArray &input, const Method &method, qint64 expected, qint64
     // MAX_OUTPUT_SIZE key also caps the SDK dictionary plus I/O reservation,
     // so using a tiny final-output size there would reject valid empty/tiny
     // streams. parseMethod/memoryRequired bound and account SDK workspace.
-    return XLZMADecoder::decompressWithResult(&state, method.properties, pd) == XLZMADecoder::DECOMPRESS_RESULT_SUCCESS &&
-           state.nCountInput == input.size() && state.nCountOutput == out->size() && out->size() <= limit &&
-           (expected < 0 || out->size() == expected) && XBinary::isPdStructNotCanceled(pd);
+    return XLZMADecoder::decompressWithResult(&state, method.properties, pd) == XLZMADecoder::DECOMPRESS_RESULT_SUCCESS && state.nCountInput == input.size() &&
+           state.nCountOutput == out->size() && out->size() <= limit && (expected < 0 || out->size() == expected) && XBinary::isPdStructNotCanceled(pd);
 }
 
 // window size, framed table/literal blocks and a zero block EOF.
@@ -227,8 +255,7 @@ bool delta(const QByteArray &input, qint64 limit, QByteArray *out, XBinary::PDST
         if (input.size() - cursor < 8) return false;
         const quint32 size = le32(input, cursor), tableBytes = le32(input, cursor + 4);
         cursor += 8;
-        if (size > quint64(limit - out->size()) || tableBytes > 0x7fffffffU || (tableBytes & 3U) ||
-            qint64(tableBytes) * 3 + size > input.size() - cursor) return false;
+        if (size > quint64(limit - out->size()) || tableBytes > 0x7fffffffU || (tableBytes & 3U) || qint64(tableBytes) * 3 + size > input.size() - cursor) return false;
         const qint64 skips = cursor, types = skips + tableBytes, rows = types + tableBytes;
         cursor += qint64(tableBytes) * 3;
         QByteArray block = input.mid(static_cast<int>(cursor), static_cast<int>(size));
@@ -262,7 +289,10 @@ bool delta(const QByteArray &input, qint64 limit, QByteArray *out, XBinary::PDST
                 if ((row & 4095U) == 0 && !XBinary::isPdStructNotCanceled(pd)) return false;
                 quint32 carry = 0;
                 for (int column = 0; column < width; ++column) {
-                    if (immutable[column]) { carry = 0; continue; }
+                    if (immutable[column]) {
+                        carry = 0;
+                        continue;
+                    }
                     const int at = static_cast<int>(position + qint64(row) * width + column);
                     const quint32 sum = quint8(block.at(at)) + quint8(block.at(at - width)) + carry;
                     block[at] = char(sum & 255U);
@@ -276,7 +306,10 @@ bool delta(const QByteArray &input, qint64 limit, QByteArray *out, XBinary::PDST
     return cursor == input.size() && XBinary::isPdStructNotCanceled(pd);
 }
 
-bool msByte(quint32 byte) { return byte == 0 || byte == 255; }
+bool msByte(quint32 byte)
+{
+    return byte == 0 || byte == 255;
+}
 
 // Public-domain Bra86 state machine also recovered at the reference implementation.
 int exeBlock(char *buffer, int size, quint32 ip, quint32 *state, XBinary::PDSTRUCT *pd)
@@ -343,7 +376,7 @@ bool exe(const QByteArray &input, qint64 limit, QByteArray *out, XBinary::PDSTRU
     }
     return XBinary::isPdStructNotCanceled(pd);
 }
-} // namespace
+}  // namespace
 
 bool XFreeArcDecoder::supports(const QByteArray &method)
 {
@@ -351,12 +384,10 @@ bool XFreeArcDecoder::supports(const QByteArray &method)
     return parseChain(method, &methods);
 }
 
-qint64 XFreeArcDecoder::memoryRequired(const QByteArray &method, qint64 inputCapacity,
-                                     qint64 maxStageBytes, XBinary::PDSTRUCT *pd)
+qint64 XFreeArcDecoder::memoryRequired(const QByteArray &method, qint64 inputCapacity, qint64 maxStageBytes, XBinary::PDSTRUCT *pd)
 {
     QList<Method> methods;
-    if (inputCapacity < 0 || maxStageBytes < 0 || maxStageBytes > MAX_BUFFER ||
-        !parseChain(method, &methods) || !XBinary::isPdStructNotCanceled(pd)) return -1;
+    if (inputCapacity < 0 || maxStageBytes < 0 || maxStageBytes > MAX_BUFFER || !parseChain(method, &methods) || !XBinary::isPdStructNotCanceled(pd)) return -1;
     qint64 workspace = 0;
     for (const Method &stage : methods) {
         if (stage.kind == Lzma) {
@@ -374,29 +405,25 @@ qint64 XFreeArcDecoder::memoryRequired(const QByteArray &method, qint64 inputCap
     return inputCapacity + extra;
 }
 
-bool XFreeArcDecoder::decode(const QByteArray &input, const QByteArray &method,
-                            qint64 expectedSize, qint64 maxBytes, QByteArray *output,
-                            XBinary::PDSTRUCT *pd)
-try
-{
+bool XFreeArcDecoder::decode(const QByteArray &input, const QByteArray &method, qint64 expectedSize, qint64 maxBytes, QByteArray *output, XBinary::PDSTRUCT *pd)
+try {
     if (!output) return false;
     QByteArray current = input;
     QList<Method> methods;
     const bool supported = parseChain(method, &methods);
     output->clear();
     const qint64 limit = qMin(maxBytes, MAX_BUFFER);
-    if (!supported || maxBytes < 0 || expectedSize < -1 || expectedSize > limit || current.size() > MAX_BUFFER ||
-        !XBinary::isPdStructNotCanceled(pd)) return false;
+    if (!supported || maxBytes < 0 || expectedSize < -1 || expectedSize > limit || current.size() > MAX_BUFFER || !XBinary::isPdStructNotCanceled(pd)) return false;
     for (int i = static_cast<int>(methods.size()) - 1; i >= 0; --i) {
         const Method &stage = methods.at(i);
         QByteArray decoded;
         bool ok = false;
         switch (stage.kind) {
-        case Store: ok = append(&decoded, current.constData(), current.size(), limit); break;
-        case Lzma: ok = lzma(current, stage, i == 0 ? expectedSize : -1, limit, &decoded, pd); break;
-        case Rep: ok = rep(current, limit, &decoded, pd); break;
-        case Exe: ok = exe(current, limit, &decoded, pd); break;
-        case Delta: ok = delta(current, limit, &decoded, pd); break;
+            case Store: ok = append(&decoded, current.constData(), current.size(), limit); break;
+            case Lzma: ok = lzma(current, stage, i == 0 ? expectedSize : -1, limit, &decoded, pd); break;
+            case Rep: ok = rep(current, limit, &decoded, pd); break;
+            case Exe: ok = exe(current, limit, &decoded, pd); break;
+            case Delta: ok = delta(current, limit, &decoded, pd); break;
         }
         if (!ok || !XBinary::isPdStructNotCanceled(pd)) return false;
         current = decoded;
@@ -404,9 +431,7 @@ try
     if (expectedSize >= 0 && current.size() != expectedSize) return false;
     *output = current;
     return true;
-}
-catch (const std::bad_alloc &)
-{
+} catch (const std::bad_alloc &) {
     if (output) output->clear();
     return false;
 }

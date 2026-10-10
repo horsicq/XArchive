@@ -37,26 +37,26 @@ const qint32 AMPK_LZARI_RENORM_LIMIT = 256;
 // the member's declared compressed size.
 class AmpkBitReader {
 public:
-    explicit AmpkBitReader(const QByteArray &baData)
-        : m_pData(reinterpret_cast<const quint8 *>(baData.constData())),
-          m_nSize(baData.size()),
-          m_nBitPosition(0)
+    explicit AmpkBitReader(const QByteArray &baData) : m_pData(reinterpret_cast<const quint8 *>(baData.constData())), m_nSize(baData.size()), m_nBitPosition(0)
     {
     }
 
     quint32 getBit()
     {
         const qint64 nByte = m_nBitPosition >> 3;
-        const quint32 nBit =
-            (nByte < m_nSize)
-                ? ((m_pData[nByte] >> (7 - (m_nBitPosition & 7))) & 1U)
-                : 0U;
+        const quint32 nBit = (nByte < m_nSize) ? ((m_pData[nByte] >> (7 - (m_nBitPosition & 7))) & 1U) : 0U;
         ++m_nBitPosition;
         return nBit;
     }
 
-    qint64 consumedSize() const { return (m_nBitPosition + 7) / 8; }
-    qint64 inputSize() const { return m_nSize; }
+    qint64 consumedSize() const
+    {
+        return (m_nBitPosition + 7) / 8;
+    }
+    qint64 inputSize() const
+    {
+        return m_nSize;
+    }
 
 private:
     const quint8 *m_pData;
@@ -88,8 +88,7 @@ struct AmpkLzari {
     qint32 symToChar[N_CHAR + 1];
     quint8 ring[N];
 
-    explicit AmpkLzari(const QByteArray &baPacked)
-        : bits(baPacked), bError(false), nLow(0), nHigh(Q4), nValue(0)
+    explicit AmpkLzari(const QByteArray &baPacked) : bits(baPacked), bError(false), nLow(0), nHigh(Q4), nValue(0)
     {
         // Model start-up.  The sym_to_char / char_to_sym permutation is not
         // decoration: UpdateModel promotes a symbol by swapping it with the
@@ -110,8 +109,7 @@ struct AmpkLzari {
 
         posCum[N] = 0;
         for (qint32 i = N; i > 0; --i) {
-            posCum[i - 1] =
-                posCum[i] + 10000U / static_cast<quint32>(i + 200);
+            posCum[i - 1] = posCum[i] + 10000U / static_cast<quint32>(i + 200);
         }
 
         for (qint32 i = 0; i < N; ++i) ring[i] = ' ';
@@ -205,16 +203,10 @@ struct AmpkLzari {
             bError = true;
             return -1;
         }
-        const quint64 nTarget =
-            ((static_cast<quint64>(nValue - nLow + 1) * symCum[0]) - 1U) /
-            nRange;
+        const quint64 nTarget = ((static_cast<quint64>(nValue - nLow + 1) * symCum[0]) - 1U) / nRange;
         const qint32 nSym = searchSymbol(static_cast<quint32>(nTarget));
-        nHigh = nLow + static_cast<quint32>(
-                           (static_cast<quint64>(nRange) * symCum[nSym - 1]) /
-                           symCum[0]);
-        nLow = nLow + static_cast<quint32>(
-                          (static_cast<quint64>(nRange) * symCum[nSym]) /
-                          symCum[0]);
+        nHigh = nLow + static_cast<quint32>((static_cast<quint64>(nRange) * symCum[nSym - 1]) / symCum[0]);
+        nLow = nLow + static_cast<quint32>((static_cast<quint64>(nRange) * symCum[nSym]) / symCum[0]);
         if (!renormalize()) {
             bError = true;
             return -1;
@@ -231,17 +223,10 @@ struct AmpkLzari {
             bError = true;
             return -1;
         }
-        const quint64 nTarget =
-            ((static_cast<quint64>(nValue - nLow + 1) * posCum[0]) - 1U) /
-            nRange;
+        const quint64 nTarget = ((static_cast<quint64>(nValue - nLow + 1) * posCum[0]) - 1U) / nRange;
         const qint32 nPosition = searchPosition(static_cast<quint32>(nTarget));
-        nHigh = nLow + static_cast<quint32>(
-                           (static_cast<quint64>(nRange) * posCum[nPosition]) /
-                           posCum[0]);
-        nLow = nLow + static_cast<quint32>(
-                          (static_cast<quint64>(nRange) *
-                           posCum[nPosition + 1]) /
-                          posCum[0]);
+        nHigh = nLow + static_cast<quint32>((static_cast<quint64>(nRange) * posCum[nPosition]) / posCum[0]);
+        nLow = nLow + static_cast<quint32>((static_cast<quint64>(nRange) * posCum[nPosition + 1]) / posCum[0]);
         if (!renormalize()) {
             bError = true;
             return -1;
@@ -254,8 +239,7 @@ struct AmpkLzari {
         qint32 nRing = N - F;
         qint64 nOutPosition = 0;
         while (nOutPosition < nOutSize) {
-            if (bits.consumedSize() >
-                bits.inputSize() + AMPK_LZARI_MAX_OVERREAD) {
+            if (bits.consumedSize() > bits.inputSize() + AMPK_LZARI_MAX_OVERREAD) {
                 return false;
             }
             const qint32 nChar = decodeChar();
@@ -268,10 +252,8 @@ struct AmpkLzari {
                 const qint32 nPosition = decodePosition();
                 if (bError) return false;
                 const qint32 nLength = nChar - 255 + THRESHOLD;
-                const qint32 nSource =
-                    (nRing - nPosition - 1) & AMPK_RING_MASK;
-                for (qint32 k = 0;
-                     (k < nLength) && (nOutPosition < nOutSize); ++k) {
+                const qint32 nSource = (nRing - nPosition - 1) & AMPK_RING_MASK;
+                for (qint32 k = 0; (k < nLength) && (nOutPosition < nOutSize); ++k) {
                     const quint8 nByte = ring[(nSource + k) & AMPK_RING_MASK];
                     pOut[nOutPosition++] = static_cast<char>(nByte);
                     ring[nRing] = nByte;
@@ -284,13 +266,9 @@ struct AmpkLzari {
 };
 }  // namespace
 
-bool XAMPKDecoder::decodeLZSS(const QByteArray &baPacked,
-                              qint64 nUncompressedSize,
-                              QByteArray *pbaUnpacked,
-                              bool bAllowTruncated)
+bool XAMPKDecoder::decodeLZSS(const QByteArray &baPacked, qint64 nUncompressedSize, QByteArray *pbaUnpacked, bool bAllowTruncated)
 {
-    if (!pbaUnpacked || (nUncompressedSize < 0) ||
-        (nUncompressedSize > AMPK_MAX_UNPACKED_SIZE)) {
+    if (!pbaUnpacked || (nUncompressedSize < 0) || (nUncompressedSize > AMPK_MAX_UNPACKED_SIZE)) {
         return false;
     }
     pbaUnpacked->clear();
@@ -357,11 +335,9 @@ bool XAMPKDecoder::decodeLZSS(const QByteArray &baPacked,
             const quint32 nFirst = pIn[nInPosition];
             const quint32 nSecond = pIn[nInPosition + 1];
             nInPosition += 2;
-            const qint32 nSource =
-                static_cast<qint32>(nFirst | ((nSecond & 0xf0U) << 4));
+            const qint32 nSource = static_cast<qint32>(nFirst | ((nSecond & 0xf0U) << 4));
             const qint32 nLength = static_cast<qint32>(nSecond & 0x0fU) + 3;
-            for (qint32 k = 0;
-                 (k < nLength) && (nOutPosition < nUncompressedSize); ++k) {
+            for (qint32 k = 0; (k < nLength) && (nOutPosition < nUncompressedSize); ++k) {
                 const quint8 nByte = pRing[(nSource + k) & AMPK_RING_MASK];
                 pOut[nOutPosition++] = static_cast<char>(nByte);
                 pRing[nRing] = nByte;
@@ -381,12 +357,9 @@ bool XAMPKDecoder::decodeLZSS(const QByteArray &baPacked,
     return true;
 }
 
-bool XAMPKDecoder::decodeLZARI(const QByteArray &baPacked,
-                               qint64 nUncompressedSize,
-                               QByteArray *pbaUnpacked)
+bool XAMPKDecoder::decodeLZARI(const QByteArray &baPacked, qint64 nUncompressedSize, QByteArray *pbaUnpacked)
 {
-    if (!pbaUnpacked || (nUncompressedSize < 0) ||
-        (nUncompressedSize > AMPK_MAX_UNPACKED_SIZE)) {
+    if (!pbaUnpacked || (nUncompressedSize < 0) || (nUncompressedSize > AMPK_MAX_UNPACKED_SIZE)) {
         return false;
     }
     pbaUnpacked->clear();

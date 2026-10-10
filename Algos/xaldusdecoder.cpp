@@ -52,9 +52,7 @@ enum ALDUS_CODEC {
 // short one, so a request that runs off the end means the stream is malformed.
 class AldusBitReader {
 public:
-    AldusBitReader(const uchar *pData, qint64 nSize)
-        : m_pData(pData), m_nBitCount(nSize * 8), m_nBitPosition(0),
-          m_bError(false)
+    AldusBitReader(const uchar *pData, qint64 nSize) : m_pData(pData), m_nBitCount(nSize * 8), m_nBitPosition(0), m_bError(false)
     {
     }
 
@@ -62,15 +60,13 @@ public:
     {
         quint32 nResult = 0;
         if (nBits <= 0) return 0;
-        if (m_bError || (nBits > 32) ||
-            (nBits > m_nBitCount - m_nBitPosition)) {
+        if (m_bError || (nBits > 32) || (nBits > m_nBitCount - m_nBitPosition)) {
             m_bError = true;
             return 0;
         }
         for (qint32 i = 0; i < nBits; ++i) {
             const qint64 nBit = m_nBitPosition + i;
-            nResult = (nResult << 1) |
-                      ((m_pData[nBit >> 3] >> (7 - (nBit & 7))) & 1U);
+            nResult = (nResult << 1) | ((m_pData[nBit >> 3] >> (7 - (nBit & 7))) & 1U);
         }
         m_nBitPosition += nBits;
         return nResult;
@@ -185,15 +181,13 @@ quint16 aldusCRC16Arc(const char *pData, qint64 nSize)
     for (qint64 i = 0; i < nSize; ++i) {
         nResult ^= static_cast<quint8>(pData[i]);
         for (qint32 nBit = 0; nBit < 8; ++nBit) {
-            nResult = (nResult & 1U) ? quint16((nResult >> 1) ^ 0xa001U)
-                                     : quint16(nResult >> 1);
+            nResult = (nResult & 1U) ? quint16((nResult >> 1) ^ 0xa001U) : quint16(nResult >> 1);
         }
     }
     return nResult;
 }
 
-bool aldusDecodeLzwBlock(const uchar *pData, qint64 nSize, qint64 nExpected,
-                         QByteArray *pbaBlock)
+bool aldusDecodeLzwBlock(const uchar *pData, qint64 nSize, qint64 nExpected, QByteArray *pbaBlock)
 {
     if (!pData || (nSize < 1) || (nExpected < 1)) return false;
 
@@ -216,8 +210,7 @@ bool aldusDecodeLzwBlock(const uchar *pData, qint64 nSize, qint64 nExpected,
         quint32 nCode = 0;
         for (qint32 i = 0; i < nCodeBits; ++i) {
             const qint64 nBit = nBitPosition + i;
-            nCode = (nCode << 1) |
-                    ((pData[nBit >> 3] >> (7 - (nBit & 7))) & 1U);
+            nCode = (nCode << 1) | ((pData[nBit >> 3] >> (7 - (nBit & 7))) & 1U);
         }
         nBitPosition += nCodeBits;
 
@@ -243,8 +236,7 @@ bool aldusDecodeLzwBlock(const uchar *pData, qint64 nSize, qint64 nExpected,
             nCurrent = nPreviousCode;
         }
         while (nCurrent >= ALDUS_LZW_CLEAR) {
-            if ((nCurrent >= ALDUS_LZW_TABLE_SIZE) ||
-                (nStackSize >= ALDUS_LZW_TABLE_SIZE)) {
+            if ((nCurrent >= ALDUS_LZW_TABLE_SIZE) || (nStackSize >= ALDUS_LZW_TABLE_SIZE)) {
                 return false;
             }
             listStack[nStackSize++] = listSuffix.at(nCurrent);
@@ -273,8 +265,7 @@ bool aldusDecodeLzwBlock(const uchar *pData, qint64 nSize, qint64 nExpected,
         nPreviousFirst = nFirstCharacter;
 
         // Early change: widen one code before the width is actually needed.
-        if ((nCodeBits < ALDUS_LZW_MAX_BITS) &&
-            ((nNextCode + 1) >= (1 << nCodeBits))) {
+        if ((nCodeBits < ALDUS_LZW_MAX_BITS) && ((nNextCode + 1) >= (1 << nCodeBits))) {
             ++nCodeBits;
         }
     }
@@ -286,13 +277,10 @@ bool aldusDecodeLzwBlock(const uchar *pData, qint64 nSize, qint64 nExpected,
     return true;
 }
 
-bool aldusDecodePkzpBlock(const uchar *pData, qint64 nSize, qint64 nExpected,
-                          QByteArray *pbaBlock)
+bool aldusDecodePkzpBlock(const uchar *pData, qint64 nSize, qint64 nExpected, QByteArray *pbaBlock)
 {
     if (!pData || (nSize < 3) || (nExpected < 1)) return false;
-    const QByteArray baBlock =
-        QByteArray::fromRawData(reinterpret_cast<const char *>(pData),
-                                qint32(nSize));
+    const QByteArray baBlock = QByteArray::fromRawData(reinterpret_cast<const char *>(pData), qint32(nSize));
     QByteArray baResult;
     if (!XDclDecoder::decode(baBlock, &baResult, nExpected)) return false;
     if (baResult.size() != nExpected) return false;
@@ -300,8 +288,7 @@ bool aldusDecodePkzpBlock(const uchar *pData, qint64 nSize, qint64 nExpected,
     return true;
 }
 
-bool aldusReadPtLen(AldusBitReader *pReader, qint32 nCount, qint32 nBits,
-                    qint32 nSpecial, AldusHuffman *pHuffman)
+bool aldusReadPtLen(AldusBitReader *pReader, qint32 nCount, qint32 nBits, qint32 nSpecial, AldusHuffman *pHuffman)
 {
     const qint32 nEntries = qint32(pReader->read(nBits));
     if (pReader->hasError()) return false;
@@ -343,8 +330,7 @@ bool aldusReadPtLen(AldusBitReader *pReader, qint32 nCount, qint32 nBits,
     return pHuffman->build(listLengths.constData(), nCount);
 }
 
-bool aldusReadCLen(AldusBitReader *pReader, const AldusHuffman &preTable,
-                   AldusHuffman *pHuffman)
+bool aldusReadCLen(AldusBitReader *pReader, const AldusHuffman &preTable, AldusHuffman *pHuffman)
 {
     const qint32 nEntries = qint32(pReader->read(ALDUS_LZSH_CBIT));
     if (pReader->hasError()) return false;
@@ -387,8 +373,7 @@ bool aldusReadCLen(AldusBitReader *pReader, const AldusHuffman &preTable,
 // One container block holds one or two complete LHA sub-blocks.  The match
 // window continues across the sub-blocks of a block but is reset for the next
 // block, so the block's own output is the whole reachable history here.
-bool aldusDecodeLh5Stream(const uchar *pData, qint64 nSize, qint64 nExpected,
-                          QByteArray *pbaBlock)
+bool aldusDecodeLh5Stream(const uchar *pData, qint64 nSize, qint64 nExpected, QByteArray *pbaBlock)
 {
     AldusBitReader reader(pData, nSize);
     QByteArray baResult;
@@ -403,11 +388,8 @@ bool aldusDecodeLh5Stream(const uchar *pData, qint64 nSize, qint64 nExpected,
             nSymbolsLeft = qint32(reader.read(16));
             if (reader.hasError() || (nSymbolsLeft == 0)) return false;
             AldusHuffman preTable;
-            if (!aldusReadPtLen(&reader, ALDUS_LZSH_NT, ALDUS_LZSH_TBIT,
-                                ALDUS_LZSH_ISPECIAL, &preTable) ||
-                !aldusReadCLen(&reader, preTable, &literalTable) ||
-                !aldusReadPtLen(&reader, ALDUS_LZSH_NP, ALDUS_LZSH_PBIT, -1,
-                                &positionTable)) {
+            if (!aldusReadPtLen(&reader, ALDUS_LZSH_NT, ALDUS_LZSH_TBIT, ALDUS_LZSH_ISPECIAL, &preTable) || !aldusReadCLen(&reader, preTable, &literalTable) ||
+                !aldusReadPtLen(&reader, ALDUS_LZSH_NP, ALDUS_LZSH_PBIT, -1, &positionTable)) {
                 return false;
             }
         }
@@ -422,19 +404,16 @@ bool aldusDecodeLh5Stream(const uchar *pData, qint64 nSize, qint64 nExpected,
 
         const qint32 nLength = nSymbol - 256 + ALDUS_LZSH_THRESHOLD;
         qint32 nDistanceBits = positionTable.decode(&reader);
-        if ((nDistanceBits < 0) || (nDistanceBits > ALDUS_LZSH_MAX_BITLEN) ||
-            reader.hasError()) {
+        if ((nDistanceBits < 0) || (nDistanceBits > ALDUS_LZSH_MAX_BITLEN) || reader.hasError()) {
             return false;
         }
         qint32 nDistanceBase = nDistanceBits;
         if (nDistanceBits > 0) {
-            nDistanceBase = (1 << (nDistanceBits - 1)) +
-                            qint32(reader.read(nDistanceBits - 1));
+            nDistanceBase = (1 << (nDistanceBits - 1)) + qint32(reader.read(nDistanceBits - 1));
             if (reader.hasError()) return false;
         }
         const qint32 nDistance = nDistanceBase + 1;
-        if ((nDistance > baResult.size()) ||
-            (qint64(nLength) > (nExpected - baResult.size()))) {
+        if ((nDistance > baResult.size()) || (qint64(nLength) > (nExpected - baResult.size()))) {
             return false;
         }
         for (qint32 i = 0; i < nLength; ++i) {
@@ -447,8 +426,7 @@ bool aldusDecodeLh5Stream(const uchar *pData, qint64 nSize, qint64 nExpected,
     return true;
 }
 
-bool aldusDecodeLzshBlock(const uchar *pData, qint64 nSize, qint64 nExpected,
-                          QByteArray *pbaBlock)
+bool aldusDecodeLzshBlock(const uchar *pData, qint64 nSize, qint64 nExpected, QByteArray *pbaBlock)
 {
     if (!pData || (nSize < ALDUS_LZSH_BLOCK_PREFIX) || (nExpected < 1)) {
         return false;
@@ -461,11 +439,9 @@ bool aldusDecodeLzshBlock(const uchar *pData, qint64 nSize, qint64 nExpected,
     QByteArray baResult;
     if (nMethod == ALDUS_LZSH_METHOD_STORED) {
         if (nPayloadSize < nExpected) return false;
-        baResult = QByteArray(reinterpret_cast<const char *>(pPayload),
-                              qint32(nExpected));
+        baResult = QByteArray(reinterpret_cast<const char *>(pPayload), qint32(nExpected));
     } else if (nMethod == ALDUS_LZSH_METHOD_LH5) {
-        if (!aldusDecodeLh5Stream(pPayload, nPayloadSize, nExpected,
-                                  &baResult)) {
+        if (!aldusDecodeLh5Stream(pPayload, nPayloadSize, nExpected, &baResult)) {
             return false;
         }
     } else {
@@ -482,20 +458,16 @@ bool aldusDecodeLzshBlock(const uchar *pData, qint64 nSize, qint64 nExpected,
     return true;
 }
 
-bool aldusDecodeContainer(const QByteArray &baPacked, qint64 nUncompressedSize,
-                          QByteArray *pbaUnpacked, ALDUS_CODEC codec)
+bool aldusDecodeContainer(const QByteArray &baPacked, qint64 nUncompressedSize, QByteArray *pbaUnpacked, ALDUS_CODEC codec)
 {
     if (!pbaUnpacked) return false;
     pbaUnpacked->clear();
-    if ((nUncompressedSize < 1) ||
-        (nUncompressedSize >
-         qint64((std::numeric_limits<qint32>::max)()))) {
+    if ((nUncompressedSize < 1) || (nUncompressedSize > qint64((std::numeric_limits<qint32>::max)()))) {
         return false;
     }
     if (qint64(baPacked.size()) < ALDUS_SUBHEADER_SIZE) return false;
 
-    const uchar *pPayload =
-        reinterpret_cast<const uchar *>(baPacked.constData());
+    const uchar *pPayload = reinterpret_cast<const uchar *>(baPacked.constData());
     const qint64 nSubHeaderSize = qFromBigEndian<quint16>(pPayload);
     const qint64 nBlockSize = qFromBigEndian<quint16>(pPayload + 2);
     const qint64 nLastBlockSize = qFromBigEndian<quint16>(pPayload + 4);
@@ -503,18 +475,15 @@ bool aldusDecodeContainer(const QByteArray &baPacked, qint64 nUncompressedSize,
     const qint64 nTableOffset = qFromBigEndian<quint32>(pPayload + 10);
     const qint64 nDataOffset = qFromBigEndian<quint32>(pPayload + 14);
 
-    if ((nSubHeaderSize != ALDUS_SUBHEADER_SIZE) || (nBlockSize < 1) ||
-        (nBlockSize > ALDUS_MAX_BLOCK_SIZE) || (nBlockCount < 1) ||
-        (nBlockCount > ALDUS_MAX_BLOCK_COUNT) || (nLastBlockSize < 1) ||
-        (nLastBlockSize > nBlockSize)) {
+    if ((nSubHeaderSize != ALDUS_SUBHEADER_SIZE) || (nBlockSize < 1) || (nBlockSize > ALDUS_MAX_BLOCK_SIZE) || (nBlockCount < 1) ||
+        (nBlockCount > ALDUS_MAX_BLOCK_COUNT) || (nLastBlockSize < 1) || (nLastBlockSize > nBlockSize)) {
         return false;
     }
     // The sub-header's table and data offsets are absolute file offsets, so in
     // a payload slice only their difference is checkable - and it is exactly
     // the size of the block-length table.
     if ((nDataOffset - nTableOffset) != (2 * nBlockCount)) return false;
-    if (((nBlockCount - 1) * nBlockSize + nLastBlockSize) !=
-        nUncompressedSize) {
+    if (((nBlockCount - 1) * nBlockSize + nLastBlockSize) != nUncompressedSize) {
         return false;
     }
 
@@ -525,8 +494,7 @@ bool aldusDecodeContainer(const QByteArray &baPacked, qint64 nUncompressedSize,
     QVector<qint64> listBlockSizes(qint32(nBlockCount), 0);
     qint64 nTotalBlockSize = 0;
     for (qint64 i = 0; i < nBlockCount; ++i) {
-        const qint64 nSize =
-            qFromBigEndian<quint16>(pPayload + nTableRelative + 2 * i);
+        const qint64 nSize = qFromBigEndian<quint16>(pPayload + nTableRelative + 2 * i);
         // Every block is word-padded, so an odd or empty length means the
         // table is not an Aldus block table.
         if ((nSize < 2) || (nSize & 1)) return false;
@@ -544,19 +512,15 @@ bool aldusDecodeContainer(const QByteArray &baPacked, qint64 nUncompressedSize,
     qint64 nOffset = nDataRelative;
     for (qint64 i = 0; i < nBlockCount; ++i) {
         const qint64 nSize = listBlockSizes.at(qint32(i));
-        const qint64 nExpected =
-            (i == (nBlockCount - 1)) ? nLastBlockSize : nBlockSize;
+        const qint64 nExpected = (i == (nBlockCount - 1)) ? nLastBlockSize : nBlockSize;
         QByteArray baBlock;
         bool bBlock = false;
         if (codec == ALDUS_CODEC_LZW) {
-            bBlock = aldusDecodeLzwBlock(pPayload + nOffset, nSize, nExpected,
-                                         &baBlock);
+            bBlock = aldusDecodeLzwBlock(pPayload + nOffset, nSize, nExpected, &baBlock);
         } else if (codec == ALDUS_CODEC_PKZP) {
-            bBlock = aldusDecodePkzpBlock(pPayload + nOffset, nSize, nExpected,
-                                          &baBlock);
+            bBlock = aldusDecodePkzpBlock(pPayload + nOffset, nSize, nExpected, &baBlock);
         } else {
-            bBlock = aldusDecodeLzshBlock(pPayload + nOffset, nSize, nExpected,
-                                          &baBlock);
+            bBlock = aldusDecodeLzshBlock(pPayload + nOffset, nSize, nExpected, &baBlock);
         }
         if (!bBlock || (baBlock.size() != nExpected)) return false;
         baResult.append(baBlock);
@@ -569,26 +533,17 @@ bool aldusDecodeContainer(const QByteArray &baPacked, qint64 nUncompressedSize,
 }
 }  // namespace
 
-bool XAldusDecoder::decodeLZW(const QByteArray &baPacked,
-                              qint64 nUncompressedSize,
-                              QByteArray *pbaUnpacked)
+bool XAldusDecoder::decodeLZW(const QByteArray &baPacked, qint64 nUncompressedSize, QByteArray *pbaUnpacked)
 {
-    return aldusDecodeContainer(baPacked, nUncompressedSize, pbaUnpacked,
-                                ALDUS_CODEC_LZW);
+    return aldusDecodeContainer(baPacked, nUncompressedSize, pbaUnpacked, ALDUS_CODEC_LZW);
 }
 
-bool XAldusDecoder::decodePKZP(const QByteArray &baPacked,
-                               qint64 nUncompressedSize,
-                               QByteArray *pbaUnpacked)
+bool XAldusDecoder::decodePKZP(const QByteArray &baPacked, qint64 nUncompressedSize, QByteArray *pbaUnpacked)
 {
-    return aldusDecodeContainer(baPacked, nUncompressedSize, pbaUnpacked,
-                                ALDUS_CODEC_PKZP);
+    return aldusDecodeContainer(baPacked, nUncompressedSize, pbaUnpacked, ALDUS_CODEC_PKZP);
 }
 
-bool XAldusDecoder::decodeLZSH(const QByteArray &baPacked,
-                               qint64 nUncompressedSize,
-                               QByteArray *pbaUnpacked)
+bool XAldusDecoder::decodeLZSH(const QByteArray &baPacked, qint64 nUncompressedSize, QByteArray *pbaUnpacked)
 {
-    return aldusDecodeContainer(baPacked, nUncompressedSize, pbaUnpacked,
-                                ALDUS_CODEC_LZSH);
+    return aldusDecodeContainer(baPacked, nUncompressedSize, pbaUnpacked, ALDUS_CODEC_LZSH);
 }

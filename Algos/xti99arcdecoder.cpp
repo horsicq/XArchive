@@ -84,8 +84,7 @@ QByteArray XTI99ARCDecoder::buildProperties(qint64 nPlainSize, qint64 nMemberOff
     return baResult;
 }
 
-bool XTI99ARCDecoder::decode(const QByteArray &baPacked, const QByteArray &baProperties, qint64 nUncompressedSize, QByteArray *pbaResult,
-                             XBinary::PDSTRUCT *pPdStruct)
+bool XTI99ARCDecoder::decode(const QByteArray &baPacked, const QByteArray &baProperties, qint64 nUncompressedSize, QByteArray *pbaResult, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pbaResult) return false;
     pbaResult->clear();

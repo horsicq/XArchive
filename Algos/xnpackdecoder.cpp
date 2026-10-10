@@ -429,6 +429,5 @@ bool XNPackDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
         if (!bConverted || (nDeclared < 0) || (nDeclared != nProduced)) return false;
     }
 
-    return (pDecompressState->nCountOutput == nProduced) && !pDecompressState->bReadError && !pDecompressState->bWriteError &&
-           XBinary::isPdStructNotCanceled(pPdStruct);
+    return (pDecompressState->nCountOutput == nProduced) && !pDecompressState->bReadError && !pDecompressState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct);
 }

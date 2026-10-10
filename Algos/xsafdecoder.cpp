@@ -140,8 +140,7 @@ bool XSAFDecoder::decode(const QByteArray &packed, qint64 nRawSize, qint32 nMeth
             if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
             if ((nSize - nPosition) < 4) return false;
             const qint32 nChunkSize = static_cast<qint32>(static_cast<quint32>(pData[nPosition]) | (static_cast<quint32>(pData[nPosition + 1]) << 8) |
-                                                          (static_cast<quint32>(pData[nPosition + 2]) << 16) |
-                                                          (static_cast<quint32>(pData[nPosition + 3]) << 24));
+                                                          (static_cast<quint32>(pData[nPosition + 2]) << 16) | (static_cast<quint32>(pData[nPosition + 3]) << 24));
             nPosition += 4;
             if ((nChunkSize < 0) || (nChunkSize > (nSize - nPosition))) return false;
             if (!safDecodeChunk(pData + nPosition, nChunkSize, &baResult, pPdStruct)) return false;

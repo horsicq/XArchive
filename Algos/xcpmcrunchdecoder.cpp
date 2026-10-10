@@ -9,8 +9,9 @@
 namespace {
 class Bits {
 public:
-    Bits(const std::uint8_t *data, std::size_t size, std::size_t position)
-        : m_data(data), m_size(size), m_position(position) {}
+    Bits(const std::uint8_t *data, std::size_t size, std::size_t position) : m_data(data), m_size(size), m_position(position)
+    {
+    }
     bool read(unsigned count, unsigned *value)
     {
         unsigned result = 0;
@@ -25,11 +26,15 @@ public:
         *value = result;
         return true;
     }
-    std::size_t position() const { return m_position; }
+    std::size_t position() const
+    {
+        return m_position;
+    }
     bool finishedWithZeroPadding() const
     {
         return m_position == m_size && (m_byte & ((1u << m_remaining) - 1)) == 0;
     }
+
 private:
     const std::uint8_t *m_data;
     std::size_t m_size;
@@ -41,8 +46,13 @@ private:
 class Output {
 public:
     Output(std::vector<std::uint8_t> *data, std::size_t limit, XCpmCrunchDecoder::Cancel canceled, void *context, bool measureOnly)
-        : m_data(data), m_limit(limit), m_canceled(canceled), m_context(context), m_measureOnly(measureOnly) {}
-    bool stopped() const { return m_canceled && m_canceled(m_context); }
+        : m_data(data), m_limit(limit), m_canceled(canceled), m_context(context), m_measureOnly(measureOnly)
+    {
+    }
+    bool stopped() const
+    {
+        return m_canceled && m_canceled(m_context);
+    }
     bool byte(unsigned value)
     {
         if (m_size >= m_limit || ((m_size & 1023) == 0 && stopped())) return false;
@@ -58,17 +68,31 @@ public:
             m_escape = false;
             if (!value) return byte(0x90);
             if (!m_havePrevious) return false;
-            for (unsigned i = 1; i < value; ++i) if (!byte(m_previous)) return false;
+            for (unsigned i = 1; i < value; ++i)
+                if (!byte(m_previous)) return false;
             return true;
         }
-        if (value == 0x90) { m_escape = true; return true; }
+        if (value == 0x90) {
+            m_escape = true;
+            return true;
+        }
         m_previous = value;
         m_havePrevious = true;
         return byte(value);
     }
-    bool complete() const { return !m_escape && !stopped(); }
-    std::uint16_t checksum() const { return m_checksum; }
-    std::size_t size() const { return m_size; }
+    bool complete() const
+    {
+        return !m_escape && !stopped();
+    }
+    std::uint16_t checksum() const
+    {
+        return m_checksum;
+    }
+    std::size_t size() const
+    {
+        return m_size;
+    }
+
 private:
     std::vector<std::uint8_t> *m_data;
     std::size_t m_limit;
@@ -85,7 +109,9 @@ private:
 // The reference implementation. The original global dictionary is operation-local.
 class Crunch {
 public:
-    Crunch(bool oldRevision, Bits *bits, Output *output) : m_old(oldRevision), m_bits(bits), m_output(output) {}
+    Crunch(bool oldRevision, Bits *bits, Output *output) : m_old(oldRevision), m_bits(bits), m_output(output)
+    {
+    }
     bool decode()
     {
         if (!reset()) return false;
@@ -94,7 +120,9 @@ public:
         int firstByte = 0;
         while (!m_output->stopped()) {
             unsigned next = 0;
-            do { if (!m_bits->read(width, &next)) return false; } while (!m_old && (next == 258 || next == 259));
+            do {
+                if (!m_bits->read(width, &next)) return false;
+            } while (!m_old && (next == 258 || next == 259));
             if (next == (m_old ? 0u : 256u)) return m_output->complete();
             if (!m_old && next == 257) {
                 if (!reset()) return false;
@@ -120,12 +148,17 @@ public:
         }
         return false;
     }
+
 private:
     static constexpr int Empty = 0x7fff;
     bool reset()
     {
-        m_prefix.fill(Empty); m_suffix.fill(Empty); m_first.fill(Empty);
-        m_links.fill(Empty); m_used.fill(false); m_hash.fill(-1);
+        m_prefix.fill(Empty);
+        m_suffix.fill(Empty);
+        m_first.fill(Empty);
+        m_links.fill(Empty);
+        m_used.fill(false);
+        m_hash.fill(-1);
         m_last = m_old ? 0 : -1;
         if (m_old) m_prefix[0] = m_suffix[0] = m_first[0] = 0xffff;
         for (int i = 0; i < (m_old ? 256 : 260); ++i) {
@@ -136,8 +169,7 @@ private:
     }
     static unsigned hash(int prefix, int suffix)
     {
-        return ((static_cast<unsigned>(prefix) >> 4 ^ static_cast<unsigned>(suffix)) |
-                ((static_cast<unsigned>(prefix) & 15) << 8)) + 1;
+        return ((static_cast<unsigned>(prefix) >> 4 ^ static_cast<unsigned>(suffix)) | ((static_cast<unsigned>(prefix) & 15) << 8)) + 1;
     }
     bool oldSlot(int prefix, int suffix, int *slot)
     {
@@ -180,7 +212,10 @@ private:
     }
     bool insert(int prefix, int suffix)
     {
-        if (++m_last >= 4096) { m_last = 4095; return true; }
+        if (++m_last >= 4096) {
+            m_last = 4095;
+            return true;
+        }
         int slot = m_last;
         if (m_old) {
             if (!oldSlot(prefix, suffix, &slot)) return false;
@@ -222,7 +257,8 @@ private:
         if (code < 0 || code >= 4096 || m_suffix[code] < 0 || m_suffix[code] > 255) return false;
         *firstByte = m_suffix[code];
         if (!m_output->rle(static_cast<unsigned>(*firstByte))) return false;
-        while (count) if (!m_output->rle(stack[--count])) return false;
+        while (count)
+            if (!m_output->rle(stack[--count])) return false;
         return true;
     }
     bool m_old;
@@ -288,6 +324,7 @@ public:
         }
         return false;
     }
+
 private:
     static constexpr int Symbols = 315;
     static constexpr int Nodes = 2 * Symbols - 1;
@@ -371,7 +408,9 @@ private:
 };
 
 struct CompactBitReader {
-    explicit CompactBitReader(Bits *bits) : m_bits(bits) {}
+    explicit CompactBitReader(Bits *bits) : m_bits(bits)
+    {
+    }
     unsigned operator()() const
     {
         unsigned bit;
@@ -463,8 +502,7 @@ bool XCpmCrunchDecoder::parseHeader(const std::uint8_t *data, std::size_t size, 
     return true;
 }
 
-bool XCpmCrunchDecoder::decode(const std::uint8_t *data, std::size_t size, std::size_t outputLimit,
-                         Result *result, Cancel canceled, void *context, bool measureOnly)
+bool XCpmCrunchDecoder::decode(const std::uint8_t *data, std::size_t size, std::size_t outputLimit, Result *result, Cancel canceled, void *context, bool measureOnly)
 {
     if (!result) return false;
     *result = Result();

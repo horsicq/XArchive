@@ -38,8 +38,7 @@ const qint32 SETTLERS_BMP_PALETTE_SIZE = 1024;
 
 qint32 settlersS16(const quint8 *pData, qint32 nOffset)
 {
-    return static_cast<qint32>(
-        static_cast<qint16>(qFromLittleEndian<quint16>(pData + nOffset)));
+    return static_cast<qint32>(static_cast<qint16>(qFromLittleEndian<quint16>(pData + nOffset)));
 }
 
 qint32 settlersU16(const quint8 *pData, qint32 nOffset)
@@ -65,9 +64,7 @@ void settlersAppendLE32(QByteArray *pba, quint32 nValue)
 // pbaOut == nullptr performs the bounded trial decode used for classification;
 // the checks are identical either way, which is what makes the decision and
 // the conversion agree by construction.
-bool settlersDecodeRLE(const quint8 *pPalette, qint32 nType,
-                       const quint8 *pData, qint32 nSize, qint32 nWidth,
-                       qint32 nHeight, QByteArray *pbaOut,
+bool settlersDecodeRLE(const quint8 *pPalette, qint32 nType, const quint8 *pData, qint32 nSize, qint32 nWidth, qint32 nHeight, QByteArray *pbaOut,
                        XBinary::PDSTRUCT *pPdStruct)
 {
     if ((nWidth <= 0) || (nWidth > SETTLERS_MAX_WIDTH) || (nHeight <= 0)) {
@@ -114,12 +111,9 @@ bool settlersDecodeRLE(const quint8 *pPalette, qint32 nType,
                     if (pbaOut && pPalette) {
                         // The archive palette is RGB triplets; a BMP pixel is
                         // stored blue first.
-                        baRow[x * 4 + 0] =
-                            static_cast<char>(pPalette[nIndex * 3 + 2]);
-                        baRow[x * 4 + 1] =
-                            static_cast<char>(pPalette[nIndex * 3 + 1]);
-                        baRow[x * 4 + 2] =
-                            static_cast<char>(pPalette[nIndex * 3 + 0]);
+                        baRow[x * 4 + 0] = static_cast<char>(pPalette[nIndex * 3 + 2]);
+                        baRow[x * 4 + 1] = static_cast<char>(pPalette[nIndex * 3 + 1]);
+                        baRow[x * 4 + 2] = static_cast<char>(pPalette[nIndex * 3 + 0]);
                         baRow[x * 4 + 3] = static_cast<char>(0xff);
                     }
                     nPosition++;
@@ -142,38 +136,23 @@ XSettlersFTDecoder::XSettlersFTDecoder(QObject *parent) : QObject(parent)
 {
 }
 
-XSettlersFTDecoder::KIND XSettlersFTDecoder::classify(const QByteArray &baEntry,
-                                                      qint64 *pnOutputSize)
+XSettlersFTDecoder::KIND XSettlersFTDecoder::classify(const QByteArray &baEntry, qint64 *pnOutputSize)
 {
     const qint32 nSize = baEntry.size();
     const quint8 *pData = reinterpret_cast<const quint8 *>(baEntry.constData());
     qint64 nOutputSize = nSize;
     KIND kind = KIND_BIN;
 
-    if ((nSize >= SETTLERS_MIN_IMAGE_SIZE) && (settlersS16(pData, 2) != 0) &&
-        (settlersS16(pData, 4) != 0) &&
-        settlersDecodeRLE(nullptr, settlersS16(pData, 0),
-                          pData + SETTLERS_IMAGE_HEADER_SIZE,
-                          nSize - SETTLERS_IMAGE_HEADER_SIZE,
-                          settlersS16(pData, 2), settlersS16(pData, 4), nullptr,
-                          nullptr)) {
+    if ((nSize >= SETTLERS_MIN_IMAGE_SIZE) && (settlersS16(pData, 2) != 0) && (settlersS16(pData, 4) != 0) &&
+        settlersDecodeRLE(nullptr, settlersS16(pData, 0), pData + SETTLERS_IMAGE_HEADER_SIZE, nSize - SETTLERS_IMAGE_HEADER_SIZE, settlersS16(pData, 2),
+                          settlersS16(pData, 4), nullptr, nullptr)) {
         kind = KIND_MASK;
-        nOutputSize = SETTLERS_BMP_FILE_HEADER_SIZE +
-                      SETTLERS_BMP_INFO_HEADER_SIZE +
-                      static_cast<qint64>(settlersU16(pData, 2)) * 4 *
-                          settlersU16(pData, 4);
-    } else if ((nSize >= SETTLERS_MIN_IMAGE_SIZE) &&
-               (settlersS16(pData, 0) == 1) && (settlersS16(pData, 2) != 0) &&
-               (settlersS16(pData, 4) != 0) && (settlersS16(pData, 6) == 0) &&
-               (settlersS16(pData, 8) == 0) &&
-               (static_cast<qint64>(settlersU16(pData, 2)) *
-                    settlersU16(pData, 4) +
-                SETTLERS_IMAGE_HEADER_SIZE == nSize)) {
+        nOutputSize = SETTLERS_BMP_FILE_HEADER_SIZE + SETTLERS_BMP_INFO_HEADER_SIZE + static_cast<qint64>(settlersU16(pData, 2)) * 4 * settlersU16(pData, 4);
+    } else if ((nSize >= SETTLERS_MIN_IMAGE_SIZE) && (settlersS16(pData, 0) == 1) && (settlersS16(pData, 2) != 0) && (settlersS16(pData, 4) != 0) &&
+               (settlersS16(pData, 6) == 0) && (settlersS16(pData, 8) == 0) &&
+               (static_cast<qint64>(settlersU16(pData, 2)) * settlersU16(pData, 4) + SETTLERS_IMAGE_HEADER_SIZE == nSize)) {
         kind = KIND_BITMAP;
-        nOutputSize = SETTLERS_BMP_FILE_HEADER_SIZE +
-                      SETTLERS_BMP_INFO_HEADER_SIZE +
-                      SETTLERS_BMP_PALETTE_SIZE +
-                      (nSize - SETTLERS_IMAGE_HEADER_SIZE);
+        nOutputSize = SETTLERS_BMP_FILE_HEADER_SIZE + SETTLERS_BMP_INFO_HEADER_SIZE + SETTLERS_BMP_PALETTE_SIZE + (nSize - SETTLERS_IMAGE_HEADER_SIZE);
     } else if ((nSize >= 5) && (baEntry.left(4) == QByteArray("FORM", 4))) {
         kind = KIND_XMI;
     } else if (nSize == PALETTE_SIZE) {
@@ -184,11 +163,7 @@ XSettlersFTDecoder::KIND XSettlersFTDecoder::classify(const QByteArray &baEntry,
     return kind;
 }
 
-bool XSettlersFTDecoder::decode(const QByteArray &baPacked,
-                                const QByteArray &baPalette,
-                                qint64 nUncompressedSize,
-                                QByteArray *pbaUnpacked,
-                                XBinary::PDSTRUCT *pPdStruct)
+bool XSettlersFTDecoder::decode(const QByteArray &baPacked, const QByteArray &baPalette, qint64 nUncompressedSize, QByteArray *pbaUnpacked, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pbaUnpacked || (baPalette.size() != PALETTE_SIZE)) return false;
 
@@ -198,8 +173,7 @@ bool XSettlersFTDecoder::decode(const QByteArray &baPacked,
     if (nExpectedSize != nUncompressedSize) return false;
 
     const quint8 *pData = reinterpret_cast<const quint8 *>(baPacked.constData());
-    const quint8 *pPalette =
-        reinterpret_cast<const quint8 *>(baPalette.constData());
+    const quint8 *pPalette = reinterpret_cast<const quint8 *>(baPalette.constData());
     const qint32 nWidth = settlersU16(pData, 2);
     const qint32 nHeight = settlersU16(pData, 4);
 
@@ -207,21 +181,16 @@ bool XSettlersFTDecoder::decode(const QByteArray &baPacked,
     baResult.reserve(static_cast<qint32>(nUncompressedSize));
 
     if (kind == KIND_MASK) {
-        const quint32 nImageSize =
-            static_cast<quint32>(static_cast<qint64>(nWidth) * 4 * nHeight);
+        const quint32 nImageSize = static_cast<quint32>(static_cast<qint64>(nWidth) * 4 * nHeight);
         baResult.append("BM", 2);
-        settlersAppendLE32(&baResult,
-                           nImageSize + SETTLERS_BMP_FILE_HEADER_SIZE +
-                               SETTLERS_BMP_INFO_HEADER_SIZE);
+        settlersAppendLE32(&baResult, nImageSize + SETTLERS_BMP_FILE_HEADER_SIZE + SETTLERS_BMP_INFO_HEADER_SIZE);
         settlersAppendLE16(&baResult, 0);
         settlersAppendLE16(&baResult, 0);
-        settlersAppendLE32(&baResult, SETTLERS_BMP_FILE_HEADER_SIZE +
-                                          SETTLERS_BMP_INFO_HEADER_SIZE);
+        settlersAppendLE32(&baResult, SETTLERS_BMP_FILE_HEADER_SIZE + SETTLERS_BMP_INFO_HEADER_SIZE);
         settlersAppendLE32(&baResult, SETTLERS_BMP_INFO_HEADER_SIZE);
         settlersAppendLE32(&baResult, static_cast<quint32>(nWidth));
         // Negative height: the rows are stored top-down.
-        settlersAppendLE32(&baResult,
-                           static_cast<quint32>(-static_cast<qint32>(nHeight)));
+        settlersAppendLE32(&baResult, static_cast<quint32>(-static_cast<qint32>(nHeight)));
         settlersAppendLE16(&baResult, 1);
         settlersAppendLE16(&baResult, 32);
         settlersAppendLE32(&baResult, 0);
@@ -231,11 +200,8 @@ bool XSettlersFTDecoder::decode(const QByteArray &baPacked,
         settlersAppendLE32(&baResult, 0);
         settlersAppendLE32(&baResult, 0);
 
-        if (!settlersDecodeRLE(pPalette, settlersS16(pData, 0),
-                               pData + SETTLERS_IMAGE_HEADER_SIZE,
-                               baPacked.size() - SETTLERS_IMAGE_HEADER_SIZE,
-                               settlersS16(pData, 2), settlersS16(pData, 4),
-                               &baResult, pPdStruct)) {
+        if (!settlersDecodeRLE(pPalette, settlersS16(pData, 0), pData + SETTLERS_IMAGE_HEADER_SIZE, baPacked.size() - SETTLERS_IMAGE_HEADER_SIZE, settlersS16(pData, 2),
+                               settlersS16(pData, 4), &baResult, pPdStruct)) {
             return false;
         }
     } else {
@@ -243,11 +209,8 @@ bool XSettlersFTDecoder::decode(const QByteArray &baPacked,
         // still copies the unaligned rows verbatim; both are reproduced so the
         // output matches byte for byte.
         const quint32 nStride = static_cast<quint32>((nWidth + 3) & ~3);
-        const quint32 nImageSize =
-            static_cast<quint32>(static_cast<qint64>(nStride) * nHeight);
-        const quint32 nOffBits = SETTLERS_BMP_FILE_HEADER_SIZE +
-                                 SETTLERS_BMP_INFO_HEADER_SIZE +
-                                 SETTLERS_BMP_PALETTE_SIZE;
+        const quint32 nImageSize = static_cast<quint32>(static_cast<qint64>(nStride) * nHeight);
+        const quint32 nOffBits = SETTLERS_BMP_FILE_HEADER_SIZE + SETTLERS_BMP_INFO_HEADER_SIZE + SETTLERS_BMP_PALETTE_SIZE;
         baResult.append("BM", 2);
         settlersAppendLE32(&baResult, nImageSize + nOffBits);
         settlersAppendLE16(&baResult, 0);
@@ -255,8 +218,7 @@ bool XSettlersFTDecoder::decode(const QByteArray &baPacked,
         settlersAppendLE32(&baResult, nOffBits);
         settlersAppendLE32(&baResult, SETTLERS_BMP_INFO_HEADER_SIZE);
         settlersAppendLE32(&baResult, static_cast<quint32>(nWidth));
-        settlersAppendLE32(&baResult,
-                           static_cast<quint32>(-static_cast<qint32>(nHeight)));
+        settlersAppendLE32(&baResult, static_cast<quint32>(-static_cast<qint32>(nHeight)));
         settlersAppendLE16(&baResult, 1);
         settlersAppendLE16(&baResult, 8);
         settlersAppendLE32(&baResult, 0);

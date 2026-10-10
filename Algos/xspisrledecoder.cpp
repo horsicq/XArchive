@@ -15,23 +15,17 @@ namespace {
 const quint8 SPIS_RLE_ESCAPE = 0x94;
 const qint32 SPIS_RLE_BUFFER_SIZE = 0x10000;
 
-class SpisRleOutput
-{
+class SpisRleOutput {
 public:
-    SpisRleOutput(char *pOutput, XBinary::DATAPROCESS_STATE *pState,
-                  XBinary::PDSTRUCT *pPdStruct, qint64 nRawSize)
-        : m_pOutput(pOutput),
-          m_pState(pState),
-          m_pPdStruct(pPdStruct),
-          m_nRawSize(nRawSize)
+    SpisRleOutput(char *pOutput, XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct, qint64 nRawSize)
+        : m_pOutput(pOutput), m_pState(pState), m_pPdStruct(pPdStruct), m_nRawSize(nRawSize)
     {
     }
 
     bool flush()
     {
         if (m_nOutputUsed == 0) return true;
-        if (XBinary::_writeDevice(m_pOutput, m_nOutputUsed, m_pState) !=
-            m_nOutputUsed) {
+        if (XBinary::_writeDevice(m_pOutput, m_nOutputUsed, m_pState) != m_nOutputUsed) {
             return false;
         }
         m_nOutputUsed = 0;
@@ -40,8 +34,7 @@ public:
 
     bool emitByte(quint8 nValue)
     {
-        if ((m_pState->nCountOutput < 0) || (m_nOutputUsed < 0) ||
-            (m_pState->nCountOutput > m_nRawSize - m_nOutputUsed) ||
+        if ((m_pState->nCountOutput < 0) || (m_nOutputUsed < 0) || (m_pState->nCountOutput > m_nRawSize - m_nOutputUsed) ||
             (m_pState->nCountOutput + m_nOutputUsed >= m_nRawSize)) {
             return false;
         }
@@ -51,19 +44,15 @@ public:
 
     bool emitRepeat(quint8 nValue, qint32 nCount)
     {
-        if ((nCount < 0) || (m_pState->nCountOutput < 0) ||
-            (m_nOutputUsed < 0) ||
-            (m_pState->nCountOutput > m_nRawSize - m_nOutputUsed) ||
-            (static_cast<qint64>(nCount) >
-             m_nRawSize - m_pState->nCountOutput - m_nOutputUsed)) {
+        if ((nCount < 0) || (m_pState->nCountOutput < 0) || (m_nOutputUsed < 0) || (m_pState->nCountOutput > m_nRawSize - m_nOutputUsed) ||
+            (static_cast<qint64>(nCount) > m_nRawSize - m_pState->nCountOutput - m_nOutputUsed)) {
             return false;
         }
         while (nCount > 0) {
             if (!XBinary::isPdStructNotCanceled(m_pPdStruct)) return false;
             const qint32 nSpace = SPIS_RLE_BUFFER_SIZE - m_nOutputUsed;
             const qint32 nChunk = (std::min)(nSpace, nCount);
-            memset(m_pOutput + m_nOutputUsed, nValue,
-                   static_cast<size_t>(nChunk));
+            memset(m_pOutput + m_nOutputUsed, nValue, static_cast<size_t>(nChunk));
             m_nOutputUsed += nChunk;
             nCount -= nChunk;
             if ((m_nOutputUsed == SPIS_RLE_BUFFER_SIZE) && !flush()) {
@@ -80,7 +69,7 @@ private:
     qint64 m_nRawSize = 0;
     qint32 m_nOutputUsed = 0;
 };
-}
+}  // namespace
 
 XSPISRLEDecoder::XSPISRLEDecoder(QObject *pParent) : QObject(pParent)
 {
@@ -146,8 +135,8 @@ bool XSPISRLEDecoder::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PD
     }
 
     if (bResult) bResult = !bEscape && output.flush();
-    bResult = bResult && !pState->bReadError && !pState->bWriteError && (pState->nCountInput == pState->nInputLimit) &&
-              (pState->nCountOutput == nRawSize) && XBinary::isPdStructNotCanceled(pPdStruct);
+    bResult = bResult && !pState->bReadError && !pState->bWriteError && (pState->nCountInput == pState->nInputLimit) && (pState->nCountOutput == nRawSize) &&
+              XBinary::isPdStructNotCanceled(pPdStruct);
 
     delete[] pInput;
     delete[] pOutput;

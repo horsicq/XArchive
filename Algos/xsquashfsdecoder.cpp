@@ -111,8 +111,8 @@ bool sqfsLzmaAlone(const quint8 *pData, qint64 nSize, qint64 nMaxOut, QByteArray
             SizeT nDestLength = (SizeT)(nMaxOut - nProduced);
             SizeT nSourceLength = (SizeT)nInputLeft;
             ELzmaStatus status = LZMA_STATUS_NOT_SPECIFIED;
-            const SRes ret = X_LzmaDec_DecodeToBuf(&state, (Byte *)baBlock.data() + nProduced, &nDestLength, (const Byte *)pInput, &nSourceLength,
-                                                  LZMA_FINISH_ANY, &status);
+            const SRes ret =
+                X_LzmaDec_DecodeToBuf(&state, (Byte *)baBlock.data() + nProduced, &nDestLength, (const Byte *)pInput, &nSourceLength, LZMA_FINISH_ANY, &status);
             if (ret != 0) {
                 bOk = false;
                 break;
@@ -853,8 +853,7 @@ bool XSquashFSDecoder::listMembers(const QByteArray &baFile, QList<MEMBER> *pLis
     return !pListMembers->isEmpty();
 }
 
-bool XSquashFSDecoder::decode(const QByteArray &baPacked, const QByteArray &baProperties, qint64 nUncompressedSize, QByteArray *pbaResult,
-                              XBinary::PDSTRUCT *pPdStruct)
+bool XSquashFSDecoder::decode(const QByteArray &baPacked, const QByteArray &baProperties, qint64 nUncompressedSize, QByteArray *pbaResult, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pbaResult) return false;
     if ((nUncompressedSize < 0) || (nUncompressedSize > MAX_UNCOMPRESSED_SIZE)) return false;

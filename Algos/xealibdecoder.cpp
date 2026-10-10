@@ -15,12 +15,9 @@ const qint32 EALIB_LZSS_F = 18;
 const qint64 EALIB_MAX_UNPACKED_SIZE = qint64(256) * 1024 * 1024;
 }  // namespace
 
-bool XEALIBDecoder::decodeLZSS(const QByteArray &baPacked,
-                               qint64 nUncompressedSize,
-                               QByteArray *pbaUnpacked)
+bool XEALIBDecoder::decodeLZSS(const QByteArray &baPacked, qint64 nUncompressedSize, QByteArray *pbaUnpacked)
 {
-    if (!pbaUnpacked || (nUncompressedSize < 0) ||
-        (nUncompressedSize > EALIB_MAX_UNPACKED_SIZE)) {
+    if (!pbaUnpacked || (nUncompressedSize < 0) || (nUncompressedSize > EALIB_MAX_UNPACKED_SIZE)) {
         return false;
     }
     pbaUnpacked->clear();

@@ -11,8 +11,7 @@ const qint64 EA_LZW_MAX_OUTPUT = 0x10000000;  // 256 MiB sanity cap
 
 class EABitReader {
 public:
-    EABitReader(const quint8 *pData, qint64 nSize)
-        : m_pData(pData), m_nSize(nSize), m_nPos(0), m_nBuffer(0), m_nBits(0)
+    EABitReader(const quint8 *pData, qint64 nSize) : m_pData(pData), m_nSize(nSize), m_nPos(0), m_nBuffer(0), m_nBits(0)
     {
     }
 
@@ -41,8 +40,7 @@ private:
 };
 }  // namespace
 
-bool XEALzwDecoder::decode(const QByteArray &baPacked, qint64 nUncompressedSize,
-                           QByteArray *pOutput, XBinary::PDSTRUCT *pPdStruct)
+bool XEALzwDecoder::decode(const QByteArray &baPacked, qint64 nUncompressedSize, QByteArray *pOutput, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pOutput) return false;
     pOutput->clear();
@@ -61,8 +59,7 @@ bool XEALzwDecoder::decode(const QByteArray &baPacked, qint64 nUncompressedSize,
     QByteArray baResult;
     baResult.reserve(static_cast<qint32>(qMin<qint64>(nUncompressedSize, EA_LZW_MAX_OUTPUT)));
 
-    EABitReader reader(reinterpret_cast<const quint8 *>(baPacked.constData()),
-                       baPacked.size());
+    EABitReader reader(reinterpret_cast<const quint8 *>(baPacked.constData()), baPacked.size());
 
     qint32 nWidth = 9;
     qint32 nMaxCode = 0x1ff;
@@ -81,8 +78,7 @@ bool XEALzwDecoder::decode(const QByteArray &baPacked, qint64 nUncompressedSize,
         // it is still below the 12-bit ceiling.
         if (nMaxCode < nNextFree) {
             ++nWidth;
-            nMaxCode = (nWidth == EA_LZW_MAX_BITS) ? EA_LZW_MAX_CODES
-                                                   : ((1 << nWidth) - 1);
+            nMaxCode = (nWidth == EA_LZW_MAX_BITS) ? EA_LZW_MAX_CODES : ((1 << nWidth) - 1);
         }
         quint32 nRaw = 0;
         if (!reader.read(nWidth, &nRaw)) break;

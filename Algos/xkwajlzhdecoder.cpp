@@ -44,14 +44,7 @@ enum class KWAJ_RESULT {
 class KWAJBitReader {
 public:
     KWAJBitReader(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct)
-        : m_pState(pState),
-          m_pPdStruct(pPdStruct),
-          m_nInputPosition(0),
-          m_nInputSize(0),
-          m_nBitBuffer(0),
-          m_nBits(0),
-          m_bCleanEnd(false),
-          m_bPastEnd(false)
+        : m_pState(pState), m_pPdStruct(pPdStruct), m_nInputPosition(0), m_nInputSize(0), m_nBitBuffer(0), m_nBits(0), m_bCleanEnd(false), m_bPastEnd(false)
     {
     }
 
@@ -546,8 +539,7 @@ bool XKWAJLZHDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, X
     }
 
     const bool bInputComplete = bCleanEnd && reader.isCleanEnd() &&
-                                (!bHasExpectedSize || (pDecompressState->nInputLimit == -1) ||
-                                 (pDecompressState->nCountInput == pDecompressState->nInputLimit));
+                                (!bHasExpectedSize || (pDecompressState->nInputLimit == -1) || (pDecompressState->nCountInput == pDecompressState->nInputLimit));
     const bool bOutputComplete = !bHasExpectedSize || (output.produced() == nExpectedSize);
     bool bResult = bInputComplete && bOutputComplete && !bDataError && !bIOError && !pDecompressState->bReadError && !pDecompressState->bWriteError &&
                    XBinary::isPdStructNotCanceled(pPdStruct);

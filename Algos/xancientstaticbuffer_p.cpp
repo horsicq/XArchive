@@ -2,35 +2,31 @@
 
 #include "xancientstaticbuffer_p.h"
 
+namespace XAncientPrivate {
 
-namespace XAncientPrivate
+ReadOnlyBuffer::ReadOnlyBuffer(const uint8_t *data, size_t length) noexcept : _data{data}, _length{length}
 {
-
-ReadOnlyBuffer::ReadOnlyBuffer(const uint8_t *data,size_t length) noexcept :
-	_data{data},
-	_length{length}
-{
-	// nothing needed
+    // nothing needed
 }
 
 const uint8_t *ReadOnlyBuffer::data() const noexcept
 {
-	return _data;
+    return _data;
 }
 
 uint8_t *ReadOnlyBuffer::data()
 {
-	throw InvalidOperationError();
+    throw InvalidOperationError();
 }
 
 size_t ReadOnlyBuffer::size() const noexcept
 {
-	return _length;
+    return _length;
 }
 
 bool ReadOnlyBuffer::isResizable() const noexcept
 {
-	return false;
+    return false;
 }
 
-}
+}  // namespace XAncientPrivate

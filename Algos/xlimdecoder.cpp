@@ -22,21 +22,17 @@
 
 namespace {
 const qint32 LIM_WINDOW = 0x8000;
-const qint32 LIM_MAIN_SYMBOLS = 0x129;   // 256 literals + 41 match codes
+const qint32 LIM_MAIN_SYMBOLS = 0x129;  // 256 literals + 41 match codes
 const qint32 LIM_DIST_SYMBOLS = 0x1d;
 const qint32 LIM_LENGTH_SYMBOLS = 20;
 const qint32 LIM_SHORT_CODES = 13;
 
-const quint16 g_arrCode[41] = {0,   1,   2,   4,   8,   16,  32,  64,   128,  256,  512,  1024, 2048, 4,    5,
-                               6,   7,   8,   9,   10,  11,  268, 270,  272,  274,  532,  536,  540,  544,  804,
-                               812, 820, 828, 1092, 1108, 1124, 1140, 1412, 1444, 1476, 1508};
-const quint8 g_arrDistanceExtra[LIM_DIST_SYMBOLS] = {0, 0, 1, 1, 1, 2,  2,  3,  3,  4,  4,  5,  5, 6, 6,
-                                                     7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13};
-const quint16 g_arrDistanceBase[LIM_DIST_SYMBOLS] = {0,   1,   2,    4,    6,    8,    12,   16,   24,   32,
-                                                     48,  64,  96,   128,  192,  256,  384,  512,  768,  1024,
-                                                     1536, 2048, 3072, 4096, 6144, 8192, 12288, 16384, 24576};
-const quint8 g_arrDefaultDistanceLengths[LIM_DIST_SYMBOLS] = {4, 6, 6, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
-                                                              5, 5, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5};
+const quint16 g_arrCode[41] = {0,   1,   2,   4,   8,   16,  32,  64,  128, 256, 512, 1024, 2048, 4,    5,    6,    7,    8,    9,    10,  11,
+                               268, 270, 272, 274, 532, 536, 540, 544, 804, 812, 820, 828,  1092, 1108, 1124, 1140, 1412, 1444, 1476, 1508};
+const quint8 g_arrDistanceExtra[LIM_DIST_SYMBOLS] = {0, 0, 1, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13};
+const quint16 g_arrDistanceBase[LIM_DIST_SYMBOLS] = {0,   1,   2,   4,   6,    8,    12,   16,   24,   32,   48,   64,    96,    128,  192,
+                                                     256, 384, 512, 768, 1024, 1536, 2048, 3072, 4096, 6144, 8192, 12288, 16384, 24576};
+const quint8 g_arrDefaultDistanceLengths[LIM_DIST_SYMBOLS] = {4, 6, 6, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5};
 
 class BitReader {
 public:

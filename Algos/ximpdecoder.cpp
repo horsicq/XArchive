@@ -38,14 +38,11 @@ const quint32 g_arrLenBase[20] = {11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59
 const quint8 g_arrLenExtra[20] = {1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5};
 const quint32 g_arrLenMask[20] = {1, 1, 1, 1, 3, 3, 3, 3, 7, 7, 7, 7, 15, 15, 15, 15, 31, 31, 31, 31};
 
-const quint32 g_arrDistBase[36] = {5,     7,     9,     13,    17,    25,    33,    49,    65,     97,     129,    193,
-                                   257,   385,   513,   769,   1025,  1537,  2049,  3073,  4097,   6145,   8193,   12289,
-                                   16385, 24577, 32769, 49153, 65537, 98305, 131073, 196609, 262145, 393217, 524289, 786433};
-const quint8 g_arrDistExtra[36] = {1,  1,  2,  2,  3,  3,  4,  4,  5,  5,  6,  6,  7,  7,  8,  8,  9,  9,
-                                   10, 10, 11, 11, 12, 12, 13, 13, 14, 14, 15, 15, 16, 16, 17, 17, 18, 18};
-const quint32 g_arrDistMask[36] = {1,     1,     3,     3,     7,     7,     15,     15,     31,     31,     63,     63,
-                                   127,   127,   255,   255,   511,   511,   1023,   1023,   2047,   2047,   4095,   4095,
-                                   8191,  8191,  16383, 16383, 32767, 32767, 65535,  65535,  131071, 131071, 262143, 262143};
+const quint32 g_arrDistBase[36] = {5,    7,    9,    13,   17,   25,    33,    49,    65,    97,    129,   193,   257,    385,    513,    769,    1025,   1537,
+                                   2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577, 32769, 49153, 65537, 98305, 131073, 196609, 262145, 393217, 524289, 786433};
+const quint8 g_arrDistExtra[36] = {1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13, 14, 14, 15, 15, 16, 16, 17, 17, 18, 18};
+const quint32 g_arrDistMask[36] = {1,    1,    3,    3,    7,    7,    15,   15,   31,    31,    63,    63,    127,   127,   255,    255,    511,    511,
+                                   1023, 1023, 2047, 2047, 4095, 4095, 8191, 8191, 16383, 16383, 32767, 32767, 65535, 65535, 131071, 131071, 262143, 262143};
 
 const quint32 g_arrWindows[3][8] = {{0x8000, 0x10000, 0x12000, 0x18000, 0x1e000, 0x24000, 0x2a000, 0x30000},
                                     {0x8000, 0x10000, 0x12000, 0x18000, 0x1e000, 0x24000, 0x2a000, 0x30000},
@@ -79,8 +76,7 @@ const ImpCrcTable g_crcTable;
 // past the end of the buffer.
 class ImpBitReader {
 public:
-    ImpBitReader(const quint8 *pData, qint64 nSize, qint64 nPosition)
-        : m_pData(pData), m_nSize(nSize), m_nPosition(nPosition), m_nBuffer(0), m_nCount(0), m_bError(false)
+    ImpBitReader(const quint8 *pData, qint64 nSize, qint64 nPosition) : m_pData(pData), m_nSize(nSize), m_nPosition(nPosition), m_nBuffer(0), m_nCount(0), m_bError(false)
     {
         if ((m_nPosition < 0) || (m_nPosition > m_nSize)) {
             m_nPosition = m_nSize;
@@ -424,8 +420,8 @@ void impDeltaUnapply(const ImpFilterState &listRecords, quint8 *pBuffer, qint64 
 // -------------------------------------------------------- LZ77 + huffman ---
 // The reference implementation. Decodes into pBuffer[nStart.. nStart+nBlockLength).
 // *pnProduced gets the number of bytes actually produced.
-bool impLzDecode(ImpBitReader *pReader, quint8 *pBuffer, qint64 nBufferSize, qint64 nStart, qint64 nBlockLength, ImpFilterState *pListRecords,
-                 bool bApplyFilter, qint64 *pnProduced, XBinary::PDSTRUCT *pPdStruct)
+bool impLzDecode(ImpBitReader *pReader, quint8 *pBuffer, qint64 nBufferSize, qint64 nStart, qint64 nBlockLength, ImpFilterState *pListRecords, bool bApplyFilter,
+                 qint64 *pnProduced, XBinary::PDSTRUCT *pPdStruct)
 {
     if (bApplyFilter) pListRecords->clear();
     if ((nStart < 0) || (nBlockLength < 0) || ((nStart + nBlockLength) > nBufferSize)) return false;
@@ -807,8 +803,7 @@ private:
             }
             if (!grow(m_nDictLength + nUnpacked + IMP_SLACK)) return false;
             qint64 nProduced = 0;
-            if (!impLzDecode(&reader, (quint8 *)m_baDictionary.data(), m_baDictionary.size(), m_nDictLength, nUnpacked, &m_listRecords, true, &nProduced,
-                             pPdStruct)) {
+            if (!impLzDecode(&reader, (quint8 *)m_baDictionary.data(), m_baDictionary.size(), m_nDictLength, nUnpacked, &m_listRecords, true, &nProduced, pPdStruct)) {
                 return false;
             }
             if (nProduced < nUnpacked) {
@@ -943,8 +938,7 @@ bool XIMPDecoder::unpackProperties(const QByteArray &baProperties, qint64 *pnStr
     return (*pnStreamOffset >= 0) && (*pnSize >= 0) && (*pnSize <= MAX_UNCOMPRESSED_SIZE);
 }
 
-bool XIMPDecoder::decode(const QByteArray &baPacked, const QByteArray &baProperties, qint64 nUncompressedSize, QByteArray *pbaResult,
-                         XBinary::PDSTRUCT *pPdStruct)
+bool XIMPDecoder::decode(const QByteArray &baPacked, const QByteArray &baProperties, qint64 nUncompressedSize, QByteArray *pbaResult, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pbaResult) return false;
     pbaResult->clear();

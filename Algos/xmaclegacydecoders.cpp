@@ -12,32 +12,39 @@
 
 namespace {
 
-class BitReader
-{
+class BitReader {
 public:
-    explicit BitReader(const QByteArray &data, qint64 byteOffset = 0)
-        : m_data(data), m_bitOffset(byteOffset * 8), m_ok(byteOffset >= 0 &&
-                                                         byteOffset <= data.size())
+    explicit BitReader(const QByteArray &data, qint64 byteOffset = 0) : m_data(data), m_bitOffset(byteOffset * 8), m_ok(byteOffset >= 0 && byteOffset <= data.size())
     {
     }
 
-    bool isOk() const { return m_ok; }
-    qint64 byteOffset() const { return (m_bitOffset + 7) / 8; }
-    qint64 alignedByteOffset() const { return m_bitOffset / 8; }
-    bool isByteAligned() const { return (m_bitOffset & 7) == 0; }
+    bool isOk() const
+    {
+        return m_ok;
+    }
+    qint64 byteOffset() const
+    {
+        return (m_bitOffset + 7) / 8;
+    }
+    qint64 alignedByteOffset() const
+    {
+        return m_bitOffset / 8;
+    }
+    bool isByteAligned() const
+    {
+        return (m_bitOffset & 7) == 0;
+    }
 
     quint32 bits(qint32 count)
     {
-        if (!m_ok || count < 0 || count > 32 ||
-            m_bitOffset > qint64(m_data.size()) * 8 - count) {
+        if (!m_ok || count < 0 || count > 32 || m_bitOffset > qint64(m_data.size()) * 8 - count) {
             m_ok = false;
             return 0;
         }
         quint32 value = 0;
         for (qint32 i = 0; i < count; ++i) {
             const qint64 bit = m_bitOffset++;
-            value = (value << 1) |
-                    ((quint8(m_data.at(bit / 8)) >> (7 - (bit & 7))) & 1U);
+            value = (value << 1) | ((quint8(m_data.at(bit / 8)) >> (7 - (bit & 7))) & 1U);
         }
         return value;
     }
@@ -75,8 +82,7 @@ public:
 
     void skipBytes(qint64 count)
     {
-        if (!isByteAligned() || count < 0 ||
-            m_bitOffset / 8 > m_data.size() - count) {
+        if (!isByteAligned() || count < 0 || m_bitOffset / 8 > m_data.size() - count) {
             m_ok = false;
             return;
         }
@@ -89,8 +95,7 @@ private:
     bool m_ok;
 };
 
-class PrefixCode
-{
+class PrefixCode {
 public:
     struct Node {
         qint32 child[2] = {-1, -1};
@@ -105,16 +110,14 @@ public:
         qint32 symbolsLeft = 0;
         for (qint32 length : lengths)
             if (length > 0) ++symbolsLeft;
-        if (!symbolsLeft || maximumLength <= 0 || maximumLength > 31)
-            return false;
+        if (!symbolsLeft || maximumLength <= 0 || maximumLength > 31) return false;
 
         for (qint32 length = 1; length <= maximumLength; ++length) {
             for (qint32 symbol = 0; symbol < lengths.size(); ++symbol) {
                 if (lengths.at(symbol) != length) continue;
                 if (length < 32 && code >= (quint32(1) << length)) return false;
                 qint32 node = 0;
-                for (qint32 bitPosition = length - 1; bitPosition >= 0;
-                     --bitPosition) {
+                for (qint32 bitPosition = length - 1; bitPosition >= 0; --bitPosition) {
                     if (m_nodes.at(node).symbol >= 0) return false;
                     const qint32 bit = (code >> bitPosition) & 1U;
                     qint32 next = m_nodes.at(node).child[bit];
@@ -125,10 +128,7 @@ public:
                     }
                     node = next;
                 }
-                if (m_nodes.at(node).symbol >= 0 ||
-                    m_nodes.at(node).child[0] >= 0 ||
-                    m_nodes.at(node).child[1] >= 0)
-                    return false;
+                if (m_nodes.at(node).symbol >= 0 || m_nodes.at(node).child[0] >= 0 || m_nodes.at(node).child[1] >= 0) return false;
                 m_nodes[node].symbol = symbol;
                 ++code;
                 if (--symbolsLeft == 0) return true;
@@ -171,13 +171,10 @@ bool readCompactCode(BitReader *reader, qint32 size, PrefixCode *code)
     return code->build(lengths, 15);
 }
 
-class CompactLzhStream
-{
+class CompactLzhStream {
 public:
     CompactLzhStream(const QByteArray &data, qint32 blockSize)
-        : m_reader(data), m_blockSize(blockSize), m_blockCount(blockSize),
-          m_blockStart(0), m_position(0), m_matchLength(0), m_matchOffset(0),
-          m_window(8192, 0)
+        : m_reader(data), m_blockSize(blockSize), m_blockCount(blockSize), m_blockStart(0), m_position(0), m_matchLength(0), m_matchOffset(0), m_window(8192, 0)
     {
     }
 
@@ -199,12 +196,9 @@ public:
                 m_blockCount += 3;
                 const qint32 length = m_length.symbol(&m_reader);
                 const qint32 highOffset = m_offset.symbol(&m_reader);
-                if (length < 0 || highOffset < 0 || highOffset > 127)
-                    return false;
+                if (length < 0 || highOffset < 0 || highOffset > 127) return false;
                 const qint32 offset = (highOffset << 6) | m_reader.bits(6);
-                if (!m_reader.isOk() || length <= 0 || length > 63 ||
-                    offset < 0 || offset > 8191)
-                    return false;
+                if (!m_reader.isOk() || length <= 0 || length > 63 || offset < 0 || offset > 8191) return false;
                 m_matchLength = length;
                 m_matchOffset = qint32(m_position) - offset;
                 *value = quint8(m_window.at(m_matchOffset & 8191));
@@ -225,10 +219,7 @@ private:
             const qint64 current = m_reader.alignedByteOffset();
             m_reader.skipBytes(((current - m_blockStart) & 1) ? 3 : 2);
         }
-        if (!readCompactCode(&m_reader, 256, &m_literal) ||
-            !readCompactCode(&m_reader, 64, &m_length) ||
-            !readCompactCode(&m_reader, 128, &m_offset))
-            return false;
+        if (!readCompactCode(&m_reader, 256, &m_literal) || !readCompactCode(&m_reader, 64, &m_length) || !readCompactCode(&m_reader, 128, &m_offset)) return false;
         m_blockCount = 0;
         m_blockStart = m_reader.alignedByteOffset();
         return true;
@@ -247,18 +238,17 @@ private:
     PrefixCode m_offset;
 };
 
-class CompactByteSource
-{
+class CompactByteSource {
 public:
-    virtual ~CompactByteSource() {}
+    virtual ~CompactByteSource()
+    {
+    }
     virtual bool next(quint8 *pValue) = 0;
 };
 
-class CompactLzhByteSource : public CompactByteSource
-{
+class CompactLzhByteSource : public CompactByteSource {
 public:
-    explicit CompactLzhByteSource(CompactLzhStream *pStream)
-        : m_pStream(pStream)
+    explicit CompactLzhByteSource(CompactLzhStream *pStream) : m_pStream(pStream)
     {
     }
 
@@ -271,11 +261,9 @@ private:
     CompactLzhStream *m_pStream;
 };
 
-class CompactBufferByteSource : public CompactByteSource
-{
+class CompactBufferByteSource : public CompactByteSource {
 public:
-    explicit CompactBufferByteSource(const QByteArray *pData)
-        : m_pData(pData), m_nPosition(0)
+    explicit CompactBufferByteSource(const QByteArray *pData) : m_pData(pData), m_nPosition(0)
     {
     }
 
@@ -291,12 +279,9 @@ private:
     qint64 m_nPosition;
 };
 
-bool expandCompactRle(CompactByteSource *pPackedSource,
-                      qint64 rawSize, QByteArray *output)
+bool expandCompactRle(CompactByteSource *pPackedSource, qint64 rawSize, QByteArray *output)
 {
-    if (!pPackedSource || !output || rawSize < 0 ||
-        rawSize > (std::numeric_limits<int>::max)())
-        return false;
+    if (!pPackedSource || !output || rawSize < 0 || rawSize > (std::numeric_limits<int>::max)()) return false;
     output->clear();
     output->reserve(qint32(rawSize));
     quint8 saved = 0;
@@ -351,8 +336,7 @@ quint16 be16(const QByteArray &data, qint64 offset, bool *ok)
         if (ok) *ok = false;
         return 0;
     }
-    return (quint16(quint8(data.at(offset))) << 8) |
-           quint8(data.at(offset + 1));
+    return (quint16(quint8(data.at(offset))) << 8) | quint8(data.at(offset + 1));
 }
 
 quint32 be32(const QByteArray &data, qint64 offset, bool *ok)
@@ -362,8 +346,7 @@ quint32 be32(const QByteArray &data, qint64 offset, bool *ok)
     return (high << 16) | low;
 }
 
-bool readDdnCode(const QByteArray &packed, qint64 start, PrefixCode *code,
-                 qint64 *endOffset)
+bool readDdnCode(const QByteArray &packed, qint64 start, PrefixCode *code, qint64 *endOffset)
 {
     bool ok = true;
     const quint32 header = be32(packed, start, &ok);
@@ -372,16 +355,14 @@ bool readDdnCode(const QByteArray &packed, qint64 start, PrefixCode *code,
     const qint32 byteCount = (header >> 13) & 0x7ff;
     const qint32 maximumLength = (header >> 8) & 0x1f;
     const qint32 bitCount = (header >> 3) & 0x1f;
-    if (codeCount <= 0 || codeCount > 256 || byteCount < 0 ||
-        start + 4 > packed.size() - byteCount || maximumLength <= 0 ||
-        maximumLength > 31 || bitCount <= 0 || bitCount > 16)
+    if (codeCount <= 0 || codeCount > 256 || byteCount < 0 || start + 4 > packed.size() - byteCount || maximumLength <= 0 || maximumLength > 31 || bitCount <= 0 ||
+        bitCount > 16)
         return false;
     BitReader reader(packed, start + 4);
     QVector<qint32> lengths(codeCount, 0);
     const bool zeroCoding = header & 4;
     for (qint32 i = 0; i < codeCount; ++i) {
-        if (!zeroCoding || reader.bits(1))
-            lengths[i] = qint32(reader.bits(bitCount));
+        if (!zeroCoding || reader.bits(1)) lengths[i] = qint32(reader.bits(bitCount));
         if (!reader.isOk() || lengths.at(i) > maximumLength) return false;
     }
     if (!code->build(lengths, maximumLength)) return false;
@@ -393,12 +374,9 @@ bool readDdnCode(const QByteArray &packed, qint64 start, PrefixCode *code,
 
 namespace XMacLegacyDecoders {
 
-bool decodeDiskDoublerLZW(const QByteArray &packed, qint64 rawSize,
-                         quint8 info1, quint8 info2, quint16 checksum,
-                         QByteArray *output, XBinary::PDSTRUCT *pPdStruct)
+bool decodeDiskDoublerLZW(const QByteArray &packed, qint64 rawSize, quint8 info1, quint8 info2, quint16 checksum, QByteArray *output, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (!output || rawSize < 0 || rawSize > (std::numeric_limits<qint32>::max)() ||
-        packed.size() < 3 || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    if (!output || rawSize < 0 || rawSize > (std::numeric_limits<qint32>::max)() || packed.size() < 3 || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
     const quint8 xorByte = (info1 >= 0x2a && !(info2 & 0x80)) ? 0x5a : 0;
     const quint8 magic1 = quint8(packed.at(0)) ^ xorByte;
     const quint8 magic2 = quint8(packed.at(1)) ^ xorByte;
@@ -423,8 +401,7 @@ bool decodeDiskDoublerLZW(const QByteArray &packed, qint64 rawSize,
     return true;
 }
 
-bool decodeCompactPro(const QByteArray &packed, qint64 rawSize, bool lzh,
-                      qint32 blockSize, QByteArray *output)
+bool decodeCompactPro(const QByteArray &packed, qint64 rawSize, bool lzh, qint32 blockSize, QByteArray *output)
 {
     if (!output || rawSize < 0 || packed.isEmpty()) return false;
     if (lzh) {
@@ -436,12 +413,9 @@ bool decodeCompactPro(const QByteArray &packed, qint64 rawSize, bool lzh,
     return expandCompactRle(&source, rawSize, output);
 }
 
-bool decodeDiskDoublerADn(const QByteArray &packed, qint64 rawSize,
-                         QByteArray *output)
+bool decodeDiskDoublerADn(const QByteArray &packed, qint64 rawSize, QByteArray *output)
 {
-    if (!output || rawSize < 0 ||
-        rawSize > (std::numeric_limits<int>::max)())
-        return false;
+    if (!output || rawSize < 0 || rawSize > (std::numeric_limits<int>::max)()) return false;
     output->clear();
     output->reserve(qint32(rawSize));
     qint64 position = 0;
@@ -449,15 +423,11 @@ bool decodeDiskDoublerADn(const QByteArray &packed, qint64 rawSize,
         bool ok = true;
         const quint16 compressedSize = be16(packed, position, &ok);
         const quint16 uncompressedSize = be16(packed, position + 2, &ok);
-        if (!ok || !compressedSize || !uncompressedSize ||
-            uncompressedSize > 0x2000 || position > packed.size() - 12 ||
-            position + 12 > packed.size() - compressedSize ||
+        if (!ok || !compressedSize || !uncompressedSize || uncompressedSize > 0x2000 || position > packed.size() - 12 || position + 12 > packed.size() - compressedSize ||
             uncompressedSize > rawSize - output->size())
             return false;
-        quint8 headerXor = quint8(compressedSize ^ (compressedSize >> 8) ^
-                                  uncompressedSize ^ (uncompressedSize >> 8));
-        for (qint32 i = 4; i < 11; ++i)
-            headerXor ^= quint8(packed.at(position + i));
+        quint8 headerXor = quint8(compressedSize ^ (compressedSize >> 8) ^ uncompressedSize ^ (uncompressedSize >> 8));
+        for (qint32 i = 4; i < 11; ++i) headerXor ^= quint8(packed.at(position + i));
         if (headerXor != quint8(packed.at(position + 11))) return false;
         const quint8 flags = quint8(packed.at(position + 9));
         const qint64 dataStart = position + 12;
@@ -479,16 +449,13 @@ bool decodeDiskDoublerADn(const QByteArray &packed, qint64 rawSize,
                     if (!reader.bits(1)) length = 2;
                     else if (!reader.bits(1)) length = reader.bits(1) ? 4 : 3;
                     else length = qint32(reader.bits(4)) + 5;
-                    if (!reader.isOk() || offset <= 0 || offset > block.size() ||
-                        length > offset)
-                        return false;
+                    if (!reader.isOk() || offset <= 0 || offset > block.size() || length > offset) return false;
                     // qint32(): the subtraction is qsizetype on Qt6 (int on
                     // Qt5), so qMin() cannot deduce one T from it and `length`.
                     // The enclosing loop runs only while block.size() is below
                     // uncompressedSize, so the difference is always positive.
                     length = qMin(length, qint32(uncompressedSize - block.size()));
-                    for (qint32 i = 0; i < length; ++i)
-                        block.append(block.at(block.size() - offset));
+                    for (qint32 i = 0; i < length; ++i) block.append(block.at(block.size() - offset));
                 }
                 if (!reader.isOk()) return false;
             }
@@ -499,12 +466,9 @@ bool decodeDiskDoublerADn(const QByteArray &packed, qint64 rawSize,
     return output->size() == rawSize;
 }
 
-bool decodeDiskDoublerDDn(const QByteArray &packed, qint64 rawSize,
-                         QByteArray *output)
+bool decodeDiskDoublerDDn(const QByteArray &packed, qint64 rawSize, QByteArray *output)
 {
-    if (!output || rawSize < 0 ||
-        rawSize > (std::numeric_limits<int>::max)())
-        return false;
+    if (!output || rawSize < 0 || rawSize > (std::numeric_limits<int>::max)()) return false;
     output->clear();
     output->reserve(qint32(rawSize));
     qint64 nextBlock = 0;
@@ -517,13 +481,9 @@ bool decodeDiskDoublerDDn(const QByteArray &packed, qint64 rawSize,
         const quint16 lengthCompressedSize = be16(packed, start + 8, &ok);
         const quint16 literalCompressedSize = be16(packed, start + 10, &ok);
         const quint16 offsetCompressedSize = be16(packed, start + 12, &ok);
-        if (!ok || !uncompressedSize || uncompressedSize > 65536 ||
-            uncompressedSize > quint64(rawSize - output->size()) ||
-            start > packed.size() - 22)
-            return false;
+        if (!ok || !uncompressedSize || uncompressedSize > 65536 || uncompressedSize > quint64(rawSize - output->size()) || start > packed.size() - 22) return false;
         quint8 headerXor = 0;
-        for (qint32 i = 0; i < 21; ++i)
-            headerXor ^= quint8(packed.at(start + i));
+        for (qint32 i = 0; i < 21; ++i) headerXor ^= quint8(packed.at(start + i));
         if (headerXor != quint8(packed.at(start + 21))) return false;
         const quint8 flags = quint8(packed.at(start + 14));
         const qint64 dataStart = start + 22;
@@ -536,15 +496,11 @@ bool decodeDiskDoublerDDn(const QByteArray &packed, qint64 rawSize,
         const qint64 literalStart = dataStart + offsetCompressedSize;
         const qint64 lengthStart = literalStart + literalCompressedSize;
         nextBlock = lengthStart + lengthCompressedSize;
-        if (literalStart < dataStart || lengthStart < literalStart ||
-            nextBlock < lengthStart || nextBlock > packed.size())
-            return false;
+        if (literalStart < dataStart || lengthStart < literalStart || nextBlock < lengthStart || nextBlock > packed.size()) return false;
 
         PrefixCode offsetCode;
         qint64 codeEnd = 0;
-        if (!readDdnCode(packed, dataStart, &offsetCode, &codeEnd) ||
-            codeEnd > literalStart)
-            return false;
+        if (!readDdnCode(packed, dataStart, &offsetCode, &codeEnd) || codeEnd > literalStart) return false;
         BitReader offsetReader(packed, codeEnd);
         QVector<quint16> offsets;
         offsets.reserve(offsetCount);
@@ -558,8 +514,7 @@ bool decodeDiskDoublerDDn(const QByteArray &packed, qint64 rawSize,
                 const quint32 base = ((2U + (slot & 1)) << bits) + 1U;
                 offset = base + offsetReader.bits(bits);
             }
-            if (!offsetReader.isOk() || offset == 0 || offset > 65535)
-                return false;
+            if (!offsetReader.isOk() || offset == 0 || offset > 65535) return false;
             offsets.append(quint16(offset));
         }
 
@@ -567,9 +522,7 @@ bool decodeDiskDoublerDDn(const QByteArray &packed, qint64 rawSize,
         literals.reserve(literalCount);
         if (flags & 0x80) {
             PrefixCode literalCode;
-            if (!readDdnCode(packed, literalStart, &literalCode, &codeEnd) ||
-                codeEnd > lengthStart)
-                return false;
+            if (!readDdnCode(packed, literalStart, &literalCode, &codeEnd) || codeEnd > lengthStart) return false;
             BitReader literalReader(packed, codeEnd);
             for (qint32 i = 0; i < literalCount; ++i) {
                 const qint32 symbol = literalCode.symbol(&literalReader);
@@ -577,16 +530,12 @@ bool decodeDiskDoublerDDn(const QByteArray &packed, qint64 rawSize,
                 literals.append(char(symbol));
             }
         } else {
-            if (literalStart > packed.size() - literalCount ||
-                literalStart + literalCount > lengthStart)
-                return false;
+            if (literalStart > packed.size() - literalCount || literalStart + literalCount > lengthStart) return false;
             literals = packed.mid(literalStart, literalCount);
         }
 
         PrefixCode lengthCode;
-        if (!readDdnCode(packed, lengthStart, &lengthCode, &codeEnd) ||
-            codeEnd > nextBlock)
-            return false;
+        if (!readDdnCode(packed, lengthStart, &lengthCode, &codeEnd) || codeEnd > nextBlock) return false;
         BitReader lengthReader(packed, codeEnd);
         qint32 literalIndex = 0;
         qint32 offsetIndex = 0;
@@ -603,8 +552,7 @@ bool decodeDiskDoublerDDn(const QByteArray &packed, qint64 rawSize,
                 const qint32 offset = offsets.at(offsetIndex++);
                 if (offset <= 0 || offset > output->size()) return false;
                 length = qMin<qint64>(length, blockEnd - output->size());
-                for (qint32 i = 0; i < length; ++i)
-                    output->append(output->at(output->size() - offset));
+                for (qint32 i = 0; i < length; ++i) output->append(output->at(output->size() - offset));
             } else {
                 if (symbol - 128 > 16) return false;
                 qint32 length = 1 << (symbol - 128);

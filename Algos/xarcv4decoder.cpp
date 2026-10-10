@@ -10,8 +10,8 @@
 
 namespace {
 // 256 literals + the end marker + 6 distance buckets * 498 lengths.
-const qint32 ARCV4_SYMBOLS = 3245;                       // 0x0CAD
-const qint32 ARCV4_NODES = ARCV4_SYMBOLS * 2 - 1;        // 6489
+const qint32 ARCV4_SYMBOLS = 3245;                 // 0x0CAD
+const qint32 ARCV4_NODES = ARCV4_SYMBOLS * 2 - 1;  // 6489
 const qint32 ARCV4_ROOT = 1;
 const qint32 ARCV4_END_SYMBOL = 256;
 const qint32 ARCV4_FIRST_MATCH = 257;
@@ -30,11 +30,7 @@ struct ARCV4Model {
     std::vector<quint16> child0;
     std::vector<quint16> child1;
 
-    ARCV4Model()
-        : freq(ARCV4_NODES + 1, 0),
-          parent(ARCV4_NODES + 1, 0),
-          child0(ARCV4_NODES + 1, 0),
-          child1(ARCV4_NODES + 1, 0)
+    ARCV4Model() : freq(ARCV4_NODES + 1, 0), parent(ARCV4_NODES + 1, 0), child0(ARCV4_NODES + 1, 0), child1(ARCV4_NODES + 1, 0)
     {
         // Weight 1 on EVERY node from 2 up, internal ones included; the root
         // is left alone because the first update overwrites it before anything
@@ -52,8 +48,9 @@ struct ARCV4Model {
 
 class ARCV4BitReader {
 public:
-    ARCV4BitReader(const uchar *pData, qint64 nSize)
-        : m_pData(pData), m_nSize(nSize) {}
+    ARCV4BitReader(const uchar *pData, qint64 nSize) : m_pData(pData), m_nSize(nSize)
+    {
+    }
 
     // -1 on end of input.  Bits leave each byte LSB first.
     qint32 readBit()
@@ -101,8 +98,7 @@ bool arcv4Propagate(ARCV4Model *pModel, qint32 nNode, qint32 nSibling)
         const qint32 nChild = nNode;
         nNode = pModel->parent[nNode];
         if (nNode < ARCV4_ROOT || nNode > ARCV4_NODES) return false;
-        pModel->freq[nNode] =
-            quint16(pModel->freq[nChild] + pModel->freq[nSibling]);
+        pModel->freq[nNode] = quint16(pModel->freq[nChild] + pModel->freq[nSibling]);
         if (nNode == ARCV4_ROOT) {
             if (pModel->freq[ARCV4_ROOT] == ARCV4_MAX_ROOT_FREQ) {
                 for (qint32 i = ARCV4_ROOT; i <= ARCV4_NODES; ++i) {
@@ -193,12 +189,9 @@ qint32 arcv4DecodeSymbol(ARCV4Model *pModel, ARCV4BitReader *pReader)
 }
 }  // namespace
 
-bool XARCV4Decoder::decode(const QByteArray &packed, qint64 nUncompressedSize,
-                           QByteArray *pOutput, XBinary::PDSTRUCT *pPdStruct)
+bool XARCV4Decoder::decode(const QByteArray &packed, qint64 nUncompressedSize, QByteArray *pOutput, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (!pOutput || (nUncompressedSize < 0) ||
-        (nUncompressedSize > qint64((std::numeric_limits<qint32>::max)())) ||
-        packed.isEmpty()) {
+    if (!pOutput || (nUncompressedSize < 0) || (nUncompressedSize > qint64((std::numeric_limits<qint32>::max)())) || packed.isEmpty()) {
         return false;
     }
 
@@ -214,8 +207,7 @@ bool XARCV4Decoder::decode(const QByteArray &packed, qint64 nUncompressedSize,
     }
 
     ARCV4Model model;
-    ARCV4BitReader reader(reinterpret_cast<const uchar *>(packed.constData()),
-                          packed.size());
+    ARCV4BitReader reader(reinterpret_cast<const uchar *>(packed.constData()), packed.size());
 
     // The declared size is exact, so the result is allocated once up front and
     // filled through a raw pointer; nothing here may write past nProduced.
@@ -225,8 +217,7 @@ bool XARCV4Decoder::decode(const QByteArray &packed, qint64 nUncompressedSize,
     qint32 nProduced = 0;
 
     for (;;) {
-        if (((nProduced & 0x3fff) == 0) &&
-            !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        if (((nProduced & 0x3fff) == 0) && !XBinary::isPdStructNotCanceled(pPdStruct)) {
             return false;
         }
         const qint32 nSymbol = arcv4DecodeSymbol(&model, &reader);

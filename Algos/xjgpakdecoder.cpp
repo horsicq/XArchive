@@ -29,10 +29,7 @@ const qint64 JGPAK_BIT_SLACK = 32;
 class JgpakDecoderContext {
 public:
     explicit JgpakDecoderContext(const QByteArray &packed)
-        : m_pInput(reinterpret_cast<const quint8 *>(packed.constData())),
-          m_nBitLimit(qint64(packed.size()) * 8),
-          m_nBitPosition(0),
-          m_bError(false)
+        : m_pInput(reinterpret_cast<const quint8 *>(packed.constData())), m_nBitLimit(qint64(packed.size()) * 8), m_nBitPosition(0), m_bError(false)
     {
         for (qint32 i = 0; i < JGPAK_N_CHAR; i++) {
             m_frequency[i] = 1;
@@ -206,8 +203,7 @@ private:
 };
 }  // namespace
 
-bool XJGPAKDecoder::decode(const QByteArray &packed, qint64 nUncompressedSize,
-                           QByteArray *pOutput, XBinary::PDSTRUCT *pPdStruct)
+bool XJGPAKDecoder::decode(const QByteArray &packed, qint64 nUncompressedSize, QByteArray *pOutput, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pOutput) return false;
     if ((nUncompressedSize < 0) || (nUncompressedSize > qint64((std::numeric_limits<qint32>::max)()))) return false;

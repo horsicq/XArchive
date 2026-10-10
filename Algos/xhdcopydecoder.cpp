@@ -21,8 +21,7 @@ const quint8 HDCOPY_MAX_LAST_CYLINDER = 83U;
 
 bool hdcopyIsValidSectorCount(quint8 nSectors)
 {
-    return (nSectors == 9U) || (nSectors == 10U) || (nSectors == 15U) || (nSectors == 17U) || (nSectors == 18U) || (nSectors == 20U) ||
-           (nSectors == 21U);
+    return (nSectors == 9U) || (nSectors == 10U) || (nSectors == 15U) || (nSectors == 17U) || (nSectors == 18U) || (nSectors == 20U) || (nSectors == 21U);
 }
 
 bool hdcopyGeometry(const QByteArray &baData, qint64 *pnTrackCount, qint64 *pnTrackSize)

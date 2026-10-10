@@ -7,8 +7,7 @@
 
 #include "xancientxpk_p.h"
 
-namespace XAncientPrivate
-{
+namespace XAncientPrivate {
 
 void CodecDecoder::decompress(ByteBuffer &rawData, bool verify)
 {
@@ -39,8 +38,7 @@ size_t CodecDecoder::getMaxRawSize() noexcept
     return 0x8000000U;
 }
 
-XpkDecoder::XpkDecoder(uint32_t recursionLevel)
-    : _recursionLevel(recursionLevel)
+XpkDecoder::XpkDecoder(uint32_t recursionLevel) : _recursionLevel(recursionLevel)
 {
 }
 

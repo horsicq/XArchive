@@ -24,8 +24,7 @@ const qint32 g_nGroupLow[RSVK_GROUPS] = {0, 1, 2, 4, 8, 16, 32, 64, 128};
 const qint32 g_nGroupHigh[RSVK_GROUPS] = {0, 1, 3, 7, 15, 31, 63, 127, 257};
 // Entries 0 and 1 are unused: those two groups are the bare RUNA/RUNB symbols
 // and get no sub-model.
-const qint32 g_nGroupMaxFrequency[RSVK_GROUPS] = {
-    0, 0, 0x100, 0x100, 0x80, 0x400, 0x800, 0x1000, 0x2000};
+const qint32 g_nGroupMaxFrequency[RSVK_GROUPS] = {0, 0, 0x100, 0x100, 0x80, 0x400, 0x800, 0x1000, 0x2000};
 
 const qint32 RSVK_SELECTOR_MAX_FREQUENCY = 0x1000;
 const qint32 RSVK_SELECTOR_INCREMENT = 0x20;
@@ -84,8 +83,8 @@ private:
 // "update_model" pair with a configurable increment and rescale threshold.
 struct RSVKModel {
     qint32 nBase = 0;
-    qint32 nChars = 0;      // number of real characters
-    qint32 nSymbols = 0;    // CACM No_of_symbols == nChars + 1 (one phantom)
+    qint32 nChars = 0;    // number of real characters
+    qint32 nSymbols = 0;  // CACM No_of_symbols == nChars + 1 (one phantom)
     qint32 nMaxFrequency = 0;
     qint32 nIncrement = 1;
     qint32 charToIndex[RSVK_MAX_SYMBOLS + 2] = {};
@@ -160,20 +159,15 @@ public:
         const qint32 nRange = m_nHigh - m_nLow + 1;
         const qint32 nTotal = pModel->cumulative[0];
         if ((nRange <= 0) || (nTotal <= 0)) return -1;
-        const qint32 nTarget = qint32(
-            ((qint64(m_nValue - m_nLow) + 1) * nTotal - 1) / nRange);
+        const qint32 nTarget = qint32(((qint64(m_nValue - m_nLow) + 1) * nTotal - 1) / nRange);
         qint32 nIndex = 1;
-        while ((nIndex <= pModel->nSymbols) &&
-               (pModel->cumulative[nIndex] > nTarget)) {
+        while ((nIndex <= pModel->nSymbols) && (pModel->cumulative[nIndex] > nTarget)) {
             ++nIndex;
         }
         if (nIndex > pModel->nChars) return -1;
         const qint32 nCharacter = pModel->indexToChar[nIndex];
-        m_nHigh = m_nLow +
-                  qint32((qint64(nRange) * pModel->cumulative[nIndex - 1]) /
-                         nTotal) - 1;
-        m_nLow = m_nLow + qint32((qint64(nRange) * pModel->cumulative[nIndex]) /
-                                 nTotal);
+        m_nHigh = m_nLow + qint32((qint64(nRange) * pModel->cumulative[nIndex - 1]) / nTotal) - 1;
+        m_nLow = m_nLow + qint32((qint64(nRange) * pModel->cumulative[nIndex]) / nTotal);
         for (;;) {
             if (m_nHigh >= 0x8000) {
                 if (m_nLow < 0x8000) {
@@ -204,21 +198,18 @@ private:
 };
 
 // Decodes one block's arithmetic stream into the MTF-index sequence.
-bool rsvkDecodeSymbols(const uchar *pPayload, qint64 nPayloadSize,
-                       std::vector<quint8> *pMtf, XBinary::PDSTRUCT *pPdStruct)
+bool rsvkDecodeSymbols(const uchar *pPayload, qint64 nPayloadSize, std::vector<quint8> *pMtf, XBinary::PDSTRUCT *pPdStruct)
 {
     RSVKBits bits(pPayload, nPayloadSize);
     RSVKArith arith(&bits);
 
     RSVKModel selector;
-    if (!selector.init(0, RSVK_GROUPS - 1, RSVK_SELECTOR_MAX_FREQUENCY,
-                       RSVK_SELECTOR_INCREMENT)) {
+    if (!selector.init(0, RSVK_GROUPS - 1, RSVK_SELECTOR_MAX_FREQUENCY, RSVK_SELECTOR_INCREMENT)) {
         return false;
     }
     RSVKModel groups[RSVK_GROUPS];
     for (qint32 i = 2; i < RSVK_GROUPS; ++i) {
-        if (!groups[i].init(g_nGroupLow[i], g_nGroupHigh[i],
-                            g_nGroupMaxFrequency[i], 1)) {
+        if (!groups[i].init(g_nGroupLow[i], g_nGroupHigh[i], g_nGroupMaxFrequency[i], 1)) {
             return false;
         }
     }
@@ -240,8 +231,7 @@ bool rsvkDecodeSymbols(const uchar *pPayload, qint64 nPayloadSize,
             }
             bNeedSymbol = false;
         }
-        if (((++nGuard & 0xffff) == 0) &&
-            !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        if (((++nGuard & 0xffff) == 0) && !XBinary::isPdStructNotCanceled(pPdStruct)) {
             return false;
         }
         if (nSymbol == RSVK_SYMBOL_EOB) break;
@@ -278,8 +268,7 @@ bool rsvkDecodeSymbols(const uchar *pPayload, qint64 nPayloadSize,
     return true;
 }
 
-bool rsvkInverse(const std::vector<quint8> &mtf, qint32 nPrimary, qint32 nHole,
-                 QByteArray *pOutput, XBinary::PDSTRUCT *pPdStruct)
+bool rsvkInverse(const std::vector<quint8> &mtf, qint32 nPrimary, qint32 nHole, QByteArray *pOutput, XBinary::PDSTRUCT *pPdStruct)
 {
     const qint32 nLength = qint32(mtf.size());
     if ((nHole < 0) || (nHole > nLength)) return false;
@@ -373,14 +362,12 @@ bool rsvkInverse(const std::vector<quint8> &mtf, qint32 nPrimary, qint32 nHole,
 
 }  // namespace
 
-bool XRSVKDecoder::decode(const QByteArray &baPacked, qint64 nUncompressedSize,
-                          QByteArray *pOutput, XBinary::PDSTRUCT *pPdStruct)
+bool XRSVKDecoder::decode(const QByteArray &baPacked, qint64 nUncompressedSize, QByteArray *pOutput, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pOutput || (nUncompressedSize < 0)) return false;
     if (nUncompressedSize == 0) {
         *pOutput = QByteArray();
-        return baPacked.isEmpty() ||
-               (baPacked.size() >= RSVK_BLOCK_HEADER_SIZE);
+        return baPacked.isEmpty() || (baPacked.size() >= RSVK_BLOCK_HEADER_SIZE);
     }
 
     QByteArray baResult;
@@ -393,28 +380,22 @@ bool XRSVKDecoder::decode(const QByteArray &baPacked, qint64 nUncompressedSize,
         const uchar *pHeader = pData + nCursor;
         if (memcmp(pHeader, "DATA", 4) != 0) break;
         const quint32 nExpectedCrc = qFromLittleEndian<quint32>(pHeader + 4);
-        const qint64 nPacked =
-            static_cast<qint64>(qFromLittleEndian<quint32>(pHeader + 8));
-        const qint32 nPrimary =
-            static_cast<qint32>(qFromLittleEndian<quint32>(pHeader + 12));
-        const qint32 nHole =
-            static_cast<qint32>(qFromLittleEndian<quint32>(pHeader + 16));
-        if ((nPacked <= 0) ||
-            (nPacked > baPacked.size() - nCursor - RSVK_BLOCK_HEADER_SIZE)) {
+        const qint64 nPacked = static_cast<qint64>(qFromLittleEndian<quint32>(pHeader + 8));
+        const qint32 nPrimary = static_cast<qint32>(qFromLittleEndian<quint32>(pHeader + 12));
+        const qint32 nHole = static_cast<qint32>(qFromLittleEndian<quint32>(pHeader + 16));
+        if ((nPacked <= 0) || (nPacked > baPacked.size() - nCursor - RSVK_BLOCK_HEADER_SIZE)) {
             return false;
         }
 
         std::vector<quint8> mtf;
-        if (!rsvkDecodeSymbols(pHeader + RSVK_BLOCK_HEADER_SIZE, nPacked, &mtf,
-                               pPdStruct)) {
+        if (!rsvkDecodeSymbols(pHeader + RSVK_BLOCK_HEADER_SIZE, nPacked, &mtf, pPdStruct)) {
             return false;
         }
         QByteArray baBlock;
         if (!rsvkInverse(mtf, nPrimary, nHole, &baBlock, pPdStruct)) {
             return false;
         }
-        if (rsvkCrc32(reinterpret_cast<const uchar *>(baBlock.constData()),
-                      baBlock.size()) != nExpectedCrc) {
+        if (rsvkCrc32(reinterpret_cast<const uchar *>(baBlock.constData()), baBlock.size()) != nExpectedCrc) {
             return false;
         }
         if (qint64(baResult.size()) + baBlock.size() > nUncompressedSize) {

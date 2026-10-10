@@ -8,12 +8,12 @@
 #include <vector>
 
 namespace {
-const qint32 SQ_SYMBOL_COUNT = 0x275;                    // 629
-const qint32 SQ_NODE_COUNT = SQ_SYMBOL_COUNT * 2;        // 0x4EA, nodes 1..0x4E9
+const qint32 SQ_SYMBOL_COUNT = 0x275;              // 629
+const qint32 SQ_NODE_COUNT = SQ_SYMBOL_COUNT * 2;  // 0x4EA, nodes 1..0x4E9
 const qint32 SQ_ROOT = 1;
 const qint32 SQ_END_SYMBOL = 0x100;
 const qint32 SQ_FIRST_MATCH = 0x101;
-const qint32 SQ_LENGTH_COUNT = 0x3E;                     // 62 lengths, 3..64
+const qint32 SQ_LENGTH_COUNT = 0x3E;  // 62 lengths, 3..64
 const qint32 SQ_SLOT_COUNT = 6;
 const qint32 SQ_WINDOW_SIZE = 0x8000;
 const qint32 SQ_WINDOW_MASK = SQ_WINDOW_SIZE - 1;

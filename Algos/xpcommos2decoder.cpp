@@ -108,8 +108,7 @@ bool XPCommOS2Decoder::decode(const QByteArray &baPacked, qint64 nUncompressedSi
 
     pbaUnpacked->clear();
 
-    if ((nUncompressedSize <= 0) || (nUncompressedSize > PCOMM_MAX_UNCOMPRESSED_SIZE) ||
-        (nUncompressedSize > static_cast<qint64>((std::numeric_limits<int>::max)()))) {
+    if ((nUncompressedSize <= 0) || (nUncompressedSize > PCOMM_MAX_UNCOMPRESSED_SIZE) || (nUncompressedSize > static_cast<qint64>((std::numeric_limits<int>::max)()))) {
         return false;
     }
 

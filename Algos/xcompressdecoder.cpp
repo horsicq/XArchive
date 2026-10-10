@@ -382,7 +382,9 @@ static bool compressDecompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
 namespace {
 class CompressProbeOutput : public QIODevice {
 public:
-    explicit CompressProbeOutput(qint64 nLimit) : m_nLimit(nLimit) {}
+    explicit CompressProbeOutput(qint64 nLimit) : m_nLimit(nLimit)
+    {
+    }
     bool bLimitReached = false;
     bool seek(qint64 nPosition) override
     {
@@ -396,8 +398,12 @@ public:
         }
         return QIODevice::seek(nPosition);
     }
+
 protected:
-    qint64 readData(char *, qint64) override { return -1; }
+    qint64 readData(char *, qint64) override
+    {
+        return -1;
+    }
     qint64 writeData(const char *, qint64 nSize) override
     {
         if ((nSize < 0) || (nSize > m_nLimit - m_nWritten)) {
@@ -407,6 +413,7 @@ protected:
         m_nWritten += nSize;
         return nSize;
     }
+
 private:
     qint64 m_nLimit;
     qint64 m_nWritten = 0;
@@ -432,8 +439,7 @@ bool XCompressDecoder::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::P
             const qint64 nExtent = (pState->nInputLimit >= 0) ? pState->nInputLimit : nSize - pState->nInputOffset;
             if ((nExtent >= 3) && (nExtent <= 4 * 1024 * 1024) && (nExtent <= nSize - pState->nInputOffset) && input->seek(pState->nInputOffset) && input) {
                 const QByteArray header = input->read(3);
-                if (input && (header.size() == 3) && (static_cast<quint8>(header.at(0)) == COMPRESS_MAGIC_0) &&
-                    (static_cast<quint8>(header.at(1)) == COMPRESS_MAGIC_1) &&
+                if (input && (header.size() == 3) && (static_cast<quint8>(header.at(0)) == COMPRESS_MAGIC_0) && (static_cast<quint8>(header.at(1)) == COMPRESS_MAGIC_1) &&
                     ((static_cast<quint8>(header.at(2)) & 0x7f) == COMPRESS_MINBITS)) {
                     CompressProbeOutput output(128 * 1024 * 1024);
                     if (!output.open(QIODevice::WriteOnly)) return false;

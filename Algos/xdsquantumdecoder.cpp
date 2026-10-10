@@ -110,8 +110,19 @@ void modelWeightInit(QDS_MODEL *pModel)
 class QDSDecoder {
 public:
     QDSDecoder(const QByteArray &baPacked, qint32 nWindowBits, bool bOldVariant)
-        : m_pData(reinterpret_cast<const quint8 *>(baPacked.constData())), m_nDataSize(baPacked.size()), m_nDataPos(0), m_nBitBuffer(0), m_nBitCount(0),
-          m_nLow(0), m_nHigh(0), m_nCode(0), m_bOld(bOldVariant), m_bStarted(false), m_bError(false), m_nWindowMask((1 << nWindowBits) - 1), m_nWindowPos(0)
+        : m_pData(reinterpret_cast<const quint8 *>(baPacked.constData())),
+          m_nDataSize(baPacked.size()),
+          m_nDataPos(0),
+          m_nBitBuffer(0),
+          m_nBitCount(0),
+          m_nLow(0),
+          m_nHigh(0),
+          m_nCode(0),
+          m_bOld(bOldVariant),
+          m_bStarted(false),
+          m_bError(false),
+          m_nWindowMask((1 << nWindowBits) - 1),
+          m_nWindowPos(0)
     {
         // QByteArray::fill() takes qsizetype on Qt6, and widening the shift expression
         // itself is what MSVC flags as C4334; size it as an int first.
@@ -318,8 +329,7 @@ private:
         }
         pModel->nShiftsLeft = 50;
         for (qint32 i = 0; i < nCount; i++) {
-            pModel->listSymbols[i].nCumFreq =
-                quint16((quint16(pModel->listSymbols.at(i).nCumFreq - pModel->listSymbols.at(i + 1).nCumFreq + 1)) >> 1);
+            pModel->listSymbols[i].nCumFreq = quint16((quint16(pModel->listSymbols.at(i).nCumFreq - pModel->listSymbols.at(i + 1).nCumFreq + 1)) >> 1);
         }
         for (qint32 i = 0; i < nCount - 1; i++) {
             for (qint32 j = i + 1; j < nCount; j++) {

@@ -25,9 +25,9 @@ const qint32 N_NIL = 0x1fff;
 const qint32 N_CAPACITY = 0x2000;
 const qint32 N_LAST_SLOT = 0x1ffe;
 const qint32 N_FIRST_SLOT = 0x100;
-const qint32 N_SCRATCH_TOP = 100;   // phrases are written down from here
+const qint32 N_SCRATCH_TOP = 100;  // phrases are written down from here
 const qint32 N_MAX_PHRASE = 100;
-const qint32 N_MAX_EXTEND = 4;      // trie bytes added per token
+const qint32 N_MAX_EXTEND = 4;  // trie bytes added per token
 
 // 13-bit codes off the top of a 32-bit accumulator, refilled a
 // little-endian 16-bit word at a time.

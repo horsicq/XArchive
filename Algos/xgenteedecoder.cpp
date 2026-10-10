@@ -48,8 +48,7 @@ const quint16 GENTEE_TAG_FILE = 0x87f4;
 const qint32 GENTEE_MAX_RECORDS = 1000000;
 const qint32 GENTEE_PROGRESS_MASK = 0xffff;
 
-const qint32 GENTEE_DISTANCE_BITS[GENTEE_DISTANCE_SLOTS] = {0, 1, 1, 2, 2, 2, 3, 3, 3, 3, 4,  4,  5,  5,  6,
-                                                            6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13};
+const qint32 GENTEE_DISTANCE_BITS[GENTEE_DISTANCE_SLOTS] = {0, 1, 1, 2, 2, 2, 3, 3, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13};
 
 struct NODE {
     qint32 nSymbol;
@@ -373,8 +372,8 @@ QString genteeName(const char *pRecord, qint64 nRecordSize)
             sResult.append(QLatin1Char('/'));
             continue;
         }
-        const bool bSafe = (nCharacter >= 0x20) && (nCharacter < 0x7f) && (nCharacter != '%') && (nCharacter != ':') && (nCharacter != '*') &&
-                           (nCharacter != '?') && (nCharacter != '"') && (nCharacter != '<') && (nCharacter != '>') && (nCharacter != '|');
+        const bool bSafe = (nCharacter >= 0x20) && (nCharacter < 0x7f) && (nCharacter != '%') && (nCharacter != ':') && (nCharacter != '*') && (nCharacter != '?') &&
+                           (nCharacter != '"') && (nCharacter != '<') && (nCharacter != '>') && (nCharacter != '|');
         if (bSafe) {
             sResult.append(QChar(nCharacter));
         } else {

@@ -23,8 +23,8 @@
 #include <limits>
 
 namespace {
-const quint8 REFPACK_MAGIC_LOW = 0xfbU;   // second signature byte, constant
-const quint8 REFPACK_FLAG_LARGE = 0x01U;  // size fields are four bytes wide
+const quint8 REFPACK_MAGIC_LOW = 0xfbU;    // second signature byte, constant
+const quint8 REFPACK_FLAG_LARGE = 0x01U;   // size fields are four bytes wide
 const quint8 REFPACK_FLAG_PACKED = 0x80U;  // packed size precedes unpacked size
 // Bits 0x02..0x40 are unassigned; requiring them to be clear is what keeps a
 // stray 0xFB byte in arbitrary data from being read as a header.
