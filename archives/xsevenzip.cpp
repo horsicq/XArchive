@@ -3179,7 +3179,7 @@ void XSevenZip::_printRecords(QList<SZRECORD> *pListRecords)
         return;
     }
 
-    qDebug("=== SZRECORD list: %d records ===", pListRecords->count());
+    qDebug("=== SZRECORD list: %lld records ===", pListRecords->count());
 
     for (qint32 nI = 0; nI < pListRecords->count(); nI++) {
         const SZRECORD &rec = pListRecords->at(nI);
