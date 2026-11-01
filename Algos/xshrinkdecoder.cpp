@@ -487,9 +487,6 @@ bool XShrinkDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XB
 
     // Do the decompression
     ozus_run(ozus);
-    if (ozus->error_code != OZUS_ERRCODE_OK) {
-        printf("Decompression failed (code %d)\n", ozus->error_code);
-    }
 
     // Free any resources you allocated. The library does not require any
     // cleanup of its own.

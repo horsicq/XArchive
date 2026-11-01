@@ -925,9 +925,6 @@ bool XImplodeDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, b
 
     // Do the decompression
     ui6a_unimplode(ui6a);
-    if (ui6a->error_code != UI6A_ERRCODE_OK) {
-        printf("Decompression failed (code %d)\n", ui6a->error_code);
-    }
 
     // Clean up
     ui6a_destroy(ui6a);

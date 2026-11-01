@@ -407,9 +407,6 @@ bool XReduceDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, qi
 
     // Do the decompression
     ozur_run(ozur);
-    if (ozur->error_code != OZUR_ERRCODE_OK) {
-        printf("Decompression failed (code %d)\n", ozur->error_code);
-    }
 
     // Free any resources you allocated. The library does not require any
     // cleanup of its own.
