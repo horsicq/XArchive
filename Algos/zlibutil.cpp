@@ -15,6 +15,9 @@
  *
  * zlib is zlib-licensed, Copyright (C) 1995-2024 Jean-loup Gailly and Mark Adler.
  *
+ * C++17 compatibility: obsolete register storage specifiers are removed.
+ * Reapply warning_fixes/2026-11-apple-cpp17/mylibs.patch after regeneration.
+ *
  * This file is generated -- do not edit by hand.
  */
 
@@ -3414,8 +3417,8 @@ unsigned long ZEXPORT crc32(unsigned long crc, const unsigned char FAR *buf, uIn
 /* ========================================================================= */
 local unsigned long crc32_little(unsigned long crc, const unsigned char FAR *buf, z_size_t len)
 {
-    register z_crc_t c;
-    register const z_crc_t FAR *buf4;
+    z_crc_t c;
+    const z_crc_t FAR *buf4;
 
     c = (z_crc_t)crc;
     c = ~c;
@@ -3451,8 +3454,8 @@ local unsigned long crc32_little(unsigned long crc, const unsigned char FAR *buf
 /* ========================================================================= */
 local unsigned long crc32_big(unsigned long crc, const unsigned char FAR *buf, z_size_t len)
 {
-    register z_crc_t c;
-    register const z_crc_t FAR *buf4;
+    z_crc_t c;
+    const z_crc_t FAR *buf4;
 
     c = ZSWAP32((z_crc_t)crc);
     c = ~c;

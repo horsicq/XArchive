@@ -16,6 +16,9 @@
  *
  * bzip2 is BSD-style licensed, Copyright (C) 1996-2019 Julian R Seward.
  *
+ * C++17 compatibility: obsolete register storage specifiers are removed.
+ * Reapply warning_fixes/2026-11-apple-cpp17/mylibs.patch after regeneration.
+ *
  * This file is generated -- do not edit by hand. Reproducible local patches
  * are maintained in _mylibs/warning_fixes/2026-09-nfd.
  */
@@ -2528,15 +2531,15 @@ void generateMTFValues ( EState* s )
             zPend = 0;
          }
          {
-            register UChar  rtmp;
-            register UChar* ryy_j;
-            register UChar  rll_i;
+            UChar  rtmp;
+            UChar* ryy_j;
+            UChar  rll_i;
             rtmp  = yy[1];
             yy[1] = yy[0];
             ryy_j = &(yy[1]);
             rll_i = ll_i;
             while ( rll_i != rtmp ) {
-               register UChar rtmp2;
+               UChar rtmp2;
                ryy_j++;
                rtmp2  = rtmp;
                rtmp   = *ryy_j;
@@ -2699,8 +2702,8 @@ void sendMTFValues ( EState* s )
 
          if (nGroups == 6 && 50 == ge-gs+1) {
             /*--- fast track the common case ---*/
-            register UInt32 cost01, cost23, cost45;
-            register UInt16 icv;
+            UInt32 cost01, cost23, cost45;
+            UInt16 icv;
             cost01 = cost23 = cost45 = 0;
 
 #           define BZ_ITER(nn)                \
