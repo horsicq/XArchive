@@ -499,6 +499,17 @@ static bool _cfbfLimitReached(qint32 nLimit, const QList<XBinary::FPART> *pListR
     return (nLimit > 0) && (pListResult->count() >= nLimit);
 }
 
+// Sectors the file holds after the header, counting a partial final sector:
+// some writers end the file at the last byte of the last stream (version 4
+// installers); reads of that sector are bounded by the stream sizes.
+static quint64 _cfbfPhysicalSectors(qint64 nFileSize, qint64 nSectorSize)
+{
+    if ((nSectorSize <= 0) || (nFileSize <= nSectorSize)) {
+        return 0;
+    }
+    return (quint64)((nFileSize - 1) / nSectorSize);
+}
+
 static bool _cfbfGetSectorOffset(quint64 nSectorSize64, qint64 nFileSize, quint32 nSector, qint64 *pnOffset)
 {
     if (!pnOffset || (nSector > (((std::numeric_limits<quint64>::max)() - nSectorSize64) / nSectorSize64))) {
@@ -519,9 +530,16 @@ static bool _cfbfGetSectorRange(quint64 nSectorSize64, qint64 nFileSize, quint32
         (nCount > (quint64)(std::numeric_limits<qint64>::max)() / nSectorSize64)) {
         return false;
     }
-    const qint64 nSize = (qint64)(nCount * nSectorSize64);
-    if ((nSize <= 0) || (nSize > nFileSize - nOffset)) {
+    qint64 nSize = (qint64)(nCount * nSectorSize64);
+    if (nSize <= 0) {
         return false;
+    }
+    // A range ending in a partial final sector stops at the file end.
+    if (nSize > nFileSize - nOffset) {
+        if (nSize - (nFileSize - nOffset) >= (qint64)nSectorSize64) {
+            return false;
+        }
+        nSize = nFileSize - nOffset;
     }
     *pnOffset = nOffset;
     *pnSize = nSize;
@@ -618,10 +636,9 @@ QList<XBinary::FPART> XCFBF::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
         qint64 dirBaseOffset = -1;
         qint64 dirTotalSize = 0;
         if (ssh._sectDirStart != 0xFFFFFFFF) {
-            if (ssh._csectDir) {
-                if (!_cfbfGetSectorRange(nSectorSize64, fileSize, ssh._sectDirStart, ssh._csectDir, &dirBaseOffset, &dirTotalSize)) {
-                    dirBaseOffset = -1;
-                }
+            // The version 4 directory count may be stale; the offset alone then maps the directory.
+            if (ssh._csectDir && _cfbfGetSectorRange(nSectorSize64, fileSize, ssh._sectDirStart, ssh._csectDir, &dirBaseOffset, &dirTotalSize)) {
+                // exact range
             } else if (_cfbfGetSectorOffset(nSectorSize64, fileSize, ssh._sectDirStart, &dirBaseOffset)) {
                 dirTotalSize = fileSize - dirBaseOffset;
             }
@@ -862,17 +879,17 @@ bool XCFBF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
         return _cfbfFailUnpackSource(this, pState);
     }
 
-    const quint64 nPhysicalSectors = (quint64)((nFileSize - nSectorSize) / nSectorSize);
+    const quint64 nPhysicalSectors = _cfbfPhysicalSectors(nFileSize, nSectorSize);
     if ((quint64)ssh._sectDirStart >= nPhysicalSectors) {
         return _cfbfFailUnpackSource(this, pState);
     }
 
-    qint64 nDirectorySize = -1;
-    if (ssh._uDllVersion == 4) {
-        if ((ssh._csectDir == 0) || ((quint64)ssh._csectDir * (quint64)nSectorSize > (quint64)(std::numeric_limits<qint32>::max)())) {
-            return _cfbfFailUnpackSource(this, pState);
-        }
-        nDirectorySize = (qint64)ssh._csectDir * nSectorSize;
+    // The version 4 directory sector count is advisory: some writers leave a
+    // stale value (one more than the chain), so the FAT chain defines the
+    // directory in both versions.
+    const qint64 nDirectorySize = -1;
+    if ((ssh._uDllVersion == 4) && (ssh._csectDir == 0)) {
+        return _cfbfFailUnpackSource(this, pState);
     }
 
     CFBF_UNPACK_CONTEXT *pContext = new (std::nothrow) CFBF_UNPACK_CONTEXT;
@@ -1386,9 +1403,10 @@ QList<quint32> XCFBF::_readFAT(const StructuredStorageHeader &ssh, PDSTRUCT *pPd
         return listResult;
     }
 
-    const quint64 nPhysicalSectors = (quint64)((nFileSize - nSectorSize) / nSectorSize);
+    const quint64 nPhysicalSectors = _cfbfPhysicalSectors(nFileSize, nSectorSize);
+    const quint64 nFullSectors = (quint64)((nFileSize - nSectorSize) / nSectorSize);  // the FAT need not describe a partial final sector
     if ((ssh._csectFat > nPhysicalSectors) || ((quint64)ssh._csectFat * (quint64)nEntriesPerSector > (quint64)(std::numeric_limits<qint32>::max)()) ||
-        ((quint64)ssh._csectFat * (quint64)nEntriesPerSector < nPhysicalSectors)) {
+        ((quint64)ssh._csectFat * (quint64)nEntriesPerSector < nFullSectors)) {
         return listResult;
     }
 
@@ -1525,7 +1543,7 @@ QByteArray XCFBF::_readStreamBySectorChain(const QList<quint32> &listFAT, quint3
         return baResult;
     }
 
-    const quint64 nPhysicalSectors = (quint64)((nFileSize - nSectorSize) / nSectorSize);
+    const quint64 nPhysicalSectors = _cfbfPhysicalSectors(nFileSize, nSectorSize);
     const quint64 nMaximumChain = (std::min)((quint64)listFAT.size(), nPhysicalSectors);
     if ((nMaximumChain == 0) || ((quint64)nStartSector >= nMaximumChain)) {
         return QByteArray();
@@ -1551,11 +1569,11 @@ QByteArray XCFBF::_readStreamBySectorChain(const QList<quint32> &listFAT, quint3
 
         const qint64 nOffset = nSectorSize + (qint64)nCurrentSector * nSectorSize;
         QByteArray baSector = read_array(nOffset, nSectorSize);
-        if ((baSector.size() != nSectorSize)) {
+        const qint64 nReadSize = bKnownSize ? (std::min)(nSectorSize, nBytesRemaining) : nSectorSize;
+        // A partial final sector satisfies a stream that ends inside it.
+        if ((baSector.size() != nSectorSize) && (!bKnownSize || ((qint64)baSector.size() < nReadSize))) {
             return QByteArray();
         }
-
-        const qint64 nReadSize = bKnownSize ? (std::min)(nSectorSize, nBytesRemaining) : nSectorSize;
         if ((nReadSize <= 0) || (baResult.size() > (std::numeric_limits<qint32>::max)() - nReadSize)) {
             return QByteArray();
         }
