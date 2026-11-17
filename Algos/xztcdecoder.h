@@ -43,6 +43,10 @@
 // with XLZHUFDecoder::getZTCOptions(), which is the whole pipeline a dispatch
 // needs.  A record publishes the PAGED payload extent, because that is what
 // actually exists in the file, so decode() is fed exactly those bytes.
+#ifdef PAGE_SIZE
+#undef PAGE_SIZE
+#endif
+
 class XZTCDecoder {
 public:
     enum {
