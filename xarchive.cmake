@@ -595,6 +595,10 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/diskimages/xdskexp.h
     ${CMAKE_CURRENT_LIST_DIR}/diskimages/xfdiimage.cpp
     ${CMAKE_CURRENT_LIST_DIR}/diskimages/xfdiimage.h
+    ${CMAKE_CURRENT_LIST_DIR}/diskimages/xfatimage.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/diskimages/xfatimage.h
+    ${CMAKE_CURRENT_LIST_DIR}/diskimages/xmsa.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/diskimages/xmsa.h
     ${CMAKE_CURRENT_LIST_DIR}/diskimages/xhdcopy.cpp
     ${CMAKE_CURRENT_LIST_DIR}/diskimages/xhdcopy.h
     ${CMAKE_CURRENT_LIST_DIR}/diskimages/xhfe.cpp

@@ -106,6 +106,8 @@ HEADERS += \
     $$PWD/archives/xclayarchive.h \
     $$PWD/archives/xsclarchive.h \
     $$PWD/diskimages/xfdiimage.h \
+    $$PWD/diskimages/xfatimage.h \
+    $$PWD/diskimages/xmsa.h \
     $$PWD/diskimages/xpcmimage.h \
     $$PWD/archives/xpowerarc.h \
     $$PWD/diskimages/xapricotimage.h \
@@ -521,6 +523,8 @@ SOURCES += \
     $$PWD/archives/xclayarchive.cpp \
     $$PWD/archives/xsclarchive.cpp \
     $$PWD/diskimages/xfdiimage.cpp \
+    $$PWD/diskimages/xfatimage.cpp \
+    $$PWD/diskimages/xmsa.cpp \
     $$PWD/diskimages/xpcmimage.cpp \
     $$PWD/archives/xpowerarc.cpp \
     $$PWD/diskimages/xapricotimage.cpp \

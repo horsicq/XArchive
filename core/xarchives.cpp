@@ -1037,6 +1037,8 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_HE_TLKB);
     result.insert(XBinary::FT_ORACLE_SQUEEZE);
     result.insert(XBinary::FT_SOFTRONICS);
+    result.insert(XBinary::FT_FAT);
+    result.insert(XBinary::FT_MSA);
     result.insert(XBinary::FT_SW);
     result.insert(XBinary::FT_SAF);
     result.insert(XBinary::FT_IGF2);
